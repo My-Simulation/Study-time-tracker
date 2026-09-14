@@ -16,7 +16,7 @@ function LapRow({ lapNo, split, total, color, isNew }) {
 
   return (
     <tr
-      className={`border-b border-[#2a2a2a] ${isNew ? 'animate-slide-down' : ''} ${textColor}`}
+      className={`border-b border-[#2a2a2a] ${textColor}`}
       style={isNew ? { animation: 'slideDown 150ms ease-out' } : {}}
     >
       <td className="py-2.5 pl-4 font-mono text-sm tabular-nums w-1/4">
@@ -78,6 +78,12 @@ export function ReadOnlyLapTable({ laps }) {
     )
   }
 
+  // Compute min/max once outside the map — handles missing splitMs safely
+  const splitValues = laps.map((l) => l.splitMs ?? 0)
+  const minSplit = Math.min(...splitValues)
+  const maxSplit = Math.max(...splitValues)
+  const hasContrast = laps.length >= 2 && minSplit !== maxSplit
+
   return (
     <div className="w-full overflow-hidden">
       <table className="w-full border-collapse">
@@ -96,18 +102,14 @@ export function ReadOnlyLapTable({ laps }) {
         </thead>
         <tbody>
           {laps.map((lap) => {
-            // Recompute colors for read-only view
-            const splitValues = laps.map((l) => l.splitMs || 0)
-            const minSplit = Math.min(...splitValues)
-            const maxSplit = Math.max(...splitValues)
-            const color =
-              laps.length < 2
-                ? 'normal'
-                : (lap.splitMs || 0) === minSplit
-                ? 'green'
-                : (lap.splitMs || 0) === maxSplit
-                ? 'red'
-                : 'normal'
+            const ms = lap.splitMs ?? 0
+            const color = !hasContrast
+              ? 'normal'
+              : ms === minSplit
+              ? 'green'
+              : ms === maxSplit
+              ? 'red'
+              : 'normal'
 
             const textColor =
               color === 'green'

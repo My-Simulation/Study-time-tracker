@@ -107,23 +107,26 @@ export default function History({ userName }) {
                   .find((s) => s.screenshotUrl)?.screenshotUrl
 
                 return (
-                  <button
+                  <div
                     key={group.date}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => navigate(`/history/${group.date}`)}
-                    className="card p-4 flex items-center gap-4 text-left hover:border-[#3a3a3a] transition-all btn-press"
+                    onKeyDown={(e) => e.key === 'Enter' && navigate(`/history/${group.date}`)}
+                    className="card p-4 flex items-center gap-3 text-left hover:border-[#3a3a3a] transition-all btn-press cursor-pointer"
                   >
                     {/* Date + time info */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-white">
+                      <div className="text-sm font-semibold text-white truncate">
                         {formatDateDisplay(group.date)}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-gray-500 whitespace-nowrap">
                           {group.sessions.length} session
                           {group.sessions.length !== 1 ? 's' : ''}
                         </span>
                         <span className="text-xs text-gray-600">·</span>
-                        <span className="font-mono text-xs text-purple-400 tabular-nums">
+                        <span className="font-mono text-xs text-purple-400 tabular-nums whitespace-nowrap">
                           {formatHoursMinutes(group.totalSeconds)}
                         </span>
                       </div>
@@ -134,12 +137,12 @@ export default function History({ userName }) {
                       <img
                         src={latestScreenshot}
                         alt={`Session on ${group.date}`}
-                        className="w-24 h-14 object-cover rounded-lg flex-shrink-0 border border-[#2a2a2a]"
+                        className="w-20 h-12 sm:w-24 sm:h-14 object-cover rounded-lg flex-shrink-0 border border-[#2a2a2a]"
                         loading="lazy"
                       />
                     ) : (
                       <div
-                        className="w-24 h-14 rounded-lg flex-shrink-0 flex items-center justify-center border border-[#2a2a2a]"
+                        className="w-20 h-12 sm:w-24 sm:h-14 rounded-lg flex-shrink-0 flex items-center justify-center border border-[#2a2a2a]"
                         style={{ background: '#111' }}
                       >
                         <span className="text-gray-700 text-xs">No img</span>
@@ -148,7 +151,7 @@ export default function History({ userName }) {
 
                     {/* Chevron */}
                     <ChevronRight />
-                  </button>
+                  </div>
                 )
               })}
             </div>

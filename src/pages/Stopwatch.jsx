@@ -67,9 +67,9 @@ export default function Stopwatch({ userName }) {
       </div>
 
       {/* ── Tab bar ── */}
-      <div className="flex justify-center px-4 pt-3 pb-2">
+      <div className="flex justify-center px-4 pt-3 pb-2 overflow-x-auto">
         <div
-          className="flex items-center gap-1 rounded-full p-1"
+          className="flex items-center gap-1 rounded-full p-1 flex-shrink-0"
           style={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
         >
           {TABS.map((tab) => {
@@ -77,7 +77,7 @@ export default function Stopwatch({ userName }) {
             return (
               <div
                 key={tab}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all select-none ${
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all select-none whitespace-nowrap ${
                   isActive
                     ? 'bg-white text-black'
                     : 'text-gray-500 cursor-default'
