@@ -44,40 +44,59 @@ export async function ensureUserExists(name) {
 /**
  * Captures a DOM element as PNG using html2canvas,
  * uploads to Firebase Storage, and returns the download URL.
+ * Has a 6-second timeout — if it hangs (e.g. cross-origin CORS on Netlify),
+ * it returns '' so the session is saved without a screenshot.
  *
  * @param {HTMLElement} element - The DOM element to capture
  * @param {string} userName - User's name (for storage path)
  * @param {string} dateStr - "YYYY-MM-DD" date string
- * @returns {Promise<string>} Download URL of the uploaded screenshot
+ * @returns {Promise<string>} Download URL or '' on failure/timeout
  */
 export async function captureAndUploadScreenshot(element, userName, dateStr) {
-  // Dynamically import html2canvas to avoid SSR issues
-  const html2canvas = (await import('html2canvas')).default
+  const TIMEOUT_MS = 6000
 
-  const canvas = await html2canvas(element, {
-    backgroundColor: '#1a1a1a',
-    scale: 2, // 2x for retina quality
-    logging: false,
-    useCORS: true,
-  })
+  const capturePromise = (async () => {
+    // Dynamically import html2canvas to keep initial bundle lean
+    const html2canvas = (await import('html2canvas')).default
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        reject(new Error('Failed to convert canvas to blob'))
-        return
-      }
-      try {
-        const filename = `${dateStr}_${Date.now()}.png`
-        const storageRef = ref(storage, `screenshots/${userName}/${filename}`)
-        await uploadBytes(storageRef, blob, { contentType: 'image/png' })
-        const url = await getDownloadURL(storageRef)
-        resolve(url)
-      } catch (err) {
-        reject(err)
-      }
-    }, 'image/png')
-  })
+    const canvas = await html2canvas(element, {
+      backgroundColor: '#1a1a1a',
+      scale: 2,          // 2x for retina quality
+      logging: false,
+      useCORS: true,
+      allowTaint: true,  // allow cross-origin content (fonts etc.)
+      foreignObjectRendering: false, // more compatible cross-browser
+    })
+
+    return new Promise((resolve) => {
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          resolve('') // no blob → skip screenshot, don't block save
+          return
+        }
+        try {
+          const filename = `${dateStr}_${Date.now()}.png`
+          const storageRef = ref(storage, `screenshots/${userName}/${filename}`)
+          await uploadBytes(storageRef, blob, { contentType: 'image/png' })
+          const url = await getDownloadURL(storageRef)
+          resolve(url)
+        } catch (err) {
+          console.warn('Storage upload failed, saving without screenshot:', err)
+          resolve('') // resolve (not reject) so save always continues
+        }
+      }, 'image/png')
+    })
+  })()
+
+  // Timeout race — if upload hangs > 6s, give up and save without screenshot
+  const timeoutPromise = new Promise((resolve) =>
+    setTimeout(() => {
+      console.warn('Screenshot timed out after 6s — saving without image')
+      resolve('')
+    }, TIMEOUT_MS)
+  )
+
+  return Promise.race([capturePromise, timeoutPromise])
 }
 
 /**

@@ -21,6 +21,7 @@ export default function SaveModal({
   const [selectedDate, setSelectedDate] = useState(todayString())
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [savingStep, setSavingStep] = useState('') // 'screenshot' | 'firestore' | ''
   const overlayRef = useRef(null)
 
   // Reset state when modal opens
@@ -29,6 +30,7 @@ export default function SaveModal({
       setSelectedDate(todayString())
       setError(null)
       setIsSaving(false)
+      setSavingStep('')
     }
   }, [isOpen])
 
@@ -43,25 +45,24 @@ export default function SaveModal({
     if (isSaving) return
     setIsSaving(true)
     setError(null)
+    setSavingStep('screenshot')
 
     try {
       let screenshotUrl = ''
 
-      // 1. Capture screenshot
+      // 1. Capture + upload screenshot (non-blocking — times out after 6s)
       if (captureTargetRef?.current) {
-        try {
-          screenshotUrl = await captureAndUploadScreenshot(
-            captureTargetRef.current,
-            userName,
-            selectedDate
-          )
-        } catch (screenshotErr) {
-          console.warn('Screenshot failed, saving without image:', screenshotErr)
-          screenshotUrl = ''
-        }
+        screenshotUrl = await captureAndUploadScreenshot(
+          captureTargetRef.current,
+          userName,
+          selectedDate
+        )
+        // captureAndUploadScreenshot always resolves (never rejects)
+        // returns '' if screenshot failed/timed out
       }
 
-      // 2 & 3. Save to Firestore
+      // 2. Save to Firestore
+      setSavingStep('firestore')
       await saveSession({
         userName,
         date: selectedDate,
@@ -77,13 +78,18 @@ export default function SaveModal({
         screenshotUrl,
       })
 
-      // 4. Notify parent
+      // 3. Done — notify parent
       onSaved(selectedDate, shouldReset)
     } catch (err) {
       console.error('Save error:', err)
-      setError('Failed to save. Check your Firebase config and try again.')
+      setError(
+        err?.code === 'permission-denied'
+          ? 'Permission denied. Make sure Firestore is in Test Mode in Firebase Console.'
+          : 'Failed to save. Check your internet connection and try again.'
+      )
     } finally {
       setIsSaving(false)
+      setSavingStep('')
     }
   }
 
@@ -156,7 +162,8 @@ export default function SaveModal({
           >
             {isSaving ? (
               <span className="flex items-center gap-2">
-                <Spinner /> Saving…
+                <Spinner />
+                {savingStep === 'screenshot' ? 'Capturing…' : 'Saving…'}
               </span>
             ) : (
               'Save & Continue'

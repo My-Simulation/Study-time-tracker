@@ -12,8 +12,6 @@ import LapTable from '../components/LapTable'
 import SaveModal from '../components/SaveModal'
 import Toast from '../components/Toast'
 
-// ── Tab bar items (only "Stopwatch" is active) ──────────────────────────────
-const TABS = ['World Clock', 'Alarm', 'Stopwatch', 'Timers']
 
 export default function Stopwatch({ userName }) {
   const navigate = useNavigate()
@@ -66,27 +64,13 @@ export default function Stopwatch({ userName }) {
         </button>
       </div>
 
-      {/* ── Tab bar ── */}
-      <div className="flex justify-center px-4 pt-3 pb-2 overflow-x-auto">
+      {/* ── Mode label ── */}
+      <div className="flex justify-center px-4 pt-3 pb-2">
         <div
-          className="flex items-center gap-1 rounded-full p-1 flex-shrink-0"
-          style={{ background: '#1a1a1a', border: '1px solid #2a2a2a' }}
+          className="px-5 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase select-none"
+          style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', color: '#aaa', letterSpacing: '0.15em' }}
         >
-          {TABS.map((tab) => {
-            const isActive = tab === 'Stopwatch'
-            return (
-              <div
-                key={tab}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all select-none whitespace-nowrap ${
-                  isActive
-                    ? 'bg-white text-black'
-                    : 'text-gray-500 cursor-default'
-                }`}
-              >
-                {tab}
-              </div>
-            )
-          })}
+          Stopwatch
         </div>
       </div>
 
