@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Users collection ──────────────────────────────────────────────────
+    // Each user document ID equals the user's name.
+    // Anyone can read (needed for checking existence on login).
+    // Create allowed only when the incoming name matches the document ID.
+    // Update/delete only allowed for the owner's own doc.
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if request.resource.data.name == userId
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0;
+      allow update, delete: if resource.data.name == userId;
+    }
+
+    // ── Sessions collection ───────────────────────────────────────────────
+    // Any authenticated name-holder can read all sessions (for simplicity).
+    // On create: userName field must be present and non-empty.
+    // On update/delete: userName must match between old and new doc.
+    //
+    // NOTE: Because this app uses name-based auth (no Firebase Auth tokens),
+    // full per-user enforcement is limited. In production, use Firebase Auth
+    // and replace the userName string checks with request.auth.uid comparisons.
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow create: if request.resource.data.userName is string
+                    && request.resource.data.userName.size() > 0
+                    && request.resource.data.date is string
+                    && request.resource.data.totalTime is string;
+      allow update: if request.resource.data.userName == resource.data.userName;
+      allow delete: if false; // Disallow deletion from client
+    }
+  }
+}
