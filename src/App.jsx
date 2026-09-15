@@ -1,14 +1,14 @@
 /**
- * App.jsx
- * Root component — routing, auth guard, global layout.
+ * App.jsx — Root with full auth routes.
  */
 
 import React, { useState, useEffect } from 'react'
-import {
-  BrowserRouter, Routes, Route, Navigate, useLocation,
-} from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { getSession, clearSession } from './utils/auth'
 
-import Login from './pages/Login'
+import Welcome from './pages/Welcome'
+import SignIn from './pages/SignIn'
+import SignUp from './pages/SignUp'
 import Stopwatch from './pages/Stopwatch'
 import History from './pages/History'
 import HistoryDetail from './pages/HistoryDetail'
@@ -16,41 +16,49 @@ import Plan from './pages/Plan'
 import WatchPartner, { WatchSearch } from './pages/WatchPartner'
 import PartnerHistory from './pages/PartnerHistory'
 
+// ── Auth guard ────────────────────────────────────────────────────────────────
 function RequireAuth({ children }) {
-  const userName = localStorage.getItem('studyTrackerUser')
-  if (!userName) return <Navigate to="/login" replace />
+  const session = getSession()
+  if (!session) return <Navigate to="/welcome" replace />
   return children
+}
+
+// ── Public watch pages (no login needed) ─────────────────────────────────────
+function PublicWatchSearch() {
+  return <WatchSearch userName={null} />
 }
 
 function AnimatedRoutes() {
   const location = useLocation()
-  const userName = localStorage.getItem('studyTrackerUser') || ''
+  const session = getSession()
+  const userName = session?.username || ''
 
   return (
     <div key={location.pathname} style={{ animation: 'fadeIn 150ms ease-out' }}>
       <Routes location={location}>
-        {/* Auth */}
-        <Route path="/login" element={<Login />} />
+        {/* Auth pages */}
+        <Route path="/welcome" element={<Welcome />} />
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="/signup" element={<SignUp />} />
 
-        {/* Main timer */}
+        {/* Old /login redirect */}
+        <Route path="/login" element={<Navigate to="/signin" replace />} />
+
+        {/* Main app — requires auth */}
         <Route path="/" element={<RequireAuth><Stopwatch userName={userName} /></RequireAuth>} />
-
-        {/* History */}
         <Route path="/history" element={<RequireAuth><History userName={userName} /></RequireAuth>} />
         <Route path="/history/:date" element={<RequireAuth><HistoryDetail userName={userName} /></RequireAuth>} />
-
-        {/* Weekly plan */}
         <Route path="/plan" element={<RequireAuth><Plan userName={userName} /></RequireAuth>} />
 
-        {/* Watch partner */}
-        <Route path="/watch" element={<RequireAuth><WatchSearch userName={userName} /></RequireAuth>} />
-        <Route path="/watch/:partnerName" element={<RequireAuth><WatchPartner /></RequireAuth>} />
+        {/* Watch — public (no auth required to watch a partner) */}
+        <Route path="/watch" element={<WatchSearch userName={userName} />} />
+        <Route path="/watch/:partnerName" element={<WatchPartner />} />
 
-        {/* Partner history */}
-        <Route path="/partner/:partnerName" element={<RequireAuth><PartnerHistory /></RequireAuth>} />
+        {/* Partner history — public */}
+        <Route path="/partner/:partnerName" element={<PartnerHistory />} />
 
         {/* Catch-all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={session ? '/' : '/welcome'} replace />} />
       </Routes>
     </div>
   )

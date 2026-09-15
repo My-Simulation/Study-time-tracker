@@ -14,6 +14,7 @@ import {
   calculateStreaks, getWeeklyPlan, getTargetForDate,
 } from '../utils/firestoreHelpers'
 import { formatDateDisplay, formatHoursMinutes, todayString } from '../utils/formatTime'
+import { clearSession } from '../utils/auth'
 
 export default function History({ userName }) {
   const navigate = useNavigate()
@@ -43,9 +44,9 @@ export default function History({ userName }) {
 
   useEffect(() => { load() }, [load])
 
-  const handleSwitchUser = () => {
-    localStorage.removeItem('studyTrackerUser')
-    navigate('/login', { replace: true })
+  const handleLogout = () => {
+    clearSession()
+    navigate('/welcome', { replace: true })
   }
 
   const { currentStreak, longestStreak } = calculateStreaks(dateGroups)
@@ -66,10 +67,10 @@ export default function History({ userName }) {
           <span>←</span><span>Back to Timer</span>
         </button>
         <button
-          onClick={handleSwitchUser}
-          className="text-xs text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
+          onClick={handleLogout}
+          className="text-xs text-gray-500 hover:text-red-400 transition-colors underline underline-offset-2"
         >
-          Switch User
+          Logout
         </button>
       </div>
 

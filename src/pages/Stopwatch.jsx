@@ -18,6 +18,7 @@ import SaveModal from '../components/SaveModal'
 import Toast from '../components/Toast'
 import { getWeeklyPlan, getTargetForDate, getUserSessions } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes } from '../utils/formatTime'
+import { clearSession, getSession } from '../utils/auth'
 
 export default function Stopwatch({ userName }) {
   const navigate = useNavigate()
@@ -55,9 +56,12 @@ export default function Stopwatch({ userName }) {
     loadGoal()
   }, [userName])
 
+  const session = getSession()
+  const avatarColor = session?.avatarColor || '#7c3aed'
+
   const handleSwitchUser = () => {
-    localStorage.removeItem('studyTrackerUser')
-    navigate('/login', { replace: true })
+    clearSession()
+    navigate('/welcome', { replace: true })
   }
 
   const handleSaved = useCallback(
@@ -90,7 +94,7 @@ export default function Stopwatch({ userName }) {
       {/* ── Top bar ── */}
       <div className="flex items-center justify-between px-4 pt-4 pb-0">
         {/* Profile pill */}
-        <ProfilePill userName={userName} onSwitch={handleSwitchUser} />
+        <ProfilePill userName={userName} avatarColor={avatarColor} onLogout={handleSwitchUser} />
 
         {/* Right icons */}
         <div className="flex items-center gap-1">
@@ -220,9 +224,10 @@ export default function Stopwatch({ userName }) {
 }
 
 // ── Profile Pill ──────────────────────────────────────────────────────────────
-function ProfilePill({ userName, onSwitch }) {
+function ProfilePill({ userName, avatarColor, onLogout }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const navigate = useNavigate()
 
   const shareLink = `${window.location.origin}/watch/${userName}`
   const copyLink = () => {
@@ -239,7 +244,7 @@ function ProfilePill({ userName, onSwitch }) {
       >
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-          style={{ background: stringToColor(userName) }}
+          style={{ background: avatarColor }}
         >
           {userName[0].toUpperCase()}
         </div>
@@ -250,27 +255,41 @@ function ProfilePill({ userName, onSwitch }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div
-            className="absolute left-0 top-10 z-50 card p-3 flex flex-col gap-2 min-w-[180px]"
-            style={{ animation: 'scaleIn 150ms ease-out' }}
-          >
-            <div className="px-2 py-1">
-              <p className="text-sm font-semibold text-white">@{userName}</p>
-              <p className="text-xs text-gray-600 mt-0.5">Your study account</p>
+          <div className="absolute left-0 top-10 z-50 card p-3 flex flex-col gap-1 min-w-[190px]" style={{ animation: 'scaleIn 150ms ease-out' }}>
+            {/* Avatar header */}
+            <div className="flex items-center gap-3 px-2 py-2">
+              <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0" style={{ background: avatarColor }}>
+                {userName[0].toUpperCase()}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">@{userName}</p>
+                <p className="text-xs text-gray-600">Your account</p>
+              </div>
             </div>
-            <div className="border-t border-[#2a2a2a]" />
-            <button onClick={copyLink} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-[#2a2a2a] transition-colors text-left">
-              <span className="text-sm">{copied ? '✓' : '🔗'}</span>
-              <span className="text-sm text-gray-300">{copied ? 'Copied!' : 'Copy Live Link'}</span>
-            </button>
-            <button onClick={onSwitch} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-[#2a2a2a] transition-colors text-left">
-              <span className="text-sm">🔄</span>
-              <span className="text-sm text-gray-300">Switch User</span>
-            </button>
+            <div className="border-t border-[#2a2a2a] my-1" />
+            <MenuBtn icon="📋" label="Weekly Plan" onClick={() => { navigate('/plan'); setOpen(false) }} />
+            <MenuBtn icon="👁️" label="Watch Partner" onClick={() => { navigate('/watch'); setOpen(false) }} />
+            <MenuBtn icon={copied ? '✓' : '🔗'} label={copied ? 'Copied!' : 'Copy Live Link'} onClick={copyLink} />
+            <div className="border-t border-[#2a2a2a] my-1" />
+            <MenuBtn icon="🚪" label="Logout" onClick={onLogout} danger />
           </div>
         </>
       )}
     </div>
+  )
+}
+
+function MenuBtn({ icon, label, onClick, danger }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-left w-full ${
+        danger ? 'hover:bg-red-950/30 text-red-400' : 'hover:bg-[#2a2a2a] text-gray-300'
+      }`}
+    >
+      <span className="text-sm">{icon}</span>
+      <span className="text-sm font-medium">{label}</span>
+    </button>
   )
 }
 

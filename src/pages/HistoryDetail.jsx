@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getSessionsByDate } from '../utils/firestoreHelpers'
 import { formatDateDisplay } from '../utils/formatTime'
 import { ReadOnlyLapTable } from '../components/LapTable'
+import { clearSession } from '../utils/auth'
 
 export default function HistoryDetail({ userName }) {
   const { date } = useParams()
@@ -36,9 +37,9 @@ export default function HistoryDetail({ userName }) {
     return () => { cancelled = true }
   }, [userName, date])
 
-  const handleSwitchUser = () => {
-    localStorage.removeItem('studyTrackerUser')
-    navigate('/login', { replace: true })
+  const handleLogout = () => {
+    clearSession()
+    navigate('/welcome', { replace: true })
   }
 
   return (
@@ -56,10 +57,10 @@ export default function HistoryDetail({ userName }) {
           <span>Back to History</span>
         </button>
         <button
-          onClick={handleSwitchUser}
-          className="text-xs text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
+          onClick={handleLogout}
+          className="text-xs text-gray-500 hover:text-red-400 transition-colors underline underline-offset-2"
         >
-          Switch User
+          Logout
         </button>
       </div>
 
