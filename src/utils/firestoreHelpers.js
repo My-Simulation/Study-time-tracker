@@ -12,7 +12,6 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
   serverTimestamp,
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -132,22 +131,32 @@ export async function saveSession({
 }
 
 /**
- * Fetches all sessions for a given user, ordered by date descending.
+ * Fetches all sessions for a given user.
+ * NOTE: orderBy('createdAt') is intentionally removed — Firestore requires a
+ * composite index for where() + orderBy() on different fields, which would need
+ * to be manually created in Firebase Console. Instead we sort in JavaScript.
  * @param {string} userName
- * @returns {Promise<Array>} Array of session objects with id field
+ * @returns {Promise<Array>} Array of session objects with id field, sorted newest first
  */
 export async function getUserSessions(userName) {
   const q = query(
     collection(db, 'sessions'),
-    where('userName', '==', userName),
-    orderBy('createdAt', 'desc')
+    where('userName', '==', userName)
   )
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+  // Sort newest first in JavaScript — no Firestore composite index needed
+  return sessions.sort((a, b) => {
+    const aTime = a.createdAt?.seconds ?? 0
+    const bTime = b.createdAt?.seconds ?? 0
+    return bTime - aTime
+  })
 }
 
 /**
  * Fetches all sessions for a given user on a specific date.
+ * NOTE: orderBy removed — sorted in JavaScript to avoid composite index requirement.
  * @param {string} userName
  * @param {string} dateStr - "YYYY-MM-DD"
  * @returns {Promise<Array>} Array of session objects ordered by createdAt ascending
@@ -156,11 +165,17 @@ export async function getSessionsByDate(userName, dateStr) {
   const q = query(
     collection(db, 'sessions'),
     where('userName', '==', userName),
-    where('date', '==', dateStr),
-    orderBy('createdAt', 'asc')
+    where('date', '==', dateStr)
   )
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+  // Sort oldest first (Session 1, Session 2...) in JavaScript
+  return sessions.sort((a, b) => {
+    const aTime = a.createdAt?.seconds ?? 0
+    const bTime = b.createdAt?.seconds ?? 0
+    return aTime - bTime
+  })
 }
 
 /**

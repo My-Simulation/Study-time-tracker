@@ -26,7 +26,12 @@ export default function History({ userName }) {
       setDateGroups(groupSessionsByDate(sessions))
     } catch (err) {
       console.error('History load error:', err)
-      setError('Failed to load history. Check your Firebase config.')
+      // Show the actual error message for easier debugging
+      setError(
+        err?.message?.includes('index')
+          ? 'Firestore index missing. Please check the browser console for a link to create it, or the fix is already deployed — try refreshing.'
+          : `Failed to load history: ${err?.message || 'Unknown error'}`
+      )
     } finally {
       setLoading(false)
     }
