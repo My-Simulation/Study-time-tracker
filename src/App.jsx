@@ -15,6 +15,7 @@ import HistoryDetail from './pages/HistoryDetail'
 import Plan from './pages/Plan'
 import WatchPartner, { WatchSearch } from './pages/WatchPartner'
 import PartnerHistory from './pages/PartnerHistory'
+import ActiveTimerBanner from './components/ActiveTimerBanner'
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 function RequireAuth({ children }) {
@@ -35,6 +36,7 @@ function AnimatedRoutes() {
 
   return (
     <div key={location.pathname} style={{ animation: 'fadeIn 150ms ease-out' }}>
+      <ActiveTimerBanner />
       <Routes location={location}>
         {/* Auth pages */}
         <Route path="/welcome" element={<Welcome />} />

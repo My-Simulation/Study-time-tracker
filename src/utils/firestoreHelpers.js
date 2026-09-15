@@ -116,14 +116,17 @@ export async function getWeeklyPlan(userName) {
 // LIVE STATUS (real-time partner view)
 // ─────────────────────────────────────────────
 
-export async function updateLiveStatus(userName, { isRunning, baseElapsed }) {
+export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp }) {
   if (!userName) return
   const statusRef = doc(db, 'liveStatus', userName.toLowerCase())
+  const now = Date.now()
   await setDoc(statusRef, {
     userName: userName.toLowerCase(),
-    isRunning,
-    baseElapsed: baseElapsed || 0,
-    startedAt: isRunning ? serverTimestamp() : null,
+    isRunning: Boolean(isRunning),
+    baseElapsed: Number(baseElapsed) || 0,
+    startedAtMs: isRunning && startTimestamp ? Number(startTimestamp) : null,
+    updatedAtMs: now,
+    // Keep serverTimestamp for backward compatibility
     updatedAt: serverTimestamp(),
   }, { merge: true })
 }

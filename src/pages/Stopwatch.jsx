@@ -11,7 +11,6 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStopwatch } from '../hooks/useStopwatch'
-import { useLiveStatus } from '../hooks/useLiveStatus'
 import StopwatchDisplay from '../components/StopwatchDisplay'
 import LapTable from '../components/LapTable'
 import SaveModal from '../components/SaveModal'
@@ -22,7 +21,7 @@ import { clearSession, getSession } from '../utils/auth'
 
 export default function Stopwatch({ userName }) {
   const navigate = useNavigate()
-  const { elapsed, isRunning, laps, displayTime, start, stop, reset, lap } = useStopwatch()
+  const { elapsed, isRunning, laps, displayTime, start, stop, reset, lap } = useStopwatch(userName)
 
   const [showModal, setShowModal] = useState(false)
   const [toast, setToast] = useState({ visible: false, message: '' })
@@ -31,9 +30,6 @@ export default function Stopwatch({ userName }) {
   const captureRef = useRef(null)
 
   const hasTime = elapsed > 0
-
-  // ── Sync live status to Firestore ────────────────────────────────────────
-  useLiveStatus(userName, isRunning, elapsed)
 
   // ── Load today's goal from weekly plan ───────────────────────────────────
   useEffect(() => {
