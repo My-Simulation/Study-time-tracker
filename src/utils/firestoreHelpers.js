@@ -440,3 +440,78 @@ export function getSpacedRepetitionDue(sessions) {
     day7: getTopicsForDate(d7Str),
   }
 }
+
+// ─────────────────────────────────────────────
+// DAILY STUDY PLANNER SHEET ("My Plan. My Time. My Success.")
+// ─────────────────────────────────────────────
+
+export async function saveDayPlanner(userName, dateStr, planData) {
+  if (!userName || !dateStr) return
+  const uKey = userName.toLowerCase()
+  try {
+    localStorage.setItem(`stt_day_plan_${uKey}_${dateStr}`, JSON.stringify(planData))
+  } catch {}
+  try {
+    await updateDoc(doc(db, 'users', uKey), {
+      [`dayPlanners.${dateStr}`]: planData,
+    })
+  } catch (err) {
+    console.warn('Failed to save day planner to Firestore:', err)
+  }
+}
+
+export async function getDayPlanner(userName, dateStr) {
+  if (!userName || !dateStr) return null
+  const uKey = userName.toLowerCase()
+  try {
+    const cached = localStorage.getItem(`stt_day_plan_${uKey}_${dateStr}`)
+    if (cached) return JSON.parse(cached)
+  } catch {}
+  try {
+    const docData = await getUserDoc(uKey)
+    if (docData?.dayPlanners?.[dateStr]) {
+      localStorage.setItem(`stt_day_plan_${uKey}_${dateStr}`, JSON.stringify(docData.dayPlanners[dateStr]))
+      return docData.dayPlanners[dateStr]
+    }
+  } catch {}
+  return null
+}
+
+export async function getAllDayPlanners(userName) {
+  if (!userName) return {}
+  const uKey = userName.toLowerCase()
+  try {
+    const docData = await getUserDoc(uKey)
+    return docData?.dayPlanners || {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Calculates a sequential Day Number (Day 1, Day 2, Day 3...)
+ * based on user's first planned or studied date.
+ */
+export async function calculateDayNumber(userName, targetDateStr) {
+  if (!userName || !targetDateStr) return 1
+  try {
+    const [sessions, userDoc] = await Promise.all([
+      getUserSessions(userName),
+      getUserDoc(userName),
+    ])
+    const allDates = new Set()
+    if (sessions) {
+      sessions.forEach((s) => s.date && allDates.add(s.date))
+    }
+    if (userDoc?.dayPlanners) {
+      Object.keys(userDoc.dayPlanners).forEach((d) => allDates.add(d))
+    }
+    allDates.add(targetDateStr)
+    const sorted = Array.from(allDates).sort()
+    const idx = sorted.indexOf(targetDateStr)
+    return idx >= 0 ? idx + 1 : 1
+  } catch {
+    return 1
+  }
+}
+

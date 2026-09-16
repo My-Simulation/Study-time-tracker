@@ -9,7 +9,7 @@
  */
 
 import React, { useRef, useState, useCallback, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useStopwatch } from '../hooks/useStopwatch'
 import StopwatchDisplay from '../components/StopwatchDisplay'
 import LapTable from '../components/LapTable'
@@ -17,7 +17,10 @@ import SaveModal from '../components/SaveModal'
 import Toast from '../components/Toast'
 import ExamCountdown from '../components/ExamCountdown'
 import DailyMissions from '../components/DailyMissions'
-import { getWeeklyPlan, getTargetForDate, getUserSessions, getSyllabus } from '../utils/firestoreHelpers'
+import {
+  getWeeklyPlan, getTargetForDate, getUserSessions, getSyllabus,
+  getDayPlanner, calculateDayNumber,
+} from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes } from '../utils/formatTime'
 import { clearSession, getSession } from '../utils/auth'
 
@@ -25,28 +28,35 @@ export default function Stopwatch({ userName }) {
   const navigate = useNavigate()
   const { elapsed, isRunning, laps, displayTime, start, stop, reset, lap } = useStopwatch(userName)
 
+  const location = useLocation()
   const [showModal, setShowModal] = useState(false)
   const [toast, setToast] = useState({ visible: false, message: '' })
   const [dailyGoal, setDailyGoal] = useState(null)   // { targetMinutes, subjects }
   const [todayStudied, setTodayStudied] = useState(0) // seconds studied today
   const [syllabus, setSyllabus] = useState([])
-  const [activeSubject, setActiveSubject] = useState('')
-  const [activeTopic, setActiveTopic] = useState('')
+  const [activeSubject, setActiveSubject] = useState(location.state?.subject || '')
+  const [activeTopic, setActiveTopic] = useState(location.state?.topic || '')
+  const [dayPlan, setDayPlan] = useState(null)
+  const [dayNum, setDayNum] = useState(1)
   const captureRef = useRef(null)
 
   const hasTime = elapsed > 0
 
-  // ── Load today's goal, syllabus and studied time ─────────────────────────
+  // ── Load today's goal, syllabus, day plan and studied time ─────────────────
   useEffect(() => {
     async function loadData() {
       try {
-        const [plan, sessions, syl] = await Promise.all([
+        const [plan, sessions, syl, dPlan, dNum] = await Promise.all([
           getWeeklyPlan(userName),
           getUserSessions(userName),
           getSyllabus(userName),
+          getDayPlanner(userName, todayString()),
+          calculateDayNumber(userName, todayString()),
         ])
         const goal = getTargetForDate(todayString(), plan)
         setDailyGoal(goal)
+        setDayPlan(dPlan)
+        setDayNum(dNum || 1)
 
         const todaySec = sessions
           .filter((s) => s.date === todayString())
@@ -62,6 +72,12 @@ export default function Stopwatch({ userName }) {
     }
     loadData()
   }, [userName])
+
+  // Update active subject/topic if navigated with state
+  useEffect(() => {
+    if (location.state?.subject) setActiveSubject(location.state.subject)
+    if (location.state?.topic) setActiveTopic(location.state.topic)
+  }, [location.state])
 
   const session = getSession()
   const avatarColor = session?.avatarColor || '#7c3aed'
@@ -105,6 +121,10 @@ export default function Stopwatch({ userName }) {
 
         {/* Right icons */}
         <div className="flex items-center gap-1">
+          {/* Day Planner Sheet icon */}
+          <IconButton onClick={() => navigate('/planner')} title="Daily Study Planner" aria-label="Day Planner">
+            <span className="text-base leading-none">🌸</span>
+          </IconButton>
           {/* Syllabus tracker icon */}
           <IconButton onClick={() => navigate('/syllabus')} title="Syllabus & Topics" aria-label="Syllabus">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -143,8 +163,44 @@ export default function Stopwatch({ userName }) {
         </div>
       </div>
 
-      {/* ── Exam D-Day Countdown & Target Hours Widget ── */}
+      {/* ── Day Study Planner Sheet Banner ── */}
       <div className="px-4 pt-1 max-w-lg mx-auto w-full">
+        <div
+          onClick={() => navigate('/planner')}
+          className="p-3 rounded-2xl flex items-center justify-between gap-3 border border-pink-500/30 cursor-pointer hover:border-pink-500/60 transition-all btn-press shadow-md"
+          style={{
+            background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12) 0%, rgba(168, 85, 247, 0.08) 100%)',
+          }}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-xl flex-shrink-0">🌸</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-pink-300 uppercase tracking-wider whitespace-nowrap">
+                  DAY {dayNum} PLAN
+                </span>
+                {dayPlan?.goals?.[0] && (
+                  <span className="text-[11px] text-gray-300 truncate">
+                    · {dayPlan.goals[0]}
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                {dayPlan?.rows?.length
+                  ? `${dayPlan.rows.filter((r) => r.done).length}/${dayPlan.rows.length} topics done today`
+                  : 'Open today’s planner sheet & set your top goals'}
+              </p>
+            </div>
+          </div>
+
+          <span className="text-xs font-bold text-pink-300 bg-pink-500/20 border border-pink-500/30 px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0">
+            Open Sheet →
+          </span>
+        </div>
+      </div>
+
+      {/* ── Exam D-Day Countdown & Target Hours Widget ── */}
+      <div className="px-4 pt-1.5 max-w-lg mx-auto w-full">
         <ExamCountdown userName={userName} totalStudiedSeconds={todayStudied + totalSeconds} />
       </div>
 
