@@ -176,6 +176,43 @@ function SessionCard({ session, index }) {
         </div>
       )}
 
+      {/* Session outcome & target details */}
+      {(session.focusScore > 0 || session.outputCount || session.subject || session.topic || session.reflectionTag || session.notes) && (
+        <div className="card p-3 flex flex-col gap-2 bg-[#121212] border-[#222]">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {session.focusScore > 0 && (
+                <span className="text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                  {'⭐'.repeat(session.focusScore)} ({session.focusScore}/5 Focus)
+                </span>
+              )}
+              {session.outputCount !== null && session.outputCount !== undefined && !isNaN(session.outputCount) && (
+                <span className="text-xs font-medium text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full">
+                  📝 {session.outputCount} {session.outputUnit || 'tasks'}
+                </span>
+              )}
+              {session.reflectionTag && (
+                <span className="text-xs font-medium text-gray-300 bg-[#1c1c1c] border border-[#2e2e2e] px-2 py-0.5 rounded-full">
+                  {session.reflectionTag}
+                </span>
+              )}
+            </div>
+
+            {(session.subject || session.topic) && (
+              <span className="text-xs font-semibold text-purple-400 bg-purple-500/10 border border-purple-500/30 px-2.5 py-0.5 rounded-md">
+                {session.subject}{session.subject && session.topic ? ' · ' : ''}{session.topic}
+              </span>
+            )}
+          </div>
+
+          {session.notes && (
+            <p className="text-xs text-gray-300 italic bg-[#171717] px-2.5 py-1.5 rounded-lg border border-[#252525]">
+              "{session.notes}"
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Metadata */}
       <div className="flex items-center gap-3 px-1">
         <span className="text-xs text-gray-600">

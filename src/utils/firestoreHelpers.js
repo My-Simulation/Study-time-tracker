@@ -172,12 +172,43 @@ export async function captureAndUploadScreenshot(element, userName, dateStr) {
 // SESSIONS
 // ─────────────────────────────────────────────
 
-export async function saveSession({ userName, date, totalTime, totalSeconds, laps, screenshotUrl }) {
-  const ref2 = await addDoc(collection(db, 'sessions'), {
+export async function saveSession({
+  userName,
+  date,
+  totalTime,
+  totalSeconds,
+  laps,
+  screenshotUrl,
+  focusScore = 0,
+  outputCount = null,
+  outputUnit = '',
+  notes = '',
+  subject = '',
+  topic = '',
+  reflectionTag = '',
+}) {
+  const sessionData = {
     userName: userName.toLowerCase(),
-    date, totalTime, totalSeconds, laps, screenshotUrl,
+    date,
+    totalTime,
+    totalSeconds,
+    laps,
+    screenshotUrl,
     createdAt: serverTimestamp(),
-  })
+  }
+
+  // Add optional outcome & target tracking fields if provided
+  if (focusScore) sessionData.focusScore = Number(focusScore)
+  if (outputCount !== null && outputCount !== '' && !isNaN(outputCount)) {
+    sessionData.outputCount = Number(outputCount)
+  }
+  if (outputUnit) sessionData.outputUnit = String(outputUnit).trim()
+  if (notes) sessionData.notes = String(notes).trim()
+  if (subject) sessionData.subject = String(subject).trim()
+  if (topic) sessionData.topic = String(topic).trim()
+  if (reflectionTag) sessionData.reflectionTag = String(reflectionTag).trim()
+
+  const ref2 = await addDoc(collection(db, 'sessions'), sessionData)
   return ref2.id
 }
 
@@ -250,4 +281,162 @@ export function getTargetForDate(dateStr, weeklyPlan) {
   const date = new Date(y, m - 1, d)
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   return weeklyPlan[days[date.getDay()]] || null
+}
+
+// ─────────────────────────────────────────────
+// SYLLABUS & TOPICS
+// ─────────────────────────────────────────────
+
+export async function saveSyllabus(userName, syllabus) {
+  if (!userName) return
+  const uKey = userName.toLowerCase()
+  try {
+    localStorage.setItem(`stt_syllabus_${uKey}`, JSON.stringify(syllabus))
+  } catch {}
+  try {
+    await updateDoc(doc(db, 'users', uKey), { syllabus })
+  } catch (err) {
+    console.warn('Failed to save syllabus to Firestore:', err)
+  }
+}
+
+export async function getSyllabus(userName) {
+  if (!userName) return []
+  const uKey = userName.toLowerCase()
+  try {
+    const cached = localStorage.getItem(`stt_syllabus_${uKey}`)
+    if (cached) return JSON.parse(cached)
+  } catch {}
+  try {
+    const docData = await getUserDoc(uKey)
+    if (docData?.syllabus) {
+      localStorage.setItem(`stt_syllabus_${uKey}`, JSON.stringify(docData.syllabus))
+      return docData.syllabus
+    }
+  } catch {}
+  return []
+}
+
+// ─────────────────────────────────────────────
+// EXAM COUNTDOWN & TARGET
+// ─────────────────────────────────────────────
+
+export async function saveExamGoal(userName, examGoal) {
+  if (!userName) return
+  const uKey = userName.toLowerCase()
+  try {
+    localStorage.setItem(`stt_exam_goal_${uKey}`, JSON.stringify(examGoal))
+  } catch {}
+  try {
+    await updateDoc(doc(db, 'users', uKey), { examGoal })
+  } catch (err) {
+    console.warn('Failed to save exam goal to Firestore:', err)
+  }
+}
+
+export async function getExamGoal(userName) {
+  if (!userName) return null
+  const uKey = userName.toLowerCase()
+  try {
+    const cached = localStorage.getItem(`stt_exam_goal_${uKey}`)
+    if (cached) return JSON.parse(cached)
+  } catch {}
+  try {
+    const docData = await getUserDoc(uKey)
+    if (docData?.examGoal) {
+      localStorage.setItem(`stt_exam_goal_${uKey}`, JSON.stringify(docData.examGoal))
+      return docData.examGoal
+    }
+  } catch {}
+  return null
+}
+
+// ─────────────────────────────────────────────
+// DAILY MISSIONS
+// ─────────────────────────────────────────────
+
+export async function saveDailyMissions(userName, dateStr, missions) {
+  if (!userName || !dateStr) return
+  const uKey = userName.toLowerCase()
+  try {
+    localStorage.setItem(`stt_missions_${uKey}_${dateStr}`, JSON.stringify(missions))
+  } catch {}
+  try {
+    await updateDoc(doc(db, 'users', uKey), {
+      [`missions.${dateStr}`]: missions,
+    })
+  } catch (err) {
+    console.warn('Failed to save daily missions to Firestore:', err)
+  }
+}
+
+export async function getDailyMissions(userName, dateStr) {
+  if (!userName || !dateStr) return []
+  const uKey = userName.toLowerCase()
+  try {
+    const cached = localStorage.getItem(`stt_missions_${uKey}_${dateStr}`)
+    if (cached) return JSON.parse(cached)
+  } catch {}
+  try {
+    const docData = await getUserDoc(uKey)
+    if (docData?.missions?.[dateStr]) {
+      localStorage.setItem(`stt_missions_${uKey}_${dateStr}`, JSON.stringify(docData.missions[dateStr]))
+      return docData.missions[dateStr]
+    }
+  } catch {}
+  return []
+}
+
+// ─────────────────────────────────────────────
+// SPACED REPETITION REVISION ALERTS
+// ─────────────────────────────────────────────
+
+/**
+ * Calculates topics due for spaced repetition revision.
+ * Intervals: 1 day ago (yesterday), 3 days ago, and 7 days ago.
+ * @param {Array} sessions
+ * @returns {{ day1: Array, day3: Array, day7: Array }}
+ */
+export function getSpacedRepetitionDue(sessions) {
+  if (!sessions || !sessions.length) return { day1: [], day3: [], day7: [] }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const calcDateStr = (daysAgo) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() - daysAgo)
+    return toDateStr(d)
+  }
+
+  const d1Str = calcDateStr(1)
+  const d3Str = calcDateStr(3)
+  const d7Str = calcDateStr(7)
+
+  const getTopicsForDate = (targetDateStr) => {
+    const matches = sessions.filter((s) => s.date === targetDateStr)
+    const set = new Map()
+    for (const m of matches) {
+      const label = m.topic ? (m.subject ? `${m.subject}: ${m.topic}` : m.topic) : m.subject || m.notes || 'Study Session'
+      if (!set.has(label)) {
+        set.set(label, {
+          label,
+          subject: m.subject || '',
+          topic: m.topic || '',
+          totalSeconds: m.totalSeconds || 0,
+          date: targetDateStr,
+          id: m.id,
+        })
+      } else {
+        set.get(label).totalSeconds += m.totalSeconds || 0
+      }
+    }
+    return Array.from(set.values())
+  }
+
+  return {
+    day1: getTopicsForDate(d1Str),
+    day3: getTopicsForDate(d3Str),
+    day7: getTopicsForDate(d7Str),
+  }
 }

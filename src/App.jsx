@@ -13,6 +13,7 @@ import Stopwatch from './pages/Stopwatch'
 import History from './pages/History'
 import HistoryDetail from './pages/HistoryDetail'
 import Plan from './pages/Plan'
+import Syllabus from './pages/Syllabus'
 import WatchPartner, { WatchSearch } from './pages/WatchPartner'
 import PartnerHistory from './pages/PartnerHistory'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
@@ -51,6 +52,7 @@ function AnimatedRoutes() {
         <Route path="/history" element={<RequireAuth><History userName={userName} /></RequireAuth>} />
         <Route path="/history/:date" element={<RequireAuth><HistoryDetail userName={userName} /></RequireAuth>} />
         <Route path="/plan" element={<RequireAuth><Plan userName={userName} /></RequireAuth>} />
+        <Route path="/syllabus" element={<RequireAuth><Syllabus userName={userName} /></RequireAuth>} />
 
         {/* Watch — public (no auth required to watch a partner) */}
         <Route path="/watch" element={<WatchSearch userName={userName} />} />

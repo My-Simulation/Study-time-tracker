@@ -15,7 +15,9 @@ import StopwatchDisplay from '../components/StopwatchDisplay'
 import LapTable from '../components/LapTable'
 import SaveModal from '../components/SaveModal'
 import Toast from '../components/Toast'
-import { getWeeklyPlan, getTargetForDate, getUserSessions } from '../utils/firestoreHelpers'
+import ExamCountdown from '../components/ExamCountdown'
+import DailyMissions from '../components/DailyMissions'
+import { getWeeklyPlan, getTargetForDate, getUserSessions, getSyllabus } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes } from '../utils/formatTime'
 import { clearSession, getSession } from '../utils/auth'
 
@@ -27,29 +29,38 @@ export default function Stopwatch({ userName }) {
   const [toast, setToast] = useState({ visible: false, message: '' })
   const [dailyGoal, setDailyGoal] = useState(null)   // { targetMinutes, subjects }
   const [todayStudied, setTodayStudied] = useState(0) // seconds studied today
+  const [syllabus, setSyllabus] = useState([])
+  const [activeSubject, setActiveSubject] = useState('')
+  const [activeTopic, setActiveTopic] = useState('')
   const captureRef = useRef(null)
 
   const hasTime = elapsed > 0
 
-  // ── Load today's goal from weekly plan ───────────────────────────────────
+  // ── Load today's goal, syllabus and studied time ─────────────────────────
   useEffect(() => {
-    async function loadGoal() {
+    async function loadData() {
       try {
-        const plan = await getWeeklyPlan(userName)
+        const [plan, sessions, syl] = await Promise.all([
+          getWeeklyPlan(userName),
+          getUserSessions(userName),
+          getSyllabus(userName),
+        ])
         const goal = getTargetForDate(todayString(), plan)
         setDailyGoal(goal)
 
-        // Load today's already-studied time
-        const sessions = await getUserSessions(userName)
         const todaySec = sessions
           .filter((s) => s.date === todayString())
           .reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
         setTodayStudied(todaySec)
+
+        if (Array.isArray(syl) && syl.length > 0) {
+          setSyllabus(syl)
+        }
       } catch (err) {
-        console.warn('Could not load daily goal:', err)
+        console.warn('Could not load stopwatch extra data:', err)
       }
     }
-    loadGoal()
+    loadData()
   }, [userName])
 
   const session = getSession()
@@ -94,6 +105,13 @@ export default function Stopwatch({ userName }) {
 
         {/* Right icons */}
         <div className="flex items-center gap-1">
+          {/* Syllabus tracker icon */}
+          <IconButton onClick={() => navigate('/syllabus')} title="Syllabus & Topics" aria-label="Syllabus">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+          </IconButton>
           {/* Plan icon */}
           <IconButton onClick={() => navigate('/plan')} title="Study Plan" aria-label="Study Plan">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -123,6 +141,11 @@ export default function Stopwatch({ userName }) {
         >
           Stopwatch
         </div>
+      </div>
+
+      {/* ── Exam D-Day Countdown & Target Hours Widget ── */}
+      <div className="px-4 pt-1 max-w-lg mx-auto w-full">
+        <ExamCountdown userName={userName} totalStudiedSeconds={todayStudied + totalSeconds} />
       </div>
 
       {/* ── Daily goal progress bar ── */}
@@ -156,9 +179,47 @@ export default function Stopwatch({ userName }) {
         </div>
       )}
 
+      {/* ── Active Topic Tagging ── */}
+      {syllabus.length > 0 && (
+        <div className="px-4 pt-2 max-w-lg mx-auto w-full flex items-center justify-between text-xs">
+          <span className="text-gray-500 font-medium text-[11px]">Topic Tag:</span>
+          <div className="flex items-center gap-1.5 overflow-x-auto max-w-[80%]">
+            <select
+              value={activeSubject}
+              onChange={(e) => {
+                setActiveSubject(e.target.value)
+                setActiveTopic('')
+              }}
+              className="rounded-lg bg-[#141414] border border-[#2a2a2a] text-white text-[11px] px-2 py-1 outline-none focus:border-purple-500"
+            >
+              <option value="">Select Subject</option>
+              {syllabus.map((s) => (
+                <option key={s.id} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {activeSubject && (
+              <select
+                value={activeTopic}
+                onChange={(e) => setActiveTopic(e.target.value)}
+                className="rounded-lg bg-[#141414] border border-[#2a2a2a] text-white text-[11px] px-2 py-1 outline-none focus:border-purple-500 max-w-[130px] truncate"
+              >
+                <option value="">Select Topic</option>
+                {(syllabus.find((s) => s.name === activeSubject)?.topics || []).map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Main card ── */}
-      <div className="flex-1 flex flex-col px-4 pb-8 max-w-lg mx-auto w-full">
-        <div className="card flex flex-col flex-1 overflow-hidden mt-3">
+      <div className="flex-1 flex flex-col px-4 pb-3 max-w-lg mx-auto w-full">
+        <div className="card flex flex-col flex-1 overflow-hidden mt-2">
           <div ref={captureRef} className="bg-[#1a1a1a] rounded-2xl">
             <StopwatchDisplay displayTime={displayTime} />
             {laps.length > 0 && <div className="border-t border-[#2a2a2a]" />}
@@ -204,6 +265,11 @@ export default function Stopwatch({ userName }) {
         </div>
       </div>
 
+      {/* ── Daily Missions / Micro-Goals Checklist ── */}
+      <div className="px-4 pb-8 max-w-lg mx-auto w-full">
+        <DailyMissions userName={userName} />
+      </div>
+
       <SaveModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -213,6 +279,8 @@ export default function Stopwatch({ userName }) {
         totalSeconds={totalSeconds}
         laps={laps}
         userName={userName}
+        initialSubject={activeSubject}
+        initialTopic={activeTopic}
       />
       <Toast message={toast.message} visible={toast.visible} onDismiss={dismissToast} />
     </div>

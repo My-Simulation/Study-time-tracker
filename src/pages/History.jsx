@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   getUserSessions, groupSessionsByDate,
   calculateStreaks, getWeeklyPlan, getTargetForDate,
+  getSpacedRepetitionDue,
 } from '../utils/firestoreHelpers'
 import { formatDateDisplay, formatHoursMinutes, todayString } from '../utils/formatTime'
 import { clearSession } from '../utils/auth'
@@ -19,10 +20,12 @@ import { clearSession } from '../utils/auth'
 export default function History({ userName }) {
   const navigate = useNavigate()
   const [dateGroups, setDateGroups] = useState([])
+  const [rawSessions, setRawSessions] = useState([])
   const [weeklyPlan, setWeeklyPlan] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [partnerInput, setPartnerInput] = useState('')
+  const [showRevisionAlerts, setShowRevisionAlerts] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -32,6 +35,7 @@ export default function History({ userName }) {
         getUserSessions(userName),
         getWeeklyPlan(userName),
       ])
+      setRawSessions(sessions || [])
       setDateGroups(groupSessionsByDate(sessions))
       setWeeklyPlan(plan || {})
     } catch (err) {
@@ -137,7 +141,77 @@ export default function History({ userName }) {
               </div>
             </div>
 
-            {/* Date cards with goal status */}
+            {/* Spaced Repetition Revision Alerts */}
+            {(() => {
+              const due = getSpacedRepetitionDue(rawSessions)
+              const hasDue = due.day1.length > 0 || due.day3.length > 0 || due.day7.length > 0
+              if (!hasDue || !showRevisionAlerts) return null
+
+              return (
+                <div className="card p-3.5 flex flex-col gap-2.5 border-purple-500/30 bg-[#161224]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🧠</span>
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">
+                        Spaced Repetition Revision Due
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowRevisionAlerts(false)}
+                      className="text-gray-500 hover:text-gray-300 text-xs px-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Review these topics for 5–10 minutes today to boost long-term memory retention:
+                  </p>
+
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    {due.day1.length > 0 && (
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+                          1-Day (Yesterday)
+                        </span>
+                        {due.day1.map((item) => (
+                          <span key={item.label} className="text-gray-300 font-medium text-[11px] bg-[#1d1730] px-2 py-0.5 rounded-lg border border-[#2e2648]">
+                            {item.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {due.day3.length > 0 && (
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 whitespace-nowrap">
+                          3-Day (3 Days Ago)
+                        </span>
+                        {due.day3.map((item) => (
+                          <span key={item.label} className="text-gray-300 font-medium text-[11px] bg-[#1d1730] px-2 py-0.5 rounded-lg border border-[#2e2648]">
+                            {item.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {due.day7.length > 0 && (
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 whitespace-nowrap">
+                          7-Day (1 Week Ago)
+                        </span>
+                        {due.day7.map((item) => (
+                          <span key={item.label} className="text-gray-300 font-medium text-[11px] bg-[#1d1730] px-2 py-0.5 rounded-lg border border-[#2e2648]">
+                            {item.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Date cards with goal status & outcome tags */}
             <div className="flex flex-col gap-3">
               {dateGroups.map((group) => {
                 const screenshot = [...group.sessions].reverse().find((s) => s.screenshotUrl)?.screenshotUrl
@@ -149,6 +223,21 @@ export default function History({ userName }) {
                 const isPast = group.date < todayString()
                 const goalMet = goalPct !== null && goalPct >= 100
                 const goalMissed = goalPct !== null && goalPct < 100 && isPast && !isToday
+
+                // Gather day's focus, output count, subjects and reflection tags
+                const focusScores = group.sessions.map((s) => s.focusScore).filter(Boolean)
+                const avgFocus = focusScores.length
+                  ? (focusScores.reduce((a, b) => a + b, 0) / focusScores.length).toFixed(1)
+                  : null
+
+                const totalOutput = group.sessions
+                  .map((s) => s.outputCount)
+                  .filter((c) => c !== null && c !== undefined && !isNaN(c))
+                  .reduce((a, b) => a + b, 0)
+
+                const outputUnits = Array.from(new Set(group.sessions.map((s) => s.outputUnit).filter(Boolean)))
+                const reflectionTags = Array.from(new Set(group.sessions.map((s) => s.reflectionTag).filter(Boolean)))
+                const subjects = Array.from(new Set(group.sessions.map((s) => s.subject).filter(Boolean)))
 
                 return (
                   <div
@@ -177,6 +266,39 @@ export default function History({ userName }) {
                           {goalMet && <GoalBadge type="met" />}
                           {goalMissed && <GoalBadge type="missed" />}
                         </div>
+
+                        {/* Outcomes & tags row */}
+                        {(avgFocus || totalOutput > 0 || reflectionTags.length > 0 || subjects.length > 0) && (
+                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                            {avgFocus && (
+                              <span className="text-[10px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-full">
+                                ⭐ {avgFocus}
+                              </span>
+                            )}
+                            {totalOutput > 0 && (
+                              <span className="text-[10px] font-medium text-purple-300 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded-full">
+                                📝 {totalOutput} {outputUnits[0] || 'done'}
+                              </span>
+                            )}
+                            {reflectionTags.slice(0, 2).map((tag) => (
+                              <span
+                                key={tag}
+                                className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                                  tag.includes('Distraction') || tag.includes('Fatigue')
+                                    ? 'text-red-300 bg-red-500/10 border-red-500/20'
+                                    : 'text-gray-300 bg-[#222] border-[#333]'
+                                }`}
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                            {subjects.map((sub) => (
+                              <span key={sub} className="text-[10px] text-gray-400 bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 rounded-md">
+                                {sub}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       {/* Thumbnail or mini card */}
