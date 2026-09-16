@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   getUserSessions, groupSessionsByDate,
   calculateStreaks, getWeeklyPlan, getTargetForDate,
-  getSpacedRepetitionDue, getAllDayPlanners,
+  getSpacedRepetitionDue, getAllDayPlanners, saveSession,
 } from '../utils/firestoreHelpers'
 import { formatDateDisplay, formatHoursMinutes, todayString } from '../utils/formatTime'
 import { clearSession } from '../utils/auth'
@@ -27,6 +27,7 @@ export default function History({ userName }) {
   const [error, setError] = useState(null)
   const [partnerInput, setPartnerInput] = useState('')
   const [showRevisionAlerts, setShowRevisionAlerts] = useState(true)
+  const [showManualModal, setShowManualModal] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -81,10 +82,19 @@ export default function History({ userName }) {
         </button>
       </div>
 
-      {/* Page title */}
-      <div className="px-4 pb-3">
-        <h1 className="text-xl font-bold text-white">Study History</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{userName && `@${userName}`}</p>
+      {/* Page title & Manual Log button */}
+      <div className="px-4 pb-3 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-white">Study History</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{userName && `@${userName}`}</p>
+        </div>
+        <button
+          onClick={() => setShowManualModal(true)}
+          className="text-xs px-3 py-1.5 rounded-xl bg-purple-500/10 text-purple-300 border border-purple-500/30 hover:bg-purple-500/20 font-medium transition-all flex items-center gap-1.5 shadow-sm"
+        >
+          <span>➕</span>
+          <span>Log Past Session</span>
+        </button>
       </div>
 
       <div className="flex-1 flex flex-col px-4 pb-10 max-w-lg mx-auto w-full gap-4">
@@ -353,6 +363,14 @@ export default function History({ userName }) {
           </>
         )}
       </div>
+
+      {/* Manual Log Modal for missed/past sessions */}
+      <ManualLogModal
+        isOpen={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        onSaved={load}
+        userName={userName}
+      />
     </div>
   )
 }
@@ -477,4 +495,182 @@ function getLast7DaysData(dateGroups) {
     })
   }
   return result
+}
+
+function ManualLogModal({ isOpen, onClose, onSaved, userName }) {
+  const [date, setDate] = useState(todayString())
+  const [hours, setHours] = useState('1')
+  const [minutes, setMinutes] = useState('0')
+  const [subject, setSubject] = useState('')
+  const [topic, setTopic] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  if (!isOpen) return null
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    const h = parseInt(hours, 10) || 0
+    const m = parseInt(minutes, 10) || 0
+    const totalSec = h * 3600 + m * 60
+
+    if (totalSec <= 0) {
+      setError('Please enter at least 1 minute of study time.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const hStr = String(h).padStart(2, '0')
+      const mStr = String(m).padStart(2, '0')
+      await saveSession({
+        userName,
+        date,
+        totalTime: `${hStr}:${mStr}:00.00`,
+        totalSeconds: totalSec,
+        laps: [],
+        screenshotUrl: '',
+        focusScore: 5,
+        reflectionTag: '🔥 Deep Focus',
+        notes: notes.trim() || 'Manual study session log',
+        subject: subject.trim() || 'Self Study',
+        topic: topic.trim(),
+      })
+      onSaved()
+      onClose()
+    } catch (err) {
+      console.error(err)
+      setError('Failed to save session. Check your connection.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="card w-full max-w-sm p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-[#2a2a2a] pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⏱️</span>
+            <h2 className="text-sm font-bold text-white">Log Past Study Session</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white text-lg w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#222]"
+          >
+            ✕
+          </button>
+        </div>
+
+        {error && (
+          <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSave} className="flex flex-col gap-3">
+          {/* Date Picker */}
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Study Date</label>
+            <input
+              type="date"
+              value={date}
+              max={todayString()}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-xs outline-none focus:border-purple-500"
+              required
+            />
+          </div>
+
+          {/* Time: Hours & Minutes */}
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Duration Studied</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="24"
+                  value={hours}
+                  onChange={(e) => setHours(e.target.value)}
+                  placeholder="0"
+                  className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-xs outline-none focus:border-purple-500"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">hours</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={minutes}
+                  onChange={(e) => setMinutes(e.target.value)}
+                  placeholder="0"
+                  className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-xs outline-none focus:border-purple-500"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">mins</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Subject & Topic */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Subject (Optional)</label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g. Math"
+                className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-xs outline-none focus:border-purple-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Topic (Optional)</label>
+              <input
+                type="text"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g. Number System"
+                className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-xs outline-none focus:border-purple-500"
+              />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Notes (Optional)</label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="What did you study during this session?"
+              className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-xs outline-none focus:border-purple-500 resize-none"
+            />
+          </div>
+
+          {/* Buttons */}
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 pill-btn h-9 text-xs bg-[#222] text-gray-300 hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 pill-btn h-9 text-xs"
+              style={{ background: '#8b5cf6', color: 'white', opacity: saving ? 0.7 : 1 }}
+            >
+              {saving ? 'Saving…' : 'Save Session'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }
