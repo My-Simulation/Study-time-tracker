@@ -515,3 +515,92 @@ export async function calculateDayNumber(userName, targetDateStr) {
   }
 }
 
+/**
+ * Finalizes and locks the current day, and automatically rolls over
+ * uncompleted tasks and goals into the next day's planner sheet.
+ */
+export async function finalizeAndRolloverDay(userName, currentDateStr, nextDateStr, currentPlanData) {
+  if (!userName || !currentDateStr || !nextDateStr) return
+
+  // 1. Lock and finalize current day
+  const finalizedCurrent = {
+    ...currentPlanData,
+    isLocked: true,
+    finalizedAt: Date.now(),
+  }
+  await saveDayPlanner(userName, currentDateStr, finalizedCurrent)
+
+  // 2. Extract uncompleted tasks & goals from current day
+  const uncompletedRows = (currentPlanData.rows || []).filter(
+    (r) => !r.done && (r.topic || r.plan || (r.subject && r.subject !== 'New Subject'))
+  )
+
+  const uncompletedGoals = (currentPlanData.goals || []).filter(
+    (g) => g && g.trim().length > 0
+  )
+
+  // 3. Load or initialize next day's planner
+  const existingNextPlan = await getDayPlanner(userName, nextDateStr)
+
+  // Create rollover rows with clear backlog marking
+  const rolloverRows = uncompletedRows.map((r, i) => ({
+    id: `rollover_${Date.now()}_${i}`,
+    time: r.time || '',
+    subject: r.subject || 'Backlog',
+    topic: r.topic || '',
+    plan: r.plan || '',
+    done: false,
+    isRollover: true,
+    rolloverFromDate: currentDateStr,
+    rolloverFromDay: currentPlanData.dayNumber || 1,
+  }))
+
+  const existingNextRows = existingNextPlan?.rows || []
+  // Combine: put rollover items at the top of the next day's schedule!
+  const combinedRows = [
+    ...rolloverRows,
+    ...existingNextRows.filter(
+      (r) => !rolloverRows.some((rr) => rr.topic === r.topic && rr.subject === r.subject)
+    ),
+  ]
+
+  // Prepare next goals (if next day has empty goals, fill with rolled-over goals)
+  const nextGoals = existingNextPlan?.goals ? [...existingNextPlan.goals] : ['', '', '']
+  let gIdx = 0
+  for (const ug of uncompletedGoals) {
+    while (gIdx < 3 && nextGoals[gIdx] && nextGoals[gIdx].trim().length > 0) {
+      gIdx++
+    }
+    if (gIdx < 3) {
+      nextGoals[gIdx] = `[From Day ${currentPlanData.dayNumber || 1}] ${ug}`
+      gIdx++
+    }
+  }
+
+  const nextDayNumber = (currentPlanData.dayNumber || 1) + 1
+
+  const nextPlanData = {
+    ...(existingNextPlan || {}),
+    date: nextDateStr,
+    dayNumber: nextDayNumber,
+    targetHours: existingNextPlan?.targetHours || currentPlanData.targetHours || 6,
+    goals: nextGoals,
+    rows:
+      combinedRows.length > 0
+        ? combinedRows
+        : currentPlanData.rows.map((r) => ({
+            ...r,
+            id: `row_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+            done: false,
+          })),
+    notes: existingNextPlan?.notes || '',
+    progressRating: existingNextPlan?.progressRating || 'good',
+    isLocked: false,
+    updatedAt: Date.now(),
+  }
+
+  await saveDayPlanner(userName, nextDateStr, nextPlanData)
+  return { finalizedCurrent, nextPlanData }
+}
+
+
