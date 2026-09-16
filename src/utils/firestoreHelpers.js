@@ -275,12 +275,25 @@ function toDateStr(date) {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
 }
 
-export function getTargetForDate(dateStr, weeklyPlan) {
-  if (!weeklyPlan || !dateStr) return null
+export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
+  if (!dateStr) return null
+
+  // 1. Priority: check if specific Day Planner sheet has targetHours for this date
+  if (dayPlanners && dayPlanners[dateStr] && typeof dayPlanners[dateStr].targetHours === 'number' && dayPlanners[dateStr].targetHours > 0) {
+    return {
+      targetMinutes: Math.round(dayPlanners[dateStr].targetHours * 60),
+      subjects: dayPlanners[dateStr].goals?.[0] || '',
+      source: 'dayPlanner',
+    }
+  }
+
+  // 2. Fallback to weeklyPlan template
+  if (!weeklyPlan) return null
   const [y, m, d] = dateStr.split('-').map(Number)
   const date = new Date(y, m - 1, d)
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  return weeklyPlan[days[date.getDay()]] || null
+  const wp = weeklyPlan[days[date.getDay()]]
+  return wp ? { ...wp, source: 'weeklyPlan' } : null
 }
 
 // ─────────────────────────────────────────────

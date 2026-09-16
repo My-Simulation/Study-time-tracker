@@ -53,7 +53,7 @@ export default function Stopwatch({ userName }) {
           getDayPlanner(userName, todayString()),
           calculateDayNumber(userName, todayString()),
         ])
-        const goal = getTargetForDate(todayString(), plan)
+        const goal = getTargetForDate(todayString(), plan, dPlan ? { [todayString()]: dPlan } : null)
         setDailyGoal(goal)
         setDayPlan(dPlan)
         setDayNum(dNum || 1)
@@ -104,11 +104,41 @@ export default function Stopwatch({ userName }) {
 
   // ── Daily goal progress ───────────────────────────────────────────────────
   const goalProgress = (() => {
-    if (!dailyGoal || !dailyGoal.targetMinutes) return null
-    const targetSec = dailyGoal.targetMinutes * 60
+    // Determine effective target: DayPlanner targetHours takes precedence, else dailyGoal from weekly plan
+    const targetMinutes = (dayPlan?.targetHours && Number(dayPlan.targetHours) > 0)
+      ? Math.round(Number(dayPlan.targetHours) * 60)
+      : (dailyGoal?.targetMinutes || 0)
+
     const studiedSec = todayStudied + Math.floor(elapsed / 1000)
+
+    if (!targetMinutes || targetMinutes <= 0) {
+      return {
+        hasTarget: false,
+        pct: 0,
+        targetSec: 0,
+        studiedSec,
+        studiedLabel: formatHoursMinutes(studiedSec),
+      }
+    }
+
+    const targetSec = targetMinutes * 60
     const pct = Math.min(100, Math.round((studiedSec / targetSec) * 100))
-    return { pct, targetSec, studiedSec, label: formatHoursMinutes(targetSec) }
+    const isAchieved = studiedSec >= targetSec
+    const remainingSec = Math.max(0, targetSec - studiedSec)
+
+    return {
+      hasTarget: true,
+      pct,
+      targetSec,
+      studiedSec,
+      targetMinutes,
+      isAchieved,
+      remainingSec,
+      label: formatHoursMinutes(targetSec),
+      studiedLabel: formatHoursMinutes(studiedSec),
+      remainingLabel: formatHoursMinutes(remainingSec),
+      source: (dayPlan?.targetHours && Number(dayPlan.targetHours) > 0) ? `Day ${dayNum} Target` : 'Weekly Plan Goal',
+    }
   })()
 
   return (
@@ -207,31 +237,104 @@ export default function Stopwatch({ userName }) {
       {/* ── Daily goal progress bar ── */}
       {goalProgress && (
         <div className="px-4 pt-2 pb-0 max-w-lg mx-auto w-full">
-          <div className="card px-4 py-3 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs text-gray-500">Today's Goal</span>
-                {dailyGoal.subjects && (
-                  <span className="text-xs text-gray-600 ml-2">· {dailyGoal.subjects}</span>
-                )}
+          {goalProgress.hasTarget ? (
+            <div
+              className="card px-4 py-3 flex flex-col gap-2.5 transition-all shadow-sm"
+              style={{
+                background: goalProgress.isAchieved
+                  ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(20, 20, 20, 0.95) 100%)'
+                  : '#1a1a1a',
+                border: goalProgress.isAchieved ? '1px solid rgba(34, 197, 94, 0.35)' : '1px solid #2a2a2a',
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{goalProgress.isAchieved ? '🎉' : '🎯'}</span>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-white tracking-wide">
+                        Today's Study Goal
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+                        {goalProgress.source}
+                      </span>
+                    </div>
+                    {dailyGoal?.subjects && (
+                      <span className="text-[11px] text-gray-400 block truncate max-w-[200px]">
+                        {dailyGoal.subjects}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`text-xs font-bold font-mono ${goalProgress.isAchieved ? 'text-green-400' : 'text-purple-400'}`}>
+                    {goalProgress.studiedLabel} / {goalProgress.label}
+                  </span>
+                  <span className="block text-[10px] text-gray-400 font-medium">
+                    {goalProgress.pct}% done
+                  </span>
+                </div>
               </div>
-              <span className={`text-xs font-semibold font-mono ${goalProgress.pct >= 100 ? 'text-green-400' : 'text-purple-400'}`}>
-                {formatHoursMinutes(goalProgress.studiedSec)} / {goalProgress.label}
+
+              {/* Progress Bar */}
+              <div className="relative h-2 rounded-full bg-[#262626] overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${goalProgress.pct}%`,
+                    background: goalProgress.isAchieved
+                      ? 'linear-gradient(90deg, #10b981, #22c55e)'
+                      : 'linear-gradient(90deg, #7c3aed, #ec4899)',
+                    boxShadow: goalProgress.isAchieved ? '0 0 10px rgba(34, 197, 94, 0.5)' : '0 0 10px rgba(124, 58, 237, 0.3)',
+                  }}
+                />
+              </div>
+
+              {/* Status Message */}
+              <div className="flex items-center justify-between text-[11px]">
+                {goalProgress.isAchieved ? (
+                  <span className="text-green-400 font-medium flex items-center gap-1">
+                    ✓ Daily goal achieved for today! Great job! 🎉
+                  </span>
+                ) : goalProgress.studiedSec > 0 ? (
+                  <span className="text-amber-400/90 font-medium">
+                    ⏳ In Progress · {goalProgress.remainingLabel} left to reach target
+                  </span>
+                ) : (
+                  <span className="text-gray-400">
+                    Not started yet today · Target: {goalProgress.label}
+                  </span>
+                )}
+                <button
+                  onClick={() => navigate('/planner')}
+                  className="text-[10px] text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-0.5 hover:underline"
+                >
+                  Day Sheet →
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* If no target set yet today */
+            <div
+              onClick={() => navigate('/planner')}
+              className="card px-3.5 py-2.5 flex items-center justify-between border-dashed border-[#333] hover:border-purple-500/50 cursor-pointer transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎯</span>
+                <div>
+                  <p className="text-xs font-semibold text-gray-300">Set Today's Target Hours</p>
+                  <p className="text-[10px] text-gray-500">
+                    {goalProgress.studiedSec > 0
+                      ? `Studied ${goalProgress.studiedLabel} today · Set a goal to track completion!`
+                      : 'Define how many hours you want to study today'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 font-medium transition-all">
+                + Set Goal
               </span>
             </div>
-            <div className="relative h-2 rounded-full bg-[#2a2a2a] overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${goalProgress.pct}%`,
-                  background: goalProgress.pct >= 100 ? '#22c55e' : 'linear-gradient(90deg, #7c3aed, #8b5cf6)',
-                }}
-              />
-            </div>
-            {goalProgress.pct >= 100 && (
-              <p className="text-xs text-green-400 text-center">🎉 Goal achieved for today!</p>
-            )}
-          </div>
+          )}
         </div>
       )}
 

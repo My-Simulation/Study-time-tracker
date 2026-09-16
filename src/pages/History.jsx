@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   getUserSessions, groupSessionsByDate,
   calculateStreaks, getWeeklyPlan, getTargetForDate,
-  getSpacedRepetitionDue,
+  getSpacedRepetitionDue, getAllDayPlanners,
 } from '../utils/firestoreHelpers'
 import { formatDateDisplay, formatHoursMinutes, todayString } from '../utils/formatTime'
 import { clearSession } from '../utils/auth'
@@ -22,6 +22,7 @@ export default function History({ userName }) {
   const [dateGroups, setDateGroups] = useState([])
   const [rawSessions, setRawSessions] = useState([])
   const [weeklyPlan, setWeeklyPlan] = useState({})
+  const [dayPlanners, setDayPlanners] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [partnerInput, setPartnerInput] = useState('')
@@ -31,13 +32,15 @@ export default function History({ userName }) {
     setLoading(true)
     setError(null)
     try {
-      const [sessions, plan] = await Promise.all([
+      const [sessions, plan, dPlanners] = await Promise.all([
         getUserSessions(userName),
         getWeeklyPlan(userName),
+        getAllDayPlanners(userName),
       ])
       setRawSessions(sessions || [])
       setDateGroups(groupSessionsByDate(sessions))
       setWeeklyPlan(plan || {})
+      setDayPlanners(dPlanners || {})
     } catch (err) {
       console.error('History load error:', err)
       setError(`Failed to load: ${err?.message || 'Unknown error'}`)
@@ -215,7 +218,7 @@ export default function History({ userName }) {
             <div className="flex flex-col gap-3">
               {dateGroups.map((group) => {
                 const screenshot = [...group.sessions].reverse().find((s) => s.screenshotUrl)?.screenshotUrl
-                const goal = getTargetForDate(group.date, weeklyPlan)
+                const goal = getTargetForDate(group.date, weeklyPlan, dayPlanners)
                 const goalPct = goal?.targetMinutes
                   ? Math.min(100, Math.round((group.totalSeconds / (goal.targetMinutes * 60)) * 100))
                   : null
