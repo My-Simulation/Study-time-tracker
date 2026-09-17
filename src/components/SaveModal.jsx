@@ -352,43 +352,36 @@ export default function SaveModal({
         )}
 
         {/* Action buttons */}
-        <div className="flex flex-col gap-2 pt-1">
+        <div className="flex flex-col gap-2 pt-2">
           <button
-            onClick={() => handleSave(false)}
+            onClick={() => handleSave(true)}
             disabled={isSaving || !selectedDate}
-            className="pill-btn w-full h-11 text-sm font-semibold"
+            className="pill-btn w-full h-11 text-sm font-semibold flex items-center justify-center gap-2 shadow-lg"
             style={{
               background: '#8b5cf6',
               color: 'white',
-              opacity: isSaving ? 0.6 : 1,
+              opacity: isSaving || !selectedDate ? 0.6 : 1,
             }}
           >
             {isSaving ? (
               <span className="flex items-center gap-2">
                 <Spinner />
-                {savingStep === 'screenshot' ? 'Capturing…' : 'Saving…'}
+                <span>{savingStep === 'screenshot' ? 'Capturing…' : 'Saving…'}</span>
               </span>
             ) : (
-              'Save & Continue'
+              'Save Session'
             )}
           </button>
           <button
-            onClick={() => handleSave(true)}
-            disabled={isSaving || !selectedDate}
-            className="pill-btn w-full h-11 text-sm font-semibold"
-            style={{
-              background: '#2a2a2a',
-              color: 'white',
-              opacity: isSaving ? 0.6 : 1,
-            }}
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="pill-btn w-full h-9 text-xs font-medium text-gray-400 hover:text-white transition-colors"
+            style={{ background: 'transparent' }}
           >
-            Save & Reset
+            Cancel
           </button>
         </div>
-
-        <p className="text-[11px] text-gray-600 text-center">
-          "Save & Continue" keeps the timer running as-is.
-        </p>
       </div>
     </div>
   )

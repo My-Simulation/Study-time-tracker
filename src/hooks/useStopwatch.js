@@ -245,7 +245,6 @@ export function useStopwatch(userName) {
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
-    if (isRunning) return
     lastLocalActionRef.current = Date.now()
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
@@ -279,7 +278,7 @@ export function useStopwatch(userName) {
         laps: [],
       }).catch(() => {})
     }
-  }, [isRunning, storageKey, userName])
+  }, [storageKey, userName])
 
   // ── Lap ───────────────────────────────────────────────────────────────────
   const lap = useCallback(() => {

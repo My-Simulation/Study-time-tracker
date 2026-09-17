@@ -145,15 +145,22 @@ export default function Stopwatch({ userName }) {
   }
 
   const handleSaved = useCallback(
-    (date, didReset) => {
+    async (date) => {
       setShowModal(false)
       setToast({ visible: true, message: `Saved for ${date} ✅` })
-      if (didReset) reset()
-      // Refresh today's studied time
-      const added = Math.floor(elapsed / 1000)
-      setTodayStudied((prev) => prev + added)
+      reset()
+      if (userName) {
+        try {
+          const todaySessions = await getSessionsByDate(userName, todayString())
+          const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+          setTodayStudied(todaySec)
+        } catch {
+          const added = Math.floor(elapsed / 1000)
+          setTodayStudied((prev) => prev + added)
+        }
+      }
     },
-    [reset, elapsed]
+    [reset, elapsed, userName]
   )
 
   const dismissToast = useCallback(() => setToast({ visible: false, message: '' }), [])
@@ -495,7 +502,10 @@ export default function Stopwatch({ userName }) {
           <div className="flex flex-col gap-2.5 p-4 pt-3">
             {hasTime && (
               <button
-                onClick={() => setShowModal(true)}
+                onClick={() => {
+                  if (isRunning) stop()
+                  setShowModal(true)
+                }}
                 className="pill-btn w-full"
                 style={{ background: '#8b5cf6', color: 'white' }}
               >
