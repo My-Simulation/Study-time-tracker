@@ -9,6 +9,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { formatTime } from '../utils/formatTime'
 import { updateLiveStatus } from '../utils/firestoreHelpers'
+import { backgroundTimer } from '../utils/backgroundTimer'
 
 const STORAGE_PREFIX = 'stt_stopwatch_state_'
 
@@ -157,6 +158,8 @@ export function useStopwatch(userName) {
 
     persistState(true, now, baseElapsedRef.current, laps)
 
+    backgroundTimer.requestWakeLock()
+
     if (userName) {
       updateLiveStatus(userName, {
         isRunning: true,
@@ -186,6 +189,7 @@ export function useStopwatch(userName) {
     setIsRunning(false)
 
     persistState(false, null, finalElapsed, laps)
+    backgroundTimer.releaseWakeLock()
 
     if (userName) {
       updateLiveStatus(userName, {
@@ -207,6 +211,7 @@ export function useStopwatch(userName) {
     setDisplayTime('0:00:00.00')
     setLaps([])
     setIsRunning(false)
+    backgroundTimer.releaseWakeLock()
 
     if (storageKey) {
       try {
@@ -271,6 +276,23 @@ export function useStopwatch(userName) {
     }
   }, [])
 
+  // Sync with backgroundTimer (MediaSession / Lock Screen controls / Tab Title / Silent Audio)
+  useEffect(() => {
+    backgroundTimer.setCallbacks({
+      onPlay: start,
+      onPause: stop,
+      onLap: lap,
+    })
+  }, [start, stop, lap])
+
+  useEffect(() => {
+    backgroundTimer.update({ isRunning, displayTime })
+  }, [isRunning, displayTime])
+
+  const togglePictureInPicture = useCallback(() => {
+    return backgroundTimer.togglePictureInPicture()
+  }, [])
+
   return {
     elapsed,
     isRunning,
@@ -280,5 +302,6 @@ export function useStopwatch(userName) {
     stop,
     reset,
     lap,
+    togglePictureInPicture,
   }
 }

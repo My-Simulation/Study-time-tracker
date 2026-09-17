@@ -23,10 +23,11 @@ import {
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes } from '../utils/formatTime'
 import { clearSession, getSession } from '../utils/auth'
+import { backgroundTimer } from '../utils/backgroundTimer'
 
 export default function Stopwatch({ userName }) {
   const navigate = useNavigate()
-  const { elapsed, isRunning, laps, displayTime, start, stop, reset, lap } = useStopwatch(userName)
+  const { elapsed, isRunning, laps, displayTime, start, stop, reset, lap, togglePictureInPicture } = useStopwatch(userName)
 
   const location = useLocation()
   const [showModal, setShowModal] = useState(false)
@@ -38,9 +39,47 @@ export default function Stopwatch({ userName }) {
   const [activeTopic, setActiveTopic] = useState(location.state?.topic || '')
   const [dayPlan, setDayPlan] = useState(null)
   const [dayNum, setDayNum] = useState(1)
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
+  const [isStandalone, setIsStandalone] = useState(false)
   const captureRef = useRef(null)
 
   const hasTime = elapsed > 0
+
+  // ── PWA Install Prompt Listener ───────────────────────────────────────────
+  useEffect(() => {
+    const handlePrompt = (e) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handlePrompt)
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+      setIsStandalone(true)
+    }
+    return () => window.removeEventListener('beforeinstallprompt', handlePrompt)
+  }, [])
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt()
+      const { outcome } = await deferredPrompt.userChoice
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null)
+        setIsStandalone(true)
+      }
+    } else {
+      alert('📲 To install this app on your phone:\n1. Tap the 3-dots (⋮) in your mobile browser.\n2. Tap "Install App" or "Add to Home Screen".\nOnce installed, it opens full-screen like a native app!')
+    }
+  }
+
+  // ── Update backgroundTimer metadata with active subject & topic ───────────
+  useEffect(() => {
+    backgroundTimer.update({
+      isRunning,
+      displayTime,
+      subject: activeSubject,
+      topic: activeTopic,
+    })
+  }, [isRunning, displayTime, activeSubject, activeTopic])
 
   // ── Load today's goal, syllabus, day plan and studied time ─────────────────
   useEffect(() => {
@@ -146,11 +185,27 @@ export default function Stopwatch({ userName }) {
 
       {/* ── Top bar ── */}
       <div className="flex items-center justify-between px-4 pt-4 pb-0">
-        {/* Profile pill */}
-        <ProfilePill userName={userName} avatarColor={avatarColor} onLogout={handleSwitchUser} />
+        <div className="flex items-center gap-2">
+          {/* Profile pill */}
+          <ProfilePill userName={userName} avatarColor={avatarColor} onLogout={handleSwitchUser} />
+          {!isStandalone && (
+            <button
+              onClick={handleInstallApp}
+              title="Install as Mobile App"
+              className="text-[11px] px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 transition-all flex items-center gap-1 font-semibold"
+            >
+              <span>📲</span>
+              <span>Install</span>
+            </button>
+          )}
+        </div>
 
         {/* Right icons */}
         <div className="flex items-center gap-1">
+          {/* Floating Mini Stopwatch (PiP) */}
+          <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
+            <span className="text-base leading-none">🖼️</span>
+          </IconButton>
           {/* Day Planner Sheet icon */}
           <IconButton onClick={() => navigate('/planner')} title="Daily Study Planner" aria-label="Day Planner">
             <span className="text-base leading-none">🌸</span>
@@ -420,6 +475,26 @@ export default function Stopwatch({ userName }) {
                 {isRunning ? 'Stop' : 'Start'}
               </button>
             </div>
+
+            {/* Lock Screen & Background Controller active banner */}
+            {isRunning && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#181229] border border-purple-500/30 text-[11px] mt-1 shadow-sm">
+                <div className="flex items-center gap-2 text-purple-200 min-w-0">
+                  <span className="relative flex h-2 w-2 flex-shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                  <span className="font-medium truncate">Lock Screen & Notification Active</span>
+                </div>
+                <button
+                  onClick={togglePictureInPicture}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-200 border border-purple-500/40 hover:bg-purple-500/30 transition-all flex items-center gap-1 flex-shrink-0"
+                  title="Open Floating Picture-in-Picture Mini Timer"
+                >
+                  <span>🖼️ Float Timer</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
