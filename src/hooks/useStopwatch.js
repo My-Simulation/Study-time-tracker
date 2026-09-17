@@ -79,10 +79,20 @@ export function useStopwatch(userName) {
           const current = baseElapsedRef.current + Math.max(0, Date.now() - startTimestampRef.current)
           setElapsed(current)
           setDisplayTime(formatTime(current))
+          backgroundTimer.setTimerState({
+            isRunning: true,
+            startTimestamp: startTimestampRef.current,
+            baseElapsed: baseElapsedRef.current,
+          })
         } else {
           startTimestampRef.current = null
           setElapsed(baseElapsedRef.current)
           setDisplayTime(formatTime(baseElapsedRef.current))
+          backgroundTimer.setTimerState({
+            isRunning: false,
+            startTimestamp: null,
+            baseElapsed: baseElapsedRef.current,
+          })
         }
       }
     } catch (e) {
@@ -159,14 +169,18 @@ export function useStopwatch(userName) {
     if (isRunning) return
     lastLocalActionRef.current = Date.now()
 
-    // Immediately start audio in user gesture to activate Lock Screen & MediaSession
-    backgroundTimer.startAudio()
-    backgroundTimer.requestWakeLock()
-
     const now = Date.now()
     startTimestampRef.current = now
-    // baseElapsed is whatever was accumulated previously
     setIsRunning(true)
+
+    // Immediately start audio and inform backgroundTimer with exact timestamps
+    backgroundTimer.setTimerState({
+      isRunning: true,
+      startTimestamp: now,
+      baseElapsed: baseElapsedRef.current,
+    })
+    backgroundTimer.startAudio()
+    backgroundTimer.requestWakeLock()
 
     persistState(true, now, baseElapsedRef.current, laps)
 
@@ -190,9 +204,6 @@ export function useStopwatch(userName) {
     lastLocalActionRef.current = Date.now()
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
-    backgroundTimer.pauseAudio()
-    backgroundTimer.releaseWakeLock()
-
     const now = Date.now()
     const finalElapsed = startTimestampRef.current
       ? baseElapsedRef.current + Math.max(0, now - startTimestampRef.current)
@@ -203,6 +214,14 @@ export function useStopwatch(userName) {
     setElapsed(finalElapsed)
     setDisplayTime(formatTime(finalElapsed))
     setIsRunning(false)
+
+    backgroundTimer.setTimerState({
+      isRunning: false,
+      startTimestamp: null,
+      baseElapsed: finalElapsed,
+    })
+    backgroundTimer.pauseAudio()
+    backgroundTimer.releaseWakeLock()
 
     persistState(false, null, finalElapsed, laps)
 
@@ -223,15 +242,20 @@ export function useStopwatch(userName) {
     lastLocalActionRef.current = Date.now()
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
-    backgroundTimer.pauseAudio()
-    backgroundTimer.releaseWakeLock()
-
     baseElapsedRef.current = 0
     startTimestampRef.current = null
     setElapsed(0)
     setDisplayTime('0:00:00.00')
     setLaps([])
     setIsRunning(false)
+
+    backgroundTimer.setTimerState({
+      isRunning: false,
+      startTimestamp: null,
+      baseElapsed: 0,
+    })
+    backgroundTimer.pauseAudio()
+    backgroundTimer.releaseWakeLock()
 
     if (storageKey) {
       try {
@@ -332,6 +356,11 @@ export function useStopwatch(userName) {
 
         persistState(true, remoteStart, remoteBase, remoteLaps)
 
+        backgroundTimer.setTimerState({
+          isRunning: true,
+          startTimestamp: remoteStart,
+          baseElapsed: remoteBase,
+        })
         backgroundTimer.startAudio()
         backgroundTimer.requestWakeLock()
 
@@ -349,6 +378,11 @@ export function useStopwatch(userName) {
         setIsRunning(false)
         setLaps(remoteLaps)
 
+        backgroundTimer.setTimerState({
+          isRunning: false,
+          startTimestamp: null,
+          baseElapsed: remoteBase,
+        })
         backgroundTimer.pauseAudio()
         backgroundTimer.releaseWakeLock()
 
@@ -381,8 +415,31 @@ export function useStopwatch(userName) {
       onPlay: start,
       onPause: stop,
       onLap: lap,
+      onTick: (liveElapsed, liveDisplayTime) => {
+        // When document is hidden, keep React state synchronized as the background worker ticks
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          setElapsed(liveElapsed)
+          setDisplayTime(liveDisplayTime)
+        }
+      },
     })
   }, [start, stop, lap])
+
+  // Resync immediately when tab/app becomes visible again
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && isRunning && startTimestampRef.current) {
+        const now = Date.now()
+        const current = baseElapsedRef.current + Math.max(0, now - startTimestampRef.current)
+        setElapsed(current)
+        setDisplayTime(formatTime(current))
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(tick)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [isRunning, tick])
 
   useEffect(() => {
     backgroundTimer.update({ isRunning, displayTime, elapsed })

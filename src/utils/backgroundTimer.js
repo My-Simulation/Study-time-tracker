@@ -3,11 +3,15 @@
  * Comprehensive background & lock screen timer support:
  * 1. MediaSession API: Live Controllable widget on Lock Screen & Notification Drawer (Play/Pause/Lap)
  * 2. Silent PCM Audio: Real WAV audio stream keeping mobile audio engine & MediaSession active in background
- * 3. Screen Wake Lock: Keeps the screen awake during study sessions
- * 4. Floating Picture-in-Picture (PiP): Floating mini-stopwatch with proper error handling
- * 5. Dynamic Document Title: Shows running timer in browser tab
- * 6. Background Notification API: Native notification when app is minimized
+ * 3. Dedicated Web Worker: Ticks every second independently of UI thread / rAF so timer never freezes when minimized
+ * 4. Audio timeupdate backup: Native media engine events drive ticks even during extreme OS battery throttling
+ * 5. Screen Wake Lock: Keeps the screen awake during study sessions
+ * 6. Floating Picture-in-Picture (PiP): Floating mini-stopwatch with graceful iOS support
+ * 7. Dynamic Document Title: Shows running timer in browser tab
+ * 8. Status Bar Notifications: Periodic silent in-place notification updates via Service Worker
  */
+
+import { formatTime } from './formatTime'
 
 class BackgroundTimerService {
   constructor() {
@@ -17,11 +21,25 @@ class BackgroundTimerService {
     this.pipVideo = null
     this.isPiPActive = false
     this.activeNotification = null
+    this.worker = null
+    this.fallbackInterval = null
+    this.lastProcessedSecond = -1
+
     this.actionCallbacks = {
       onPlay: null,
       onPause: null,
       onLap: null,
+      onTick: null,
     }
+
+    this.timerState = {
+      isRunning: false,
+      startTimestamp: null,
+      baseElapsed: 0,
+      subject: '',
+      topic: '',
+    }
+
     this.lastState = {
       isRunning: false,
       displayTime: '0:00:00.00',
@@ -31,6 +49,7 @@ class BackgroundTimerService {
     }
 
     this._initAudio()
+    this._initWorker()
     this._initVisibilityListener()
   }
 
@@ -39,52 +58,68 @@ class BackgroundTimerService {
       this.audio = new Audio('/silent-presence.wav')
       this.audio.loop = true
       this.audio.volume = 0.05
+      // Audio timeupdate fires every ~250ms natively in background while audio plays
+      this.audio.addEventListener('timeupdate', () => {
+        this._handleBackgroundTick()
+      })
     } catch (err) {
       console.warn('Audio init error:', err)
+    }
+  }
+
+  _initWorker() {
+    if (typeof window === 'undefined' || typeof Worker === 'undefined') return
+    try {
+      const workerCode = `
+        let timer = null;
+        self.onmessage = function(e) {
+          if (e.data === 'start') {
+            if (!timer) {
+              timer = setInterval(function() {
+                self.postMessage('tick');
+              }, 1000);
+            }
+          } else if (e.data === 'stop') {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          }
+        };
+      `
+      const blob = new Blob([workerCode], { type: 'application/javascript' })
+      this.worker = new Worker(URL.createObjectURL(blob))
+      this.worker.onmessage = (e) => {
+        if (e.data === 'tick') {
+          this._handleBackgroundTick()
+        }
+      }
+    } catch (err) {
+      console.warn('Background Worker init error:', err)
     }
   }
 
   _initVisibilityListener() {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden' && this.lastState.isRunning) {
-          this._showBackgroundNotification()
+        if (document.visibilityState === 'hidden' && this.timerState.isRunning) {
+          this._handleBackgroundTick()
         } else if (document.visibilityState === 'visible') {
-          if (this.lastState.isRunning) {
+          if (this.timerState.isRunning) {
             this.requestWakeLock()
-          }
-          if (this.activeNotification) {
-            try {
-              this.activeNotification.close()
-            } catch (e) {}
-            this.activeNotification = null
           }
         }
       })
     }
   }
 
-  _showBackgroundNotification() {
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      try {
-        const timeStr = this.lastState.displayTime.split('.')[0]
-        const sub = this.lastState.subject || 'Study Session'
-        this.activeNotification = new Notification(`⏱️ ${timeStr} · Timer Running`, {
-          body: `${sub} is active. Tap to return to app.`,
-          icon: '/icon-192.png',
-          badge: '/icon-192.png',
-          tag: 'stt-active-timer',
-          renotify: false,
-          silent: true,
-        })
-      } catch (err) {
-        console.warn('Background notification error:', err)
-      }
+  setCallbacks({ onPlay, onPause, onLap, onTick }) {
+    this.actionCallbacks = {
+      onPlay: onPlay || this.actionCallbacks.onPlay,
+      onPause: onPause || this.actionCallbacks.onPause,
+      onLap: onLap || this.actionCallbacks.onLap,
+      onTick: onTick || this.actionCallbacks.onTick,
     }
-  }
-
-  setCallbacks({ onPlay, onPause, onLap }) {
-    this.actionCallbacks = { onPlay, onPause, onLap }
     this._setupMediaSessionHandlers()
   }
 
@@ -149,15 +184,86 @@ class BackgroundTimerService {
   }
 
   /**
+   * Primary state coordinator: keeps background workers ticking accurately
+   */
+  setTimerState({ isRunning, startTimestamp, baseElapsed, subject, topic }) {
+    this.timerState.isRunning = Boolean(isRunning)
+    this.timerState.startTimestamp = startTimestamp ? Number(startTimestamp) : null
+    this.timerState.baseElapsed = Number(baseElapsed) || 0
+    if (subject !== undefined) this.timerState.subject = subject
+    if (topic !== undefined) this.timerState.topic = topic
+
+    if (this.timerState.isRunning && this.timerState.startTimestamp) {
+      if (this.worker) this.worker.postMessage('start')
+      if (!this.fallbackInterval) {
+        this.fallbackInterval = setInterval(() => this._handleBackgroundTick(), 1000)
+      }
+    } else {
+      if (this.worker) this.worker.postMessage('stop')
+      if (this.fallbackInterval) {
+        clearInterval(this.fallbackInterval)
+        this.fallbackInterval = null
+      }
+    }
+
+    const currentElapsed = this.timerState.isRunning && this.timerState.startTimestamp
+      ? this.timerState.baseElapsed + Math.max(0, Date.now() - this.timerState.startTimestamp)
+      : this.timerState.baseElapsed
+    const formatted = formatTime(currentElapsed)
+    this._renderMediaAndNotifications(formatted, currentElapsed)
+  }
+
+  /**
+   * Background tick loop: executed by Web Worker, audio timeupdate, or fallback interval.
+   * Runs continuously even when app is minimized or phone is locked!
+   */
+  _handleBackgroundTick() {
+    if (!this.timerState.isRunning || !this.timerState.startTimestamp) return
+    const now = Date.now()
+    const elapsed = this.timerState.baseElapsed + Math.max(0, now - this.timerState.startTimestamp)
+    const sec = Math.floor(elapsed / 1000)
+
+    if (sec === this.lastProcessedSecond) return
+    this.lastProcessedSecond = sec
+
+    const displayTime = formatTime(elapsed)
+    this._renderMediaAndNotifications(displayTime, elapsed)
+
+    if (this.actionCallbacks.onTick) {
+      this.actionCallbacks.onTick(elapsed, displayTime)
+    }
+  }
+
+  /**
    * Called whenever stopwatch ticks or state changes.
    */
-  update({ isRunning, displayTime, elapsed = 0, subject = '', topic = '' }) {
+  update({ isRunning, displayTime, elapsed = 0, subject, topic }) {
+    if (isRunning !== undefined) this.timerState.isRunning = Boolean(isRunning)
+    if (subject !== undefined) this.timerState.subject = subject
+    if (topic !== undefined) this.timerState.topic = topic
+
+    this._renderMediaAndNotifications(
+      displayTime || this.lastState.displayTime,
+      elapsed !== undefined ? elapsed : this.lastState.elapsed
+    )
+  }
+
+  _renderMediaAndNotifications(displayTime, elapsed) {
+    const isRunning = this.timerState.isRunning
+    const subject = this.timerState.subject
+    const topic = this.timerState.topic
     this.lastState = { isRunning, displayTime, elapsed, subject, topic }
+
+    const timeFormatted = displayTime.split('.')[0]
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const subtitle = subject
+      ? `${subject}${topic ? ` · ${topic}` : ''}`
+      : 'Study Time Tracker'
 
     // 1. Dynamic document title
     if (typeof document !== 'undefined') {
       if (isRunning) {
-        document.title = `(${displayTime.split('.')[0]}) Study Tracker`
+        document.title = `(${timeFormatted}) Study Tracker`
       } else if (displayTime !== '0:00:00.00') {
         document.title = `(Paused) Study Tracker`
       } else {
@@ -168,13 +274,8 @@ class BackgroundTimerService {
     // 2. Lock Screen & Notification Shade via MediaSession
     if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
       try {
-        const timeFormatted = displayTime.split('.')[0]
         const titleStr = isRunning ? `⏱️ ${timeFormatted}` : `⏸️ Paused: ${timeFormatted}`
-        const subtitle = subject
-          ? `${subject}${topic ? ` · ${topic}` : ''}`
-          : 'Study Time Tracker'
 
-        const origin = typeof window !== 'undefined' ? window.location.origin : ''
         navigator.mediaSession.playbackState = isRunning ? 'playing' : 'paused'
         navigator.mediaSession.metadata = new MediaMetadata({
           title: titleStr,
@@ -186,7 +287,7 @@ class BackgroundTimerService {
           ],
         })
 
-        // Position state for Android lock screen progress bar ticking
+        // Position state for hardware media lock screen progress bar ticking
         if ('setPositionState' in navigator.mediaSession) {
           try {
             const elapsedSec = Math.floor(elapsed / 1000)
@@ -202,9 +303,49 @@ class BackgroundTimerService {
       }
     }
 
-    // 3. Update PiP canvas if active
+    // 3. Status Bar Notification (for Android / Desktop / PWA while minimized)
+    if (
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'hidden' &&
+      isRunning
+    ) {
+      this._updateNotification(
+        `⏱️ ${timeFormatted} · Timer Running`,
+        `${subtitle} is active. Tap to return to app.`,
+        origin
+      )
+    }
+
+    // 4. Update PiP canvas if active
     if (this.isPiPActive && this.pipCanvas) {
       this._drawPiPCanvas(displayTime, isRunning, subject, topic)
+    }
+  }
+
+  _updateNotification(title, body, origin) {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+
+    const options = {
+      body,
+      icon: `${origin}/icon-192.png`,
+      badge: `${origin}/icon-192.png`,
+      tag: 'stt-active-timer',
+      renotify: false,
+      silent: true,
+    }
+
+    // Priority 1: ServiceWorkerRegistration (required on mobile Chrome / Android)
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready
+        .then((reg) => {
+          reg.showNotification(title, options).catch(() => {})
+        })
+        .catch(() => {})
+    } else {
+      // Priority 2: Standard Notification constructor (Desktop Safari / Firefox)
+      try {
+        this.activeNotification = new Notification(title, options)
+      } catch (e) {}
     }
   }
 
