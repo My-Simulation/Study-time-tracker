@@ -3,26 +3,21 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-// Purge any stale cache storage from earlier service worker versions
-if (typeof window !== 'undefined' && 'caches' in window) {
-  caches.keys().then((keys) => {
-    for (const key of keys) {
-      if (key !== 'stt-nocache-v2') {
-        caches.delete(key)
-      }
+// Completely unregister any active service workers and clear cache
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const reg of registrations) {
+      reg.unregister().catch(() => {})
     }
   }).catch(() => {})
 }
 
-// Register Service Worker for PWA installability
-if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then((reg) => {
-      reg.update().catch(() => {})
-    }).catch((err) => {
-      console.warn('Service worker registration failed:', err)
-    })
-  })
+if (typeof window !== 'undefined' && 'caches' in window) {
+  caches.keys().then((keys) => {
+    for (const key of keys) {
+      caches.delete(key).catch(() => {})
+    }
+  }).catch(() => {})
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(

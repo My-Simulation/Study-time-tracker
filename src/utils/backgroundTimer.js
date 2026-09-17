@@ -17,7 +17,6 @@ class BackgroundTimerService {
     this.pipCanvas = null
     this.pipVideo = null
     this.isPiPActive = false
-    this.worker = null
     this.fallbackInterval = null
     this.lastProcessedSecond = -1
 
@@ -45,7 +44,6 @@ class BackgroundTimerService {
     }
 
     this._initAudio()
-    this._initWorker()
     this._initVisibilityListener()
   }
 
@@ -60,38 +58,6 @@ class BackgroundTimerService {
       })
     } catch (err) {
       console.warn('Audio init error:', err)
-    }
-  }
-
-  _initWorker() {
-    if (typeof window === 'undefined' || typeof Worker === 'undefined') return
-    try {
-      const workerCode = `
-        let timer = null;
-        self.onmessage = function(e) {
-          if (e.data === 'start') {
-            if (!timer) {
-              timer = setInterval(function() {
-                self.postMessage('tick');
-              }, 1000);
-            }
-          } else if (e.data === 'stop') {
-            if (timer) {
-              clearInterval(timer);
-              timer = null;
-            }
-          }
-        };
-      `
-      const blob = new Blob([workerCode], { type: 'application/javascript' })
-      this.worker = new Worker(URL.createObjectURL(blob))
-      this.worker.onmessage = (e) => {
-        if (e.data === 'tick') {
-          this._handleBackgroundTick()
-        }
-      }
-    } catch (err) {
-      console.warn('Background Worker init error:', err)
     }
   }
 
@@ -175,7 +141,7 @@ class BackgroundTimerService {
   }
 
   /**
-   * Primary state coordinator: keeps background workers ticking accurately
+   * Primary state coordinator: keeps background ticks running accurately
    */
   setTimerState({ isRunning, startTimestamp, baseElapsed, subject, topic }) {
     this.timerState.isRunning = Boolean(isRunning)
@@ -185,12 +151,10 @@ class BackgroundTimerService {
     if (topic !== undefined) this.timerState.topic = topic
 
     if (this.timerState.isRunning && this.timerState.startTimestamp) {
-      if (this.worker) this.worker.postMessage('start')
       if (!this.fallbackInterval) {
         this.fallbackInterval = setInterval(() => this._handleBackgroundTick(), 1000)
       }
     } else {
-      if (this.worker) this.worker.postMessage('stop')
       if (this.fallbackInterval) {
         clearInterval(this.fallbackInterval)
         this.fallbackInterval = null
@@ -205,7 +169,7 @@ class BackgroundTimerService {
   }
 
   /**
-   * Background tick loop: executed by Web Worker, audio timeupdate, or fallback interval.
+   * Background tick loop: executed by audio timeupdate or fallback interval.
    * Runs continuously even when app is minimized or phone is locked!
    */
   _handleBackgroundTick() {
@@ -240,63 +204,67 @@ class BackgroundTimerService {
   }
 
   _renderMediaAndNotifications(displayTime, elapsed) {
-    const isRunning = this.timerState.isRunning
-    const subject = this.timerState.subject
-    const topic = this.timerState.topic
-    this.lastState = { isRunning, displayTime, elapsed, subject, topic }
+    try {
+      const isRunning = this.timerState.isRunning
+      const subject = this.timerState.subject || ''
+      const topic = this.timerState.topic || ''
+      this.lastState = { isRunning, displayTime, elapsed, subject, topic }
 
-    const timeFormatted = displayTime.split('.')[0]
-    const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const subtitle = subject
-      ? `${subject}${topic ? ` · ${topic}` : ''}`
-      : 'Study Time Tracker'
+      const rawTime = typeof displayTime === 'string' && displayTime ? displayTime : formatTime(Number(elapsed) || 0)
+      const timeFormatted = rawTime.includes('.') ? rawTime.split('.')[0] : rawTime
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const subtitle = subject
+        ? `${subject}${topic ? ` · ${topic}` : ''}`
+        : 'Study Time Tracker'
 
-    // 1. Dynamic document title
-    if (typeof document !== 'undefined') {
-      if (isRunning) {
-        document.title = `(${timeFormatted}) Study Tracker`
-      } else if (displayTime !== '0:00:00.00') {
-        document.title = `(Paused) Study Tracker`
-      } else {
-        document.title = 'Study Time Tracker'
-      }
-    }
-
-    // 2. Lock Screen & Notification Shade via MediaSession
-    if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
-      try {
-        const titleStr = isRunning ? `⏱️ ${timeFormatted}` : `⏸️ Paused: ${timeFormatted}`
-
-        navigator.mediaSession.playbackState = isRunning ? 'playing' : 'paused'
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: titleStr,
-          artist: subtitle,
-          album: isRunning ? '🟢 Live Timer Running' : '⏸️ Timer Paused',
-          artwork: [
-            { src: `${origin}/icon-192.png`, sizes: '192x192', type: 'image/png' },
-            { src: `${origin}/icon-512.png`, sizes: '512x512', type: 'image/png' },
-          ],
-        })
-
-        // Position state for hardware media lock screen progress bar ticking
-        if ('setPositionState' in navigator.mediaSession) {
-          try {
-            const elapsedSec = Math.floor(elapsed / 1000)
-            navigator.mediaSession.setPositionState({
-              duration: 86400,
-              playbackRate: isRunning ? 1.0 : 0.0,
-              position: Math.min(86400, elapsedSec),
-            })
-          } catch (e) {}
+      // 1. Dynamic document title
+      if (typeof document !== 'undefined') {
+        if (isRunning) {
+          document.title = `(${timeFormatted}) Study Tracker`
+        } else if (rawTime !== '0:00:00.00' && rawTime !== '0:00:00') {
+          document.title = `(Paused) Study Tracker`
+        } else {
+          document.title = 'Study Time Tracker'
         }
-      } catch (err) {
-        console.warn('MediaSession metadata error:', err)
       }
-    }
 
-    // 3. Update PiP canvas if active
-    if (this.isPiPActive && this.pipCanvas) {
-      this._drawPiPCanvas(displayTime, isRunning, subject, topic)
+      // 2. Lock Screen via MediaSession
+      if (typeof navigator !== 'undefined' && 'mediaSession' in navigator && typeof MediaMetadata !== 'undefined') {
+        try {
+          const titleStr = isRunning ? `⏱️ ${timeFormatted}` : `⏸️ Paused: ${timeFormatted}`
+
+          navigator.mediaSession.playbackState = isRunning ? 'playing' : 'paused'
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: titleStr,
+            artist: subtitle,
+            album: isRunning ? '🟢 Live Timer Running' : '⏸️ Timer Paused',
+            artwork: [
+              { src: `${origin}/icon-192.png`, sizes: '192x192', type: 'image/png' },
+              { src: `${origin}/icon-512.png`, sizes: '512x512', type: 'image/png' },
+            ],
+          })
+
+          if ('setPositionState' in navigator.mediaSession) {
+            try {
+              const elapsedSec = Math.floor((Number(elapsed) || 0) / 1000)
+              navigator.mediaSession.setPositionState({
+                duration: 86400,
+                playbackRate: isRunning ? 1.0 : 0.0,
+                position: Math.min(86400, elapsedSec),
+              })
+            } catch (e) {}
+          }
+        } catch (err) {
+          console.warn('MediaSession metadata error:', err)
+        }
+      }
+
+      // 3. Update PiP canvas if active
+      if (this.isPiPActive && this.pipCanvas) {
+        this._drawPiPCanvas(rawTime, isRunning, subject, topic)
+      }
+    } catch (outerErr) {
+      console.warn('renderMedia error:', outerErr)
     }
   }
 
