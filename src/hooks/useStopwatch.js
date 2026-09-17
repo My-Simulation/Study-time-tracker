@@ -8,13 +8,17 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { formatTime } from '../utils/formatTime'
-import { updateLiveStatus } from '../utils/firestoreHelpers'
+import { updateLiveStatus, subscribeToLiveStatus } from '../utils/firestoreHelpers'
 import { backgroundTimer } from '../utils/backgroundTimer'
 
 const STORAGE_PREFIX = 'stt_stopwatch_state_'
 
 export function useStopwatch(userName) {
   const storageKey = userName ? `${STORAGE_PREFIX}${userName.toLowerCase()}` : null
+  const deviceIdRef = useRef(
+    `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  )
+  const lastLocalActionRef = useRef(0)
 
   // Initialize state from localStorage if available
   const [elapsed, setElapsed] = useState(() => {
@@ -137,6 +141,8 @@ export function useStopwatch(userName) {
           isRunning: true,
           baseElapsed: baseElapsedRef.current,
           startTimestamp: startTimestampRef.current,
+          deviceId: deviceIdRef.current,
+          laps,
         }).catch(() => {})
       }, 10000)
     } else {
@@ -146,11 +152,12 @@ export function useStopwatch(userName) {
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
     }
-  }, [isRunning, userName])
+  }, [isRunning, userName, laps])
 
   // ── Start ─────────────────────────────────────────────────────────────────
   const start = useCallback(() => {
     if (isRunning) return
+    lastLocalActionRef.current = Date.now()
 
     // Immediately start audio in user gesture to activate Lock Screen & MediaSession
     backgroundTimer.startAudio()
@@ -168,6 +175,8 @@ export function useStopwatch(userName) {
         isRunning: true,
         baseElapsed: baseElapsedRef.current,
         startTimestamp: now,
+        deviceId: deviceIdRef.current,
+        laps,
       }).catch(() => {})
     }
 
@@ -178,6 +187,7 @@ export function useStopwatch(userName) {
   // ── Stop (pause) ──────────────────────────────────────────────────────────
   const stop = useCallback(() => {
     if (!isRunning) return
+    lastLocalActionRef.current = Date.now()
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
     backgroundTimer.pauseAudio()
@@ -201,6 +211,8 @@ export function useStopwatch(userName) {
         isRunning: false,
         baseElapsed: finalElapsed,
         startTimestamp: null,
+        deviceId: deviceIdRef.current,
+        laps,
       }).catch(() => {})
     }
   }, [isRunning, laps, persistState, userName])
@@ -208,6 +220,7 @@ export function useStopwatch(userName) {
   // ── Reset ─────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
     if (isRunning) return
+    lastLocalActionRef.current = Date.now()
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
     backgroundTimer.pauseAudio()
@@ -231,6 +244,8 @@ export function useStopwatch(userName) {
         isRunning: false,
         baseElapsed: 0,
         startTimestamp: null,
+        deviceId: deviceIdRef.current,
+        laps: [],
       }).catch(() => {})
     }
   }, [isRunning, storageKey, userName])
@@ -238,6 +253,7 @@ export function useStopwatch(userName) {
   // ── Lap ───────────────────────────────────────────────────────────────────
   const lap = useCallback(() => {
     if (!isRunning || !startTimestampRef.current) return
+    lastLocalActionRef.current = Date.now()
     const now = Date.now()
     const currentTotal = baseElapsedRef.current + Math.max(0, now - startTimestampRef.current)
 
@@ -271,9 +287,85 @@ export function useStopwatch(userName) {
       }))
 
       persistState(true, startTimestampRef.current, baseElapsedRef.current, formatted)
+
+      if (userName) {
+        updateLiveStatus(userName, {
+          isRunning: true,
+          baseElapsed: baseElapsedRef.current,
+          startTimestamp: startTimestampRef.current,
+          deviceId: deviceIdRef.current,
+          laps: formatted,
+        }).catch(() => {})
+      }
+
       return formatted
     })
-  }, [isRunning, persistState])
+  }, [isRunning, persistState, userName])
+
+  // ── Real-Time Cross-Device Subscription (Laptop <-> Mobile) ───────────────
+  useEffect(() => {
+    if (!userName) return
+
+    const unsubscribe = subscribeToLiveStatus(userName, (remote) => {
+      if (!remote) return
+      // Ignore echoes from this same device tab/session
+      if (remote.deviceId && remote.deviceId === deviceIdRef.current) return
+
+      // If user performed an action locally in the last 1500ms, ignore updates from before/around that action
+      if (Date.now() - lastLocalActionRef.current < 1500) return
+
+      const remoteRunning = Boolean(remote.isRunning)
+      const remoteStart = remote.startedAtMs || remote.startTimestamp || null
+      const remoteBase = Number(remote.baseElapsed) || 0
+      const remoteLaps = Array.isArray(remote.laps) ? remote.laps : []
+
+      if (remoteRunning && remoteStart) {
+        // Remote device started timer or is actively running
+        startTimestampRef.current = remoteStart
+        baseElapsedRef.current = remoteBase
+        const current = remoteBase + Math.max(0, Date.now() - remoteStart)
+
+        setElapsed(current)
+        setDisplayTime(formatTime(current))
+        setIsRunning(true)
+        setLaps(remoteLaps)
+
+        persistState(true, remoteStart, remoteBase, remoteLaps)
+
+        backgroundTimer.startAudio()
+        backgroundTimer.requestWakeLock()
+
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(tick)
+      } else {
+        // Remote device paused or reset
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+
+        startTimestampRef.current = null
+        baseElapsedRef.current = remoteBase
+
+        setElapsed(remoteBase)
+        setDisplayTime(formatTime(remoteBase))
+        setIsRunning(false)
+        setLaps(remoteLaps)
+
+        backgroundTimer.pauseAudio()
+        backgroundTimer.releaseWakeLock()
+
+        if (remoteBase === 0 && remoteLaps.length === 0) {
+          if (storageKey) {
+            try { localStorage.removeItem(storageKey) } catch {}
+          }
+        } else {
+          persistState(false, null, remoteBase, remoteLaps)
+        }
+      }
+    })
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [userName, storageKey, persistState, tick])
 
   // Clean up animation frame on unmount (does NOT stop the timer)
   useEffect(() => {

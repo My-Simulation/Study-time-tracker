@@ -174,14 +174,15 @@ class BackgroundTimerService {
           ? `${subject}${topic ? ` · ${topic}` : ''}`
           : 'Study Time Tracker'
 
+        const origin = typeof window !== 'undefined' ? window.location.origin : ''
         navigator.mediaSession.playbackState = isRunning ? 'playing' : 'paused'
         navigator.mediaSession.metadata = new MediaMetadata({
           title: titleStr,
           artist: subtitle,
           album: isRunning ? '🟢 Live Timer Running' : '⏸️ Timer Paused',
           artwork: [
-            { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-            { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+            { src: `${origin}/icon-192.png`, sizes: '192x192', type: 'image/png' },
+            { src: `${origin}/icon-512.png`, sizes: '512x512', type: 'image/png' },
           ],
         })
 
@@ -251,6 +252,21 @@ class BackgroundTimerService {
       } catch (err) {
         console.warn('Exit PiP error:', err)
       }
+    }
+
+    // iOS WebKit check: Apple iOS strictly restricts PiP to native video files and blocks canvas streams
+    const isIOS = typeof navigator !== 'undefined' && (
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    )
+
+    if (isIOS) {
+      alert(
+        '📱 iPhone / iOS Note:\n\n' +
+        'Apple iOS does not allow web browsers to pop out floating PiP windows for custom canvas timers.\n\n' +
+        '✨ Good news: Your timer is ALREADY active on your iPhone Lock Screen and Notification Center! You can lock your phone or swipe down from the top to see and control the live timer.'
+      )
+      return false
     }
 
     if (!document.pictureInPictureEnabled) {

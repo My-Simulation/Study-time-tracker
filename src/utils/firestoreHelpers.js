@@ -113,29 +113,39 @@ export async function getWeeklyPlan(userName) {
 }
 
 // ─────────────────────────────────────────────
-// LIVE STATUS (real-time partner view)
+// LIVE STATUS (real-time cross-device & partner view)
 // ─────────────────────────────────────────────
 
-export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp }) {
+export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp, deviceId, laps, subject, topic }) {
   if (!userName) return
   const statusRef = doc(db, 'liveStatus', userName.toLowerCase())
   const now = Date.now()
-  await setDoc(statusRef, {
+  const payload = {
     userName: userName.toLowerCase(),
     isRunning: Boolean(isRunning),
     baseElapsed: Number(baseElapsed) || 0,
     startedAtMs: isRunning && startTimestamp ? Number(startTimestamp) : null,
     updatedAtMs: now,
-    // Keep serverTimestamp for backward compatibility
     updatedAt: serverTimestamp(),
-  }, { merge: true })
+  }
+  if (deviceId) payload.deviceId = deviceId
+  if (laps) payload.laps = laps
+  if (subject !== undefined) payload.subject = subject
+  if (topic !== undefined) payload.topic = topic
+
+  await setDoc(statusRef, payload, { merge: true })
 }
 
-export function subscribeToPartnerStatus(partnerName, callback) {
-  const statusRef = doc(db, 'liveStatus', partnerName.toLowerCase())
+export function subscribeToLiveStatus(userName, callback) {
+  if (!userName) return () => {}
+  const statusRef = doc(db, 'liveStatus', userName.toLowerCase())
   return onSnapshot(statusRef, (snap) => {
     callback(snap.exists() ? snap.data() : null)
   })
+}
+
+export function subscribeToPartnerStatus(partnerName, callback) {
+  return subscribeToLiveStatus(partnerName, callback)
 }
 
 // ─────────────────────────────────────────────
