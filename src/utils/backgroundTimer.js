@@ -49,7 +49,10 @@ class BackgroundTimerService {
 
   _initAudio() {
     try {
-      this.audio = new Audio('/silent-presence.wav')
+      // 1-second silent WAV base64: ensures zero network delay and reliable playback on mobile browsers
+      const SILENT_WAV_BASE64 =
+        'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+      this.audio = new Audio(SILENT_WAV_BASE64)
       this.audio.loop = true
       this.audio.volume = 0.05
       // Audio timeupdate fires every ~250ms natively in background while audio plays
@@ -166,6 +169,10 @@ class BackgroundTimerService {
       : this.timerState.baseElapsed
     const formatted = formatTime(currentElapsed)
     this._renderMediaAndNotifications(formatted, currentElapsed)
+
+    if (!this.timerState.isRunning && this.timerState.baseElapsed === 0) {
+      this.closeAndroidNotification()
+    }
   }
 
   /**
@@ -263,9 +270,57 @@ class BackgroundTimerService {
       if (this.isPiPActive && this.pipCanvas) {
         this._drawPiPCanvas(rawTime, isRunning, subject, topic)
       }
+
+      // 4. Android Status Bar & Lock Screen persistent notification
+      this._updateAndroidNotification(timeFormatted, isRunning, subtitle)
     } catch (outerErr) {
       console.warn('renderMedia error:', outerErr)
     }
+  }
+
+  /**
+   * Pinned, silent notification on Android (Status bar + Lock screen)
+   */
+  async _updateAndroidNotification(timeFormatted, isRunning, subtitle) {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    const isAndroid = /android/i.test(navigator.userAgent)
+    if (!isAndroid) return // Keep clean on iOS
+
+    try {
+      const reg = await navigator.serviceWorker.ready
+      if (reg && reg.showNotification) {
+        const titleStr = isRunning ? `⏱️ ${timeFormatted}` : `⏸️ Paused: ${timeFormatted}`
+        const bodyStr = isRunning
+          ? `🟢 Running · ${subtitle}`
+          : `⏸️ Paused · ${subtitle}`
+
+        await reg.showNotification(titleStr, {
+          body: bodyStr,
+          tag: 'stt_timer',
+          renotify: false,
+          silent: true,
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
+        })
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  /**
+   * Closes the Android timer notification
+   */
+  async closeAndroidNotification() {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    try {
+      const reg = await navigator.serviceWorker.ready
+      if (reg && reg.getNotifications) {
+        const notifs = await reg.getNotifications({ tag: 'stt_timer' })
+        notifs.forEach((n) => n.close())
+      }
+    } catch (e) {}
   }
 
   /**

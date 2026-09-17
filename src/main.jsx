@@ -3,21 +3,13 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-// Completely unregister any active service workers and clear cache
+// Register Service Worker for notifications and PWA support
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const reg of registrations) {
-      reg.unregister().catch(() => {})
-    }
-  }).catch(() => {})
-}
-
-if (typeof window !== 'undefined' && 'caches' in window) {
-  caches.keys().then((keys) => {
-    for (const key of keys) {
-      caches.delete(key).catch(() => {})
-    }
-  }).catch(() => {})
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('Service worker registration failed:', err)
+    })
+  })
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
