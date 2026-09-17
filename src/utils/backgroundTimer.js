@@ -1,14 +1,11 @@
 /**
  * backgroundTimer.js
- * Comprehensive background & lock screen timer support:
- * 1. MediaSession API: Live Controllable widget on Lock Screen & Notification Drawer (Play/Pause/Lap)
+ * Clean, lightweight background & lock screen timer support:
+ * 1. MediaSession API: Live Controllable widget on Lock Screen (Play/Pause/Lap)
  * 2. Silent PCM Audio: Real WAV audio stream keeping mobile audio engine & MediaSession active in background
- * 3. Dedicated Web Worker: Ticks every second independently of UI thread / rAF so timer never freezes when minimized
- * 4. Audio timeupdate backup: Native media engine events drive ticks even during extreme OS battery throttling
- * 5. Screen Wake Lock: Keeps the screen awake during study sessions
- * 6. Floating Picture-in-Picture (PiP): Floating mini-stopwatch with graceful iOS support
- * 7. Dynamic Document Title: Shows running timer in browser tab
- * 8. Status Bar Notifications: Periodic silent in-place notification updates via Service Worker
+ * 3. Screen Wake Lock: Keeps the screen awake during study sessions
+ * 4. Floating Picture-in-Picture (PiP): Floating mini-stopwatch with graceful iOS support
+ * 5. Dynamic Document Title: Shows running timer in browser tab
  */
 
 import { formatTime } from './formatTime'
@@ -20,7 +17,6 @@ class BackgroundTimerService {
     this.pipCanvas = null
     this.pipVideo = null
     this.isPiPActive = false
-    this.activeNotification = null
     this.worker = null
     this.fallbackInterval = null
     this.lastProcessedSecond = -1
@@ -165,11 +161,6 @@ class BackgroundTimerService {
     } catch (e) {
       console.warn('startAudio error:', e)
     }
-
-    // Ask for notification permission if not yet decided
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {})
-    }
   }
 
   /**
@@ -303,49 +294,9 @@ class BackgroundTimerService {
       }
     }
 
-    // 3. Status Bar Notification (for Android / Desktop / PWA while minimized)
-    if (
-      typeof document !== 'undefined' &&
-      document.visibilityState === 'hidden' &&
-      isRunning
-    ) {
-      this._updateNotification(
-        `⏱️ ${timeFormatted} · Timer Running`,
-        `${subtitle} is active. Tap to return to app.`,
-        origin
-      )
-    }
-
-    // 4. Update PiP canvas if active
+    // 3. Update PiP canvas if active
     if (this.isPiPActive && this.pipCanvas) {
       this._drawPiPCanvas(displayTime, isRunning, subject, topic)
-    }
-  }
-
-  _updateNotification(title, body, origin) {
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
-
-    const options = {
-      body,
-      icon: `${origin}/icon-192.png`,
-      badge: `${origin}/icon-192.png`,
-      tag: 'stt-active-timer',
-      renotify: false,
-      silent: true,
-    }
-
-    // Priority 1: ServiceWorkerRegistration (required on mobile Chrome / Android)
-    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.ready) {
-      navigator.serviceWorker.ready
-        .then((reg) => {
-          reg.showNotification(title, options).catch(() => {})
-        })
-        .catch(() => {})
-    } else {
-      // Priority 2: Standard Notification constructor (Desktop Safari / Firefox)
-      try {
-        this.activeNotification = new Notification(title, options)
-      } catch (e) {}
     }
   }
 
