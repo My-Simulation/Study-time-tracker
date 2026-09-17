@@ -221,6 +221,27 @@ export async function saveSession({
   if (topic) sessionData.topic = String(topic).trim()
   if (reflectionTag) sessionData.reflectionTag = String(reflectionTag).trim()
 
+  // Deduplication check: prevent inserting duplicate sessions with identical or near-identical time
+  try {
+    const existingQ = query(
+      collection(db, 'sessions'),
+      where('userName', '==', userName.toLowerCase()),
+      where('date', '==', date)
+    )
+    const existingSnap = await getDocs(existingQ)
+    const duplicate = existingSnap.docs.find((d) => {
+      const data = d.data()
+      return Math.abs((data.totalSeconds || 0) - totalSeconds) <= 3
+    })
+    if (duplicate) {
+      console.warn('Duplicate session detected, updating existing session instead of inserting duplicate:', duplicate.id)
+      await updateDoc(doc(db, 'sessions', duplicate.id), sessionData)
+      return duplicate.id
+    }
+  } catch (dupErr) {
+    console.warn('Deduplication check error:', dupErr)
+  }
+
   const ref2 = await addDoc(collection(db, 'sessions'), sessionData)
   return ref2.id
 }

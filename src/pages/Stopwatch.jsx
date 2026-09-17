@@ -120,6 +120,16 @@ export default function Stopwatch({ userName }) {
         const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
         setTodayStudied(todaySec)
 
+        // If the stopwatch is paused and its elapsed time matches an already saved session,
+        // cleanly reset it to 0 so it never double-counts on the dashboard
+        if (!isRunning && elapsed > 0 && todaySessions && todaySessions.length > 0) {
+          const currentSec = Math.floor(elapsed / 1000)
+          const alreadySaved = todaySessions.some((s) => Math.abs((s.totalSeconds || 0) - currentSec) <= 3)
+          if (alreadySaved) {
+            reset()
+          }
+        }
+
         if (Array.isArray(syl) && syl.length > 0) {
           setSyllabus(syl)
         }
