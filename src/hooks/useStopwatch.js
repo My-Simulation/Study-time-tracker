@@ -173,6 +173,13 @@ export function useStopwatch(userName) {
     startTimestampRef.current = now
     setIsRunning(true)
 
+    // Automatically prompt for notification permission on Android/mobile if not yet prompted
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      try {
+        Notification.requestPermission().catch(() => {})
+      } catch (e) {}
+    }
+
     // Immediately start audio and inform backgroundTimer with exact timestamps
     backgroundTimer.setTimerState({
       isRunning: true,

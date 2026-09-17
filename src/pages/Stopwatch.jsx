@@ -41,9 +41,29 @@ export default function Stopwatch({ userName }) {
   const [dayNum, setDayNum] = useState(1)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [isStandalone, setIsStandalone] = useState(false)
+  const [notifPermission, setNotifPermission] = useState(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission
+    }
+    return 'granted'
+  })
   const captureRef = useRef(null)
 
   const hasTime = elapsed > 0
+
+  const handleEnableNotification = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission()
+        setNotifPermission(perm)
+        if (perm === 'granted') {
+          setToast({ visible: true, message: 'Notification & Lock Screen timer enabled! 🔔✅' })
+        }
+      } catch (e) {
+        console.warn(e)
+      }
+    }
+  }
 
   // ── PWA Install Prompt Listener ───────────────────────────────────────────
   useEffect(() => {
@@ -196,6 +216,16 @@ export default function Stopwatch({ userName }) {
               <span>Install</span>
             </button>
           )}
+          {notifPermission === 'default' && (
+            <button
+              onClick={handleEnableNotification}
+              title="Turn on Lock Screen Timer"
+              className="text-[11px] px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all flex items-center gap-1 font-semibold"
+            >
+              <span>🔔</span>
+              <span>Enable Timer</span>
+            </button>
+          )}
         </div>
 
         {/* Right icons */}
@@ -245,6 +275,27 @@ export default function Stopwatch({ userName }) {
           Stopwatch
         </div>
       </div>
+
+      {/* ── Direct One-Tap Notification Permission Banner ── */}
+      {notifPermission === 'default' && (
+        <div className="px-4 pt-1 pb-1 max-w-lg mx-auto w-full">
+          <div
+            onClick={handleEnableNotification}
+            className="p-3 rounded-2xl flex items-center justify-between gap-3 border border-amber-500/40 bg-amber-500/10 cursor-pointer hover:bg-amber-500/20 transition-all shadow-md btn-press"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-xl flex-shrink-0">🔔</span>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-amber-200 truncate">Enable Lock Screen & Notification Timer</p>
+                <p className="text-[10px] text-gray-300 mt-0.5 truncate">Tap to show running stopwatch on top of your screen</p>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-black bg-amber-400 px-3 py-1 rounded-full flex-shrink-0 shadow-sm">
+              Turn On
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ── Day Study Planner Sheet Banner ── */}
       <div className="px-4 pt-1 max-w-lg mx-auto w-full">
