@@ -151,14 +151,17 @@ export function useStopwatch(userName) {
   // ── Start ─────────────────────────────────────────────────────────────────
   const start = useCallback(() => {
     if (isRunning) return
+
+    // Immediately start audio in user gesture to activate Lock Screen & MediaSession
+    backgroundTimer.startAudio()
+    backgroundTimer.requestWakeLock()
+
     const now = Date.now()
     startTimestampRef.current = now
     // baseElapsed is whatever was accumulated previously
     setIsRunning(true)
 
     persistState(true, now, baseElapsedRef.current, laps)
-
-    backgroundTimer.requestWakeLock()
 
     if (userName) {
       updateLiveStatus(userName, {
@@ -177,6 +180,9 @@ export function useStopwatch(userName) {
     if (!isRunning) return
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
+    backgroundTimer.pauseAudio()
+    backgroundTimer.releaseWakeLock()
+
     const now = Date.now()
     const finalElapsed = startTimestampRef.current
       ? baseElapsedRef.current + Math.max(0, now - startTimestampRef.current)
@@ -189,7 +195,6 @@ export function useStopwatch(userName) {
     setIsRunning(false)
 
     persistState(false, null, finalElapsed, laps)
-    backgroundTimer.releaseWakeLock()
 
     if (userName) {
       updateLiveStatus(userName, {
@@ -205,13 +210,15 @@ export function useStopwatch(userName) {
     if (isRunning) return
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
+    backgroundTimer.pauseAudio()
+    backgroundTimer.releaseWakeLock()
+
     baseElapsedRef.current = 0
     startTimestampRef.current = null
     setElapsed(0)
     setDisplayTime('0:00:00.00')
     setLaps([])
     setIsRunning(false)
-    backgroundTimer.releaseWakeLock()
 
     if (storageKey) {
       try {
@@ -286,8 +293,22 @@ export function useStopwatch(userName) {
   }, [start, stop, lap])
 
   useEffect(() => {
-    backgroundTimer.update({ isRunning, displayTime })
-  }, [isRunning, displayTime])
+    backgroundTimer.update({ isRunning, displayTime, elapsed })
+  }, [isRunning, displayTime, elapsed])
+
+  // If timer was already running on load or refresh, resume audio on first touch/click
+  useEffect(() => {
+    if (!isRunning) return
+    const handleInteraction = () => {
+      backgroundTimer.startAudio()
+    }
+    window.addEventListener('click', handleInteraction, { once: true })
+    window.addEventListener('touchstart', handleInteraction, { once: true })
+    return () => {
+      window.removeEventListener('click', handleInteraction)
+      window.removeEventListener('touchstart', handleInteraction)
+    }
+  }, [isRunning])
 
   const togglePictureInPicture = useCallback(() => {
     return backgroundTimer.togglePictureInPicture()

@@ -1,16 +1,13 @@
 /**
  * backgroundTimer.js
  * Comprehensive background & lock screen timer support:
- * 1. MediaSession API: Controls on Lock Screen & Top Notification Bar (Play/Pause/Lap)
- * 2. Silent Audio Loop: Keeps background timer running accurately without mobile sleep throttling
+ * 1. MediaSession API: Live Controllable widget on Lock Screen & Notification Drawer (Play/Pause/Lap)
+ * 2. Silent PCM Audio: Real WAV audio stream keeping mobile audio engine & MediaSession active in background
  * 3. Screen Wake Lock: Keeps the screen awake during study sessions
- * 4. Floating Picture-in-Picture (PiP): Floating mini-stopwatch on top of any app
+ * 4. Floating Picture-in-Picture (PiP): Floating mini-stopwatch with proper error handling
  * 5. Dynamic Document Title: Shows running timer in browser tab
+ * 6. Background Notification API: Native notification when app is minimized
  */
-
-// Tiny 1-second silent WAV audio data URI to activate background media session
-const SILENT_AUDIO_URI =
-  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
 
 class BackgroundTimerService {
   constructor() {
@@ -19,6 +16,7 @@ class BackgroundTimerService {
     this.pipCanvas = null
     this.pipVideo = null
     this.isPiPActive = false
+    this.activeNotification = null
     this.actionCallbacks = {
       onPlay: null,
       onPause: null,
@@ -27,6 +25,7 @@ class BackgroundTimerService {
     this.lastState = {
       isRunning: false,
       displayTime: '0:00:00.00',
+      elapsed: 0,
       subject: '',
       topic: '',
     }
@@ -37,9 +36,9 @@ class BackgroundTimerService {
 
   _initAudio() {
     try {
-      this.audio = new Audio(SILENT_AUDIO_URI)
+      this.audio = new Audio('/silent-presence.wav')
       this.audio.loop = true
-      this.audio.volume = 0.01 // Virtually silent
+      this.audio.volume = 0.05
     } catch (err) {
       console.warn('Audio init error:', err)
     }
@@ -48,11 +47,39 @@ class BackgroundTimerService {
   _initVisibilityListener() {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
-        // Re-acquire wake lock if visible and timer is still running
-        if (document.visibilityState === 'visible' && this.lastState.isRunning) {
-          this.requestWakeLock()
+        if (document.visibilityState === 'hidden' && this.lastState.isRunning) {
+          this._showBackgroundNotification()
+        } else if (document.visibilityState === 'visible') {
+          if (this.lastState.isRunning) {
+            this.requestWakeLock()
+          }
+          if (this.activeNotification) {
+            try {
+              this.activeNotification.close()
+            } catch (e) {}
+            this.activeNotification = null
+          }
         }
       })
+    }
+  }
+
+  _showBackgroundNotification() {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        const timeStr = this.lastState.displayTime.split('.')[0]
+        const sub = this.lastState.subject || 'Study Session'
+        this.activeNotification = new Notification(`⏱️ ${timeStr} · Timer Running`, {
+          body: `${sub} is active. Tap to return to app.`,
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
+          tag: 'stt-active-timer',
+          renotify: false,
+          silent: true,
+        })
+      } catch (err) {
+        console.warn('Background notification error:', err)
+      }
     }
   }
 
@@ -77,16 +104,55 @@ class BackgroundTimerService {
       navigator.mediaSession.setActionHandler('nexttrack', () => {
         if (this.actionCallbacks.onLap) this.actionCallbacks.onLap()
       })
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        if (this.actionCallbacks.onLap) this.actionCallbacks.onLap()
+      })
     } catch (e) {
       console.warn('MediaSession handler error:', e)
     }
   }
 
   /**
+   * Starts the background audio. MUST be called synchronously inside a user click handler (e.g. Start button).
+   */
+  startAudio() {
+    try {
+      if (!this.audio) this._initAudio()
+      if (this.audio) {
+        this.audio.currentTime = 0
+        const p = this.audio.play()
+        if (p !== undefined) {
+          p.catch((err) => {
+            console.warn('Audio play error:', err)
+          })
+        }
+      }
+    } catch (e) {
+      console.warn('startAudio error:', e)
+    }
+
+    // Ask for notification permission if not yet decided
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
+  }
+
+  /**
+   * Pauses the background audio.
+   */
+  pauseAudio() {
+    if (this.audio) {
+      try {
+        this.audio.pause()
+      } catch (e) {}
+    }
+  }
+
+  /**
    * Called whenever stopwatch ticks or state changes.
    */
-  update({ isRunning, displayTime, subject = '', topic = '' }) {
-    this.lastState = { isRunning, displayTime, subject, topic }
+  update({ isRunning, displayTime, elapsed = 0, subject = '', topic = '' }) {
+    this.lastState = { isRunning, displayTime, elapsed, subject, topic }
 
     // 1. Dynamic document title
     if (typeof document !== 'undefined') {
@@ -102,9 +168,8 @@ class BackgroundTimerService {
     // 2. Lock Screen & Notification Shade via MediaSession
     if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
       try {
-        const titleStr = isRunning
-          ? `⏱️ ${displayTime.split('.')[0]}`
-          : `⏸️ Paused: ${displayTime.split('.')[0]}`
+        const timeFormatted = displayTime.split('.')[0]
+        const titleStr = isRunning ? `⏱️ ${timeFormatted}` : `⏸️ Paused: ${timeFormatted}`
         const subtitle = subject
           ? `${subject}${topic ? ` · ${topic}` : ''}`
           : 'Study Time Tracker'
@@ -119,23 +184,24 @@ class BackgroundTimerService {
             { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
           ],
         })
+
+        // Position state for Android lock screen progress bar ticking
+        if ('setPositionState' in navigator.mediaSession) {
+          try {
+            const elapsedSec = Math.floor(elapsed / 1000)
+            navigator.mediaSession.setPositionState({
+              duration: 86400,
+              playbackRate: isRunning ? 1.0 : 0.0,
+              position: Math.min(86400, elapsedSec),
+            })
+          } catch (e) {}
+        }
       } catch (err) {
         console.warn('MediaSession metadata error:', err)
       }
     }
 
-    // 3. Audio state
-    if (this.audio) {
-      if (isRunning && this.audio.paused) {
-        this.audio.play().catch(() => {
-          // Auto-play might require user gesture
-        })
-      } else if (!isRunning && !this.audio.paused) {
-        this.audio.pause()
-      }
-    }
-
-    // 4. Update PiP canvas if active
+    // 3. Update PiP canvas if active
     if (this.isPiPActive && this.pipCanvas) {
       this._drawPiPCanvas(displayTime, isRunning, subject, topic)
     }
@@ -188,7 +254,10 @@ class BackgroundTimerService {
     }
 
     if (!document.pictureInPictureEnabled) {
-      alert('Floating Picture-in-Picture is not supported on this browser.')
+      alert(
+        'Floating Picture-in-Picture is not supported by this browser.\n\n' +
+        '💡 Don\'t worry: Your timer will still run continuously on your Lock Screen and in the Notification Bar!'
+      )
       return false
     }
 
@@ -199,16 +268,6 @@ class BackgroundTimerService {
         this.pipCanvas.height = 180
       }
 
-      if (!this.pipVideo) {
-        this.pipVideo = document.createElement('video')
-        this.pipVideo.muted = true
-        this.pipVideo.playsInline = true
-        this.pipVideo.srcObject = this.pipCanvas.captureStream(30)
-        this.pipVideo.addEventListener('leavepictureinpicture', () => {
-          this.isPiPActive = false
-        })
-      }
-
       this._drawPiPCanvas(
         this.lastState.displayTime,
         this.lastState.isRunning,
@@ -216,13 +275,36 @@ class BackgroundTimerService {
         this.lastState.topic
       )
 
+      if (!this.pipVideo) {
+        this.pipVideo = document.createElement('video')
+        this.pipVideo.id = 'stt-pip-video'
+        this.pipVideo.muted = true
+        this.pipVideo.playsInline = true
+        this.pipVideo.style.position = 'fixed'
+        this.pipVideo.style.width = '1px'
+        this.pipVideo.style.height = '1px'
+        this.pipVideo.style.opacity = '0'
+        this.pipVideo.style.pointerEvents = 'none'
+        this.pipVideo.style.bottom = '0'
+        this.pipVideo.style.right = '0'
+        document.body.appendChild(this.pipVideo)
+
+        this.pipVideo.addEventListener('leavepictureinpicture', () => {
+          this.isPiPActive = false
+        })
+      }
+
+      this.pipVideo.srcObject = this.pipCanvas.captureStream(30)
       await this.pipVideo.play()
       await this.pipVideo.requestPictureInPicture()
       this.isPiPActive = true
       return true
     } catch (err) {
       console.warn('PiP launch error:', err)
-      alert('Please start the timer first, then tap Floating Mini Timer!')
+      alert(
+        `Could not open Floating PiP window: ${err?.message || 'Permission denied'}.\n\n` +
+        `💡 Tip: Lock your screen or check your notification shade — the live timer is running there!`
+      )
       return false
     }
   }
