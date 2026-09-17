@@ -11,8 +11,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="StudyTracker" />
     <meta name="description" content="Study Time Tracker - Track your daily study sessions with live lock screen controls" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -23,15 +21,17 @@
           for (var i = 0; i < regs.length; i++) { regs[i].unregister(); }
         }).catch(function(){});
       }
-      if ('caches' in window) {
-        caches.keys().then(function(keys) {
-          for (var i = 0; i < keys.length; i++) { caches.delete(keys[i]); }
-        }).catch(function(){});
-      }
     </script>
   </head>
   <body style="background-color: #0d0d0d; color: white; margin: 0; min-height: 100vh;">
-    <div id="root"></div>
+    <div id="root">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background-color:#0d0d0d;color:#fff;font-family:system-ui,-apple-system,sans-serif;">
+        <div style="font-size:36px;margin-bottom:12px;filter:drop-shadow(0 4px 12px rgba(168,85,247,0.3));">⏱️</div>
+        <div style="font-size:17px;font-weight:600;letter-spacing:-0.01em;color:#e2e8f0;">Study Time Tracker</div>
+        <div style="margin-top:16px;width:22px;height:22px;border:2.5px solid rgba(168,85,247,0.25);border-top-color:#a855f7;border-radius:50%;animation:sttSpin 0.7s linear infinite;"></div>
+      </div>
+      <style>@keyframes sttSpin{to{transform:rotate(360deg)}}</style>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

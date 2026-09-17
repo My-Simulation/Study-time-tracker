@@ -18,7 +18,7 @@ import Toast from '../components/Toast'
 import ExamCountdown from '../components/ExamCountdown'
 import DailyMissions from '../components/DailyMissions'
 import {
-  getWeeklyPlan, getTargetForDate, getUserSessions, getSyllabus,
+  getWeeklyPlan, getTargetForDate, getSessionsByDate, getSyllabus,
   getDayPlanner, calculateDayNumber,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes } from '../utils/formatTime'
@@ -85,9 +85,9 @@ export default function Stopwatch({ userName }) {
   useEffect(() => {
     async function loadData() {
       try {
-        const [plan, sessions, syl, dPlan, dNum] = await Promise.all([
+        const [plan, todaySessions, syl, dPlan, dNum] = await Promise.all([
           getWeeklyPlan(userName),
-          getUserSessions(userName),
+          getSessionsByDate(userName, todayString()),
           getSyllabus(userName),
           getDayPlanner(userName, todayString()),
           calculateDayNumber(userName, todayString()),
@@ -97,9 +97,7 @@ export default function Stopwatch({ userName }) {
         setDayPlan(dPlan)
         setDayNum(dNum || 1)
 
-        const todaySec = sessions
-          .filter((s) => s.date === todayString())
-          .reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+        const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
         setTodayStudied(todaySec)
 
         if (Array.isArray(syl) && syl.length > 0) {

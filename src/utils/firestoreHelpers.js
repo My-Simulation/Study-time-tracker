@@ -7,8 +7,7 @@ import {
   getDocs, query, where, serverTimestamp, updateDoc,
   onSnapshot,
 } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage } from '../firebase'
+import { db, getStorageInstance } from '../firebase'
 import { hashPassword, verifyPassword } from './auth'
 
 // ─────────────────────────────────────────────
@@ -165,6 +164,10 @@ export async function captureAndUploadScreenshot(element, userName, dateStr) {
         if (!blob) { resolve(''); return }
         try {
           const filename = `${dateStr}_${Date.now()}.png`
+          const [{ ref, uploadBytes, getDownloadURL }, storage] = await Promise.all([
+            import('firebase/storage'),
+            getStorageInstance(),
+          ])
           const storageRef = ref(storage, `screenshots/${userName}/${filename}`)
           await uploadBytes(storageRef, blob, { contentType: 'image/png' })
           resolve(await getDownloadURL(storageRef))

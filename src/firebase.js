@@ -7,7 +7,6 @@
 
 import { initializeApp } from 'firebase/app'
 import { getFirestore } from 'firebase/firestore'
-import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: "AIzaSyCqwdwxpR8X9qqCCG696m2jiQ0qHzdznk0",
@@ -23,8 +22,15 @@ const app = initializeApp(firebaseConfig)
 /** Firestore database instance */
 export const db = getFirestore(app)
 
-/** Firebase Storage instance */
-export const storage = getStorage(app)
+/** Firebase Storage instance - lazy getter to avoid bloating initial bundle */
+let _storage = null
+export async function getStorageInstance() {
+  if (!_storage) {
+    const { getStorage } = await import('firebase/storage')
+    _storage = getStorage(app)
+  }
+  return _storage
+}
 
 export default app
 
