@@ -61,10 +61,15 @@ export default function Stopwatch({ userName }) {
   const [streakCount, setStreakCount] = useState(0)
   const pomoAlertFiredRef = useRef(false)
 
-  // Sync wallpaper when userName switches
+  // Sync wallpaper when userName switches or when updated locally/cloud
   useEffect(() => {
-    setWallpaper(getWallpaper(userName))
-    setWallpaperConfig(getWallpaperConfig(userName))
+    const updateWp = () => {
+      setWallpaper(getWallpaper(userName))
+      setWallpaperConfig(getWallpaperConfig(userName))
+    }
+    updateWp()
+    window.addEventListener('study_wallpaper_changed', updateWp)
+    return () => window.removeEventListener('study_wallpaper_changed', updateWp)
   }, [userName])
 
   const handleSelectWallpaper = (url) => {
@@ -348,30 +353,8 @@ export default function Stopwatch({ userName }) {
   return (
     <div className="min-h-screen flex flex-col relative overflow-x-hidden bg-transparent">
 
-      {/* ── Fixed Personal Focus Wallpaper Layer ── */}
-      {wallpaper && (
-        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none">
-          <div
-            className="w-full h-full transition-all duration-500"
-            style={{
-              backgroundImage: `url(${wallpaper})`,
-              backgroundPosition: 'center',
-              backgroundSize: wallpaperConfig.fit === 'contain' ? 'contain' : 'cover',
-              backgroundRepeat: 'no-repeat',
-              filter: wallpaperConfig.blur ? 'blur(6px)' : 'none',
-              transform: wallpaperConfig.blur ? 'scale(1.06)' : 'none',
-            }}
-          />
-          {/* Dark Focus Dimming Overlay to ensure 100% text legibility */}
-          <div
-            className="absolute inset-0 bg-black transition-opacity duration-300"
-            style={{ opacity: wallpaperConfig.dim ?? 0.45 }}
-          />
-        </div>
-      )}
-
       {/* ── Top bar (Spans max-w-7xl on desktop, responsive on mobile) ── */}
-      <div className="relative z-10 flex items-center justify-between px-3 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-0 max-w-7xl mx-auto w-full">
+      <div className="relative z-40 flex items-center justify-between px-3 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-0 max-w-7xl mx-auto w-full">
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
           {/* Profile pill */}
           <ProfilePill userName={userName} avatarColor={avatarColor} photoUrl={session?.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
@@ -419,18 +402,27 @@ export default function Stopwatch({ userName }) {
           {/* Watch partner */}
           <IconButton onClick={() => navigate('/watch')} title="Watch Partner" aria-label="Watch Partner">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
             </svg>
           </IconButton>
-          {/* Analytics icon */}
-          <IconButton onClick={() => navigate('/analytics')} title="Study Analytics" aria-label="Study Analytics">
-            <span className="text-sm sm:text-base leading-none">📈</span>
-          </IconButton>
-          {/* History icon */}
-          <IconButton onClick={() => navigate('/history')} title="History" aria-label="View history">
+          {/* History */}
+          <IconButton onClick={() => navigate('/history')} title="Study History" aria-label="History">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
+          </IconButton>
+          {/* Audio Chime toggle */}
+          <IconButton
+            onClick={() => setSoundEnabled((v) => !v)}
+            title={soundEnabled ? 'Chime ON (click to mute)' : 'Chime MUTED (click to enable)'}
+            aria-label="Sound Toggle"
+          >
+            <span className="text-sm sm:text-base leading-none">{soundEnabled ? '🔔' : '🔕'}</span>
+          </IconButton>
+          {/* Ambient Focus Sounds modal */}
+          <IconButton onClick={() => setShowSoundModal(true)} title="Focus Ambient Sounds (Rain, White Noise...)" aria-label="Focus Sounds">
+            <span className="text-sm sm:text-base leading-none">🎧</span>
           </IconButton>
           {/* Floating Mini Stopwatch (PiP) */}
           <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
@@ -440,7 +432,7 @@ export default function Stopwatch({ userName }) {
       </div>
 
       {/* ── Mode Selector (Stopwatch / Pomodoro), Fullscreen & Wallpaper ── */}
-      <div className="relative z-10 flex items-center justify-center gap-2 px-4 pt-3 pb-2 max-w-7xl mx-auto w-full">
+      <div className="relative z-30 flex items-center justify-center gap-2 px-4 pt-3 pb-2 max-w-7xl mx-auto w-full">
         <div className="inline-flex p-0.5 rounded-full bg-[#181818] border border-[#2a2a2a] shadow-inner">
           <button
             onClick={() => setTimerMode('stopwatch')}
@@ -1017,12 +1009,15 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-10 z-50 card p-3 flex flex-col gap-1 min-w-[190px]" style={{ animation: 'scaleIn 150ms ease-out' }}>
+          <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" onClick={() => setOpen(false)} />
+          <div
+            className="absolute left-0 top-11 z-50 card p-3 flex flex-col gap-1 min-w-[210px] max-w-[calc(100vw-24px)] bg-[#14141c]/95 backdrop-blur-xl border border-[#2d2d42] shadow-2xl rounded-2xl"
+            style={{ animation: 'scaleIn 150ms ease-out' }}
+          >
             {/* Avatar header */}
             <div className="flex items-center gap-3 px-2 py-2">
               <div
-                className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0 overflow-hidden"
+                className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0 overflow-hidden shadow-inner"
                 style={{ background: avatarColor }}
               >
                 {photoUrl ? (
@@ -1031,9 +1026,9 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
                   userName[0].toUpperCase()
                 )}
               </div>
-              <div>
-                <p className="text-sm font-semibold text-white">@{userName}</p>
-                <p className="text-xs text-gray-600">Your account</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white truncate">@{userName}</p>
+                <p className="text-xs text-gray-400">Your account</p>
               </div>
             </div>
             <div className="border-t border-[#2a2a2a] my-1" />

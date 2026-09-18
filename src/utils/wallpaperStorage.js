@@ -1,3 +1,6 @@
+import { doc, setDoc, onSnapshot } from "firebase/firestore"
+import { db } from "../firebase"
+
 // Per-user local wallpaper storage and curated presets
 
 export const PRESET_WALLPAPERS = [
@@ -107,11 +110,12 @@ export function getWallpaper(userName) {
   }
 }
 
-// Set user wallpaper URL
+// Set user wallpaper URL (updates local cache + syncs to Firestore user doc)
 export function setWallpaper(userName, bgUrl) {
   if (!userName) return;
+  const uKey = userName.toLowerCase();
   try {
-    const key = `${BG_KEY_PREFIX}${userName.toLowerCase()}`;
+    const key = `${BG_KEY_PREFIX}${uKey}`;
     if (bgUrl) {
       localStorage.setItem(key, bgUrl);
     } else {
@@ -121,7 +125,20 @@ export function setWallpaper(userName, bgUrl) {
       window.dispatchEvent(new CustomEvent('study_wallpaper_changed', { detail: { userName, bgUrl } }));
     }
   } catch (e) {
-    console.warn("Could not save wallpaper preference:", e);
+    console.warn("Could not save local wallpaper preference:", e);
+  }
+
+  // Cross-device cloud sync
+  try {
+    setDoc(
+      doc(db, "users", uKey),
+      { wallpaper: bgUrl || null },
+      { merge: true }
+    ).catch((err) => {
+      console.warn("Could not sync wallpaper to cloud:", err);
+    });
+  } catch (err) {
+    console.warn("Could not dispatch cloud wallpaper sync:", err);
   }
 }
 
@@ -139,33 +156,130 @@ export function getWallpaperConfig(userName) {
   return DEFAULT_CONFIG;
 }
 
-// Save user wallpaper configuration
+// Save user wallpaper configuration (updates local cache + syncs to Firestore user doc)
 export function setWallpaperConfig(userName, config) {
   if (!userName) return;
+  const uKey = userName.toLowerCase();
+  const merged = { ...DEFAULT_CONFIG, ...config };
   try {
-    const key = `${CONFIG_KEY_PREFIX}${userName.toLowerCase()}`;
-    const merged = { ...DEFAULT_CONFIG, ...config };
+    const key = `${CONFIG_KEY_PREFIX}${uKey}`;
     localStorage.setItem(key, JSON.stringify(merged));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('study_wallpaper_changed', { detail: { userName, config: merged } }));
     }
   } catch (e) {
-    console.warn("Could not save wallpaper config:", e);
+    console.warn("Could not save local wallpaper config:", e);
+  }
+
+  // Cross-device cloud sync
+  try {
+    setDoc(
+      doc(db, "users", uKey),
+      { wallpaperConfig: merged },
+      { merge: true }
+    ).catch((err) => {
+      console.warn("Could not sync wallpaper config to cloud:", err);
+    });
+  } catch (err) {
+    console.warn("Could not dispatch cloud config sync:", err);
   }
 }
 
-// Clear wallpaper completely (reset to default #0d0d0d)
+// Clear wallpaper completely (reset to default #0d0d0d across local and cloud)
 export function clearWallpaper(userName) {
   if (!userName) return;
+  const uKey = userName.toLowerCase();
   try {
-    localStorage.removeItem(`${BG_KEY_PREFIX}${userName.toLowerCase()}`);
-    localStorage.removeItem(`${CONFIG_KEY_PREFIX}${userName.toLowerCase()}`);
+    localStorage.removeItem(`${BG_KEY_PREFIX}${uKey}`);
+    localStorage.removeItem(`${CONFIG_KEY_PREFIX}${uKey}`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('study_wallpaper_changed', { detail: { userName, bgUrl: null } }));
     }
   } catch (e) {
-    console.warn("Could not clear wallpaper:", e);
+    console.warn("Could not clear local wallpaper:", e);
   }
+
+  // Cross-device cloud clear
+  try {
+    setDoc(
+      doc(db, "users", uKey),
+      { wallpaper: null, wallpaperConfig: null },
+      { merge: true }
+    ).catch((err) => {
+      console.warn("Could not clear cloud wallpaper:", err);
+    });
+  } catch (err) {
+    console.warn("Could not dispatch cloud wallpaper clear:", err);
+  }
+}
+
+// Real-time listener for cross-device wallpaper synchronization
+export function subscribeToUserWallpaper(userName, callback) {
+  if (!userName || typeof window === "undefined") return () => {};
+  const uKey = userName.toLowerCase();
+  const userRef = doc(db, "users", uKey);
+
+  return onSnapshot(
+    userRef,
+    (snapshot) => {
+      if (!snapshot.exists()) return;
+      const data = snapshot.data();
+
+      let changed = false;
+      const currentLocalWp = localStorage.getItem(`${BG_KEY_PREFIX}${uKey}`) || null;
+      const currentLocalConfigRaw = localStorage.getItem(`${CONFIG_KEY_PREFIX}${uKey}`) || null;
+
+      // Sync wallpaper URL / image
+      if (data.wallpaper !== undefined) {
+        const cloudWp = data.wallpaper;
+        if (cloudWp !== currentLocalWp) {
+          if (cloudWp) {
+            localStorage.setItem(`${BG_KEY_PREFIX}${uKey}`, cloudWp);
+          } else {
+            localStorage.removeItem(`${BG_KEY_PREFIX}${uKey}`);
+          }
+          changed = true;
+        }
+      } else if (currentLocalWp) {
+        // Automatically migrate existing local wallpaper to cloud doc
+        setDoc(
+          userRef,
+          {
+            wallpaper: currentLocalWp,
+            wallpaperConfig: getWallpaperConfig(userName),
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+
+      // Sync configuration (dim, blur, fit)
+      if (data.wallpaperConfig !== undefined) {
+        const cloudCfg = data.wallpaperConfig;
+        if (cloudCfg) {
+          const mergedStr = JSON.stringify({ ...DEFAULT_CONFIG, ...cloudCfg });
+          if (mergedStr !== currentLocalConfigRaw) {
+            localStorage.setItem(`${CONFIG_KEY_PREFIX}${uKey}`, mergedStr);
+            changed = true;
+          }
+        } else if (currentLocalConfigRaw) {
+          localStorage.removeItem(`${CONFIG_KEY_PREFIX}${uKey}`);
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        window.dispatchEvent(
+          new CustomEvent("study_wallpaper_changed", {
+            detail: { userName, source: "cloud_sync" },
+          })
+        );
+        if (callback) callback();
+      }
+    },
+    (err) => {
+      console.warn("Error subscribing to cloud wallpaper updates:", err);
+    }
+  );
 }
 
 // Compress and store custom image safely in client storage

@@ -8,7 +8,7 @@ import { getSession, clearSession } from './utils/auth'
 
 import Stopwatch from './pages/Stopwatch'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
-import { getWallpaper, getWallpaperConfig } from './utils/wallpaperStorage'
+import { getWallpaper, getWallpaperConfig, subscribeToUserWallpaper } from './utils/wallpaperStorage'
 
 // Route-level code splitting: loads pages on-demand instead of blocking the initial app load
 const Welcome = lazy(() => import('./pages/Welcome'))
@@ -105,6 +105,16 @@ export default function App() {
       window.removeEventListener('study_wallpaper_changed', handler)
     }
   }, [])
+
+  useEffect(() => {
+    if (!userName) return
+    const unsubscribe = subscribeToUserWallpaper(userName, () => {
+      setTick((t) => t + 1)
+    })
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [userName])
 
   return (
     <BrowserRouter>
