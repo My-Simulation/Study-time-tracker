@@ -312,70 +312,71 @@ export default function Stopwatch({ userName }) {
     <div className="min-h-screen flex flex-col" style={{ background: '#0d0d0d' }}>
 
       {/* ── Top bar ── */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-0">
-        <div className="flex items-center gap-2">
+      {/* ── Top bar ── */}
+      <div className="flex items-center justify-between px-2 sm:px-4 pt-3 sm:pt-4 pb-0 max-w-lg mx-auto w-full">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
           {/* Profile pill */}
           <ProfilePill userName={userName} avatarColor={avatarColor} photoUrl={session?.photoUrl} onLogout={handleSwitchUser} />
           {!isStandalone && (
             <button
               onClick={handleInstallApp}
               title="Install as Mobile App"
-              className="text-[11px] px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 transition-all flex items-center gap-1 font-semibold"
+              className="text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 transition-all flex items-center gap-1 font-semibold flex-shrink-0"
             >
               <span>📲</span>
-              <span>Install</span>
+              <span className="hidden sm:inline">Install</span>
             </button>
           )}
           {notifPermission === 'default' && (
             <button
               onClick={handleEnableNotification}
               title="Turn on Lock Screen Timer"
-              className="text-[11px] px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all flex items-center gap-1 font-semibold"
+              className="text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all flex items-center gap-1 font-semibold flex-shrink-0"
             >
               <span>🔔</span>
-              <span>Enable Timer</span>
+              <span className="hidden sm:inline">Timer</span>
             </button>
           )}
         </div>
 
         {/* Right icons */}
-        <div className="flex items-center gap-1">
-          {/* Floating Mini Stopwatch (PiP) */}
-          <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
-            <span className="text-base leading-none">🖼️</span>
-          </IconButton>
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           {/* Day Planner Sheet icon */}
           <IconButton onClick={() => navigate('/planner')} title="Daily Study Planner" aria-label="Day Planner">
-            <span className="text-base leading-none">🌸</span>
+            <span className="text-sm sm:text-base leading-none">🌸</span>
           </IconButton>
           {/* Syllabus tracker icon */}
           <IconButton onClick={() => navigate('/syllabus')} title="Syllabus & Topics" aria-label="Syllabus">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
             </svg>
           </IconButton>
           {/* Plan icon */}
           <IconButton onClick={() => navigate('/plan')} title="Study Plan" aria-label="Study Plan">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="3" y1="9" x2="21" y2="9" />
             </svg>
           </IconButton>
           {/* Watch partner */}
           <IconButton onClick={() => navigate('/watch')} title="Watch Partner" aria-label="Watch Partner">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
             </svg>
           </IconButton>
           {/* Analytics icon */}
           <IconButton onClick={() => navigate('/analytics')} title="Study Analytics" aria-label="Study Analytics">
-            <span className="text-base leading-none">📈</span>
+            <span className="text-sm sm:text-base leading-none">📈</span>
           </IconButton>
           {/* History icon */}
           <IconButton onClick={() => navigate('/history')} title="History" aria-label="View history">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
             </svg>
+          </IconButton>
+          {/* Floating Mini Stopwatch (PiP) */}
+          <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
+            <span className="text-sm sm:text-base leading-none">🖼️</span>
           </IconButton>
         </div>
       </div>
@@ -768,15 +769,15 @@ export default function Stopwatch({ userName }) {
 
       {/* ── Zen / Fullscreen Focus Mode Overlay ── */}
       {isZenMode && (
-        <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col justify-between p-6 sm:p-12 text-white select-none animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col justify-between p-4 sm:p-10 text-white select-none animate-fadeIn">
           {/* Top Header */}
           <div className="flex items-center justify-between w-full max-w-4xl mx-auto">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                {timerMode === 'pomodoro' ? '🍅 Pomodoro Focus' : '⏱️ Stopwatch Zen'}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest px-2.5 sm:px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                {timerMode === 'pomodoro' ? '🍅 Pomodoro' : '⏱️ Stopwatch'}
               </span>
               {activeSubject && (
-                <span className="text-xs font-semibold text-gray-400">
+                <span className="text-xs font-semibold text-gray-400 truncate max-w-[120px] sm:max-w-none">
                   • {activeSubject} {activeTopic ? `(${activeTopic})` : ''}
                 </span>
               )}
@@ -784,29 +785,44 @@ export default function Stopwatch({ userName }) {
 
             <button
               onClick={() => setIsZenMode(false)}
-              className="px-3.5 py-1.5 rounded-full bg-[#1e1e1e] hover:bg-[#2c2c2c] border border-[#333] text-xs font-bold text-gray-300 hover:text-white transition-colors flex items-center gap-1.5"
+              className="px-3 sm:px-3.5 py-1.5 rounded-full bg-[#1e1e1e] hover:bg-[#2c2c2c] border border-[#333] text-xs font-bold text-gray-300 hover:text-white transition-colors flex items-center gap-1.5"
             >
               <span>✕</span>
-              <span>Exit Zen (Esc / F)</span>
+              <span>Exit (Esc / F)</span>
             </button>
           </div>
 
           {/* Center Immense Timer */}
-          <div className="flex flex-col items-center justify-center my-auto text-center w-full max-w-4xl mx-auto">
+          <div className="flex flex-col items-center justify-center my-auto text-center w-full max-w-4xl mx-auto px-2 sm:px-4 overflow-hidden">
             {timerMode === 'pomodoro' ? (
               <>
-                <span className="text-xs font-bold uppercase tracking-widest text-teal-400 mb-2">
+                <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-teal-400 mb-2">
                   Focus Countdown
                 </span>
-                <div className="text-7xl sm:text-9xl font-black font-mono tracking-tight text-white drop-shadow-2xl">
+                <div
+                  className="font-black font-mono tracking-tight text-white drop-shadow-2xl text-center select-none w-full"
+                  style={{
+                    fontSize: 'clamp(44px, 15vw, 110px)',
+                    lineHeight: 1.05,
+                    fontFamily: '"Roboto Mono", ui-monospace, monospace',
+                  }}
+                >
                   {formatPomodoroTime(pomoRemainingSec)}
                 </div>
-                <span className="text-sm font-mono text-gray-400 mt-3">
+                <span className="text-xs sm:text-sm font-mono text-gray-400 mt-2">
                   Total Elapsed: {displayTime}
                 </span>
               </>
             ) : (
-              <div className="text-7xl sm:text-9xl font-black font-mono tracking-tight text-white drop-shadow-2xl">
+              <div
+                className="font-black font-mono tracking-tight text-white drop-shadow-2xl text-center select-none w-full overflow-hidden"
+                style={{
+                  fontSize: 'clamp(28px, 9.2vw, 90px)',
+                  lineHeight: 1.05,
+                  letterSpacing: '-0.02em',
+                  fontFamily: '"Roboto Mono", ui-monospace, monospace',
+                }}
+              >
                 {displayTime}
               </div>
             )}
@@ -870,7 +886,7 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout }) {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full px-2 py-1.5 transition-colors hover:bg-[#1a1a1a]"
+        className="flex items-center gap-1.5 sm:gap-2 rounded-full px-1.5 sm:px-2 py-1 sm:py-1.5 transition-colors hover:bg-[#1a1a1a] flex-shrink-0"
       >
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden"
@@ -882,8 +898,8 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout }) {
             userName[0].toUpperCase()
           )}
         </div>
-        <span className="text-sm text-gray-300 font-medium max-w-[100px] truncate">@{userName}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+        <span className="text-xs sm:text-sm text-gray-300 font-medium max-w-[65px] sm:max-w-[100px] truncate">@{userName}</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
       </button>
 
       {open && (
@@ -942,7 +958,7 @@ function IconButton({ children, onClick, title }) {
     <button
       onClick={onClick}
       title={title}
-      className="w-9 h-9 rounded-full flex items-center justify-center transition-colors hover:bg-[#1a1a1a]"
+      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors hover:bg-[#1a1a1a] flex-shrink-0"
     >
       {children}
     </button>
