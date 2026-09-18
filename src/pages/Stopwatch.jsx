@@ -350,6 +350,8 @@ export default function Stopwatch({ userName }) {
     }
   })()
 
+  const [zenMainTime, zenCentis] = (displayTime || '0:00:00.00').split('.')
+
   return (
     <div className="min-h-screen flex flex-col relative overflow-x-hidden bg-transparent">
 
@@ -835,7 +837,7 @@ export default function Stopwatch({ userName }) {
 
       {/* ── Zen / Fullscreen Focus Mode Overlay ── */}
       {isZenMode && (
-        <div className={`fixed inset-0 z-50 flex flex-col justify-between p-4 sm:p-10 text-white select-none animate-fadeIn ${wallpaper ? 'bg-transparent' : 'bg-[#0a0a0a]'}`}>
+        <div className={`fixed inset-0 z-50 flex flex-col justify-between p-3 sm:p-8 lg:p-10 text-white select-none animate-fadeIn ${wallpaper ? 'bg-transparent' : 'bg-[#0a0a0a]'}`}>
           {/* Zen Mode Wallpaper Background Layer */}
           {wallpaper && (
             <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden select-none">
@@ -858,7 +860,7 @@ export default function Stopwatch({ userName }) {
           )}
 
           {/* Top Header */}
-          <div className="flex items-center justify-between w-full max-w-4xl mx-auto">
+          <div className="flex items-center justify-between w-full max-w-5xl mx-auto">
             <div className="flex items-center gap-2 sm:gap-3">
               <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest px-2.5 sm:px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
                 {timerMode === 'pomodoro' ? '🍅 Pomodoro' : '⏱️ Stopwatch'}
@@ -890,43 +892,63 @@ export default function Stopwatch({ userName }) {
           </div>
 
           {/* Center Immense Timer */}
-          <div className="flex flex-col items-center justify-center my-auto text-center w-full max-w-4xl mx-auto px-2 sm:px-4 overflow-hidden">
+          <div className="flex flex-col items-center justify-center my-auto text-center w-full max-w-5xl mx-auto px-1 sm:px-4">
             {timerMode === 'pomodoro' ? (
-              <>
-                <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-teal-400 mb-2">
-                  Focus Countdown
+              <div className="flex flex-col items-center justify-center w-full">
+                <span className="text-[11px] sm:text-sm font-bold uppercase tracking-widest text-teal-400 mb-2 flex items-center gap-1.5">
+                  <span>🍅</span> Focus Countdown
                 </span>
                 <div
-                  className="font-black font-mono tracking-tight text-white drop-shadow-2xl text-center select-none w-full"
+                  className="font-black font-mono tracking-tight text-white drop-shadow-2xl text-center select-none w-full tabular-nums whitespace-nowrap"
                   style={{
-                    fontSize: 'clamp(44px, 15vw, 110px)',
-                    lineHeight: 1.05,
+                    fontSize: 'clamp(54px, min(18vw, 24vh), 135px)',
+                    lineHeight: 1,
                     fontFamily: '"Roboto Mono", ui-monospace, monospace',
+                    letterSpacing: '-0.03em',
                   }}
                 >
                   {formatPomodoroTime(pomoRemainingSec)}
                 </div>
-                <span className="text-xs sm:text-sm font-mono text-gray-400 mt-2">
+                <span className="text-[11px] sm:text-xs font-mono text-gray-400 mt-3 bg-white/5 border border-white/10 px-3 py-1 rounded-full backdrop-blur-sm">
                   Total Elapsed: {displayTime}
                 </span>
-              </>
+              </div>
             ) : (
-              <div
-                className="font-black font-mono tracking-tight text-white drop-shadow-2xl text-center select-none w-full overflow-hidden"
-                style={{
-                  fontSize: 'clamp(28px, 9.2vw, 90px)',
-                  lineHeight: 1.05,
-                  letterSpacing: '-0.02em',
-                  fontFamily: '"Roboto Mono", ui-monospace, monospace',
-                }}
-              >
-                {displayTime}
+              <div className="flex flex-col items-center justify-center w-full">
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-purple-400 mb-2 flex items-center gap-1.5">
+                  <span>⏱️</span> Elapsed Study Time
+                </span>
+                <div className="flex items-baseline justify-center tracking-tight font-mono select-none w-full max-w-full whitespace-nowrap overflow-visible">
+                  <span
+                    className="font-black text-white drop-shadow-2xl tabular-nums"
+                    style={{
+                      fontSize: 'clamp(44px, min(14.5vw, 19vh), 120px)',
+                      lineHeight: 1,
+                      fontFamily: '"Roboto Mono", ui-monospace, monospace',
+                      letterSpacing: '-0.03em',
+                    }}
+                  >
+                    {zenMainTime}
+                  </span>
+                  {zenCentis !== undefined && (
+                    <span
+                      className="font-bold text-purple-300/85 drop-shadow-lg tabular-nums ml-1 sm:ml-2"
+                      style={{
+                        fontSize: 'clamp(22px, min(7.2vw, 9.5vh), 58px)',
+                        lineHeight: 1,
+                        fontFamily: '"Roboto Mono", ui-monospace, monospace',
+                      }}
+                    >
+                      .{zenCentis}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Goal progress sub-bar */}
             {goalProgress && goalProgress.hasTarget && (
-              <div className="mt-8 w-full max-w-md">
+              <div className="mt-8 w-full max-w-md px-2">
                 <div className="flex justify-between text-xs text-gray-400 mb-1.5">
                   <span>Today: {goalProgress.studiedLabel}</span>
                   <span>Target: {goalProgress.label} ({goalProgress.pct}%)</span>
