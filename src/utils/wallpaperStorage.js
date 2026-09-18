@@ -240,16 +240,6 @@ export function subscribeToUserWallpaper(userName, callback) {
           }
           changed = true;
         }
-      } else if (currentLocalWp) {
-        // Automatically migrate existing local wallpaper to cloud doc
-        setDoc(
-          userRef,
-          {
-            wallpaper: currentLocalWp,
-            wallpaperConfig: getWallpaperConfig(userName),
-          },
-          { merge: true }
-        ).catch(() => {});
       }
 
       // Sync configuration (dim, blur, fit)

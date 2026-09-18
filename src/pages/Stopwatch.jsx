@@ -406,23 +406,15 @@ export default function Stopwatch({ userName }) {
               <circle cx="12" cy="12" r="3" />
             </svg>
           </IconButton>
+          {/* Analytics icon */}
+          <IconButton onClick={() => navigate('/analytics')} title="Study Analytics" aria-label="Study Analytics">
+            <span className="text-sm sm:text-base leading-none">📈</span>
+          </IconButton>
           {/* History */}
           <IconButton onClick={() => navigate('/history')} title="Study History" aria-label="History">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
-          </IconButton>
-          {/* Audio Chime toggle */}
-          <IconButton
-            onClick={() => setSoundEnabled((v) => !v)}
-            title={soundEnabled ? 'Chime ON (click to mute)' : 'Chime MUTED (click to enable)'}
-            aria-label="Sound Toggle"
-          >
-            <span className="text-sm sm:text-base leading-none">{soundEnabled ? '🔔' : '🔕'}</span>
-          </IconButton>
-          {/* Ambient Focus Sounds modal */}
-          <IconButton onClick={() => setShowSoundModal(true)} title="Focus Ambient Sounds (Rain, White Noise...)" aria-label="Focus Sounds">
-            <span className="text-sm sm:text-base leading-none">🎧</span>
           </IconButton>
           {/* Floating Mini Stopwatch (PiP) */}
           <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
