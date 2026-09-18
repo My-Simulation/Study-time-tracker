@@ -44,12 +44,33 @@ export function saveSession(username, userDoc) {
     username: username.toLowerCase(),
     displayName: userDoc.displayName || username,
     avatarColor: userDoc.avatarColor || '#7c3aed',
+    photoUrl: userDoc.photoUrl || '',
     savedAt: Date.now(),
     expiresAt: Date.now() + SESSION_DURATION_MS,
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session))
   // Also keep old key for backward compat with RequireAuth checks
   localStorage.setItem('studyTrackerUser', username.toLowerCase())
+}
+
+/**
+ * Updates the current session with new profile attributes.
+ */
+export function updateCurrentSession(fields) {
+  try {
+    const current = getSession()
+    if (!current) return null
+    const updated = { ...current, ...fields }
+    if (fields.username) {
+      updated.username = fields.username.toLowerCase()
+      localStorage.setItem('studyTrackerUser', fields.username.toLowerCase())
+    }
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated))
+    window.dispatchEvent(new Event('storage'))
+    return updated
+  } catch {
+    return null
+  }
 }
 
 /**

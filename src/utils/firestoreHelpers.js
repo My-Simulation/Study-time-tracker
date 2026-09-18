@@ -5,7 +5,7 @@
 import {
   collection, doc, setDoc, getDoc, addDoc,
   getDocs, query, where, serverTimestamp, updateDoc,
-  onSnapshot,
+  deleteDoc, onSnapshot,
 } from 'firebase/firestore'
 import { db, getStorageInstance } from '../firebase'
 import { hashPassword, verifyPassword } from './auth'
@@ -15,7 +15,7 @@ import { hashPassword, verifyPassword } from './auth'
 // ─────────────────────────────────────────────
 
 export function validateUsername(name) {
-  if (!name || name.trim().length < 3) return 'Username must be at least 3 characters.'
+  if (!name || name.trim().length < 4) return 'Username must be at least 4 characters long.'
   if (name.trim().length > 20) return 'Username must be 20 characters or less.'
   if (!/^[a-zA-Z0-9_]+$/.test(name.trim()))
     return 'Only letters, numbers, and underscores — no spaces.'
@@ -96,6 +96,126 @@ export async function loginUser(username, password) {
 export async function getUserDoc(username) {
   const snap = await getDoc(doc(db, 'users', username.toLowerCase()))
   return snap.exists() ? snap.data() : null
+}
+
+/**
+ * Resets a user's password with a new one.
+ */
+export async function resetUserPassword(username, newPassword) {
+  const lowerUsername = username.trim().toLowerCase()
+  const snap = await getDoc(doc(db, 'users', lowerUsername))
+  if (!snap.exists()) {
+    return { ok: false, error: `No account found for @${lowerUsername}.` }
+  }
+  const pwErr = validatePassword(newPassword)
+  if (pwErr) return { ok: false, error: pwErr }
+
+  const passwordHash = await hashPassword(newPassword)
+  await updateDoc(doc(db, 'users', lowerUsername), { passwordHash })
+  const updatedDoc = (await getDoc(doc(db, 'users', lowerUsername))).data()
+  return { ok: true, userDoc: updatedDoc }
+}
+
+/**
+ * Updates editable profile fields (displayName, avatarColor, photoUrl).
+ */
+export async function updateUserProfile(username, { displayName, avatarColor, photoUrl }) {
+  const lowerUsername = username.trim().toLowerCase()
+  const payload = {}
+  if (displayName !== undefined) payload.displayName = displayName.trim()
+  if (avatarColor !== undefined) payload.avatarColor = avatarColor
+  if (photoUrl !== undefined) payload.photoUrl = photoUrl
+
+  await updateDoc(doc(db, 'users', lowerUsername), payload)
+  return await getUserDoc(lowerUsername)
+}
+
+/**
+ * Changes username with complete migration of sessions, dayPlanners, syllabus, and liveStatus.
+ */
+export async function changeUsername(oldUsername, newUsername) {
+  const oldLower = oldUsername.trim().toLowerCase()
+  const newLower = newUsername.trim().toLowerCase()
+
+  if (oldLower === newLower) {
+    return { ok: true, username: newLower }
+  }
+
+  const valErr = validateUsername(newLower)
+  if (valErr) return { ok: false, error: valErr }
+
+  const taken = await isUsernameTaken(newLower)
+  if (taken) {
+    return { ok: false, error: `@${newLower} is already taken. Please pick another username.` }
+  }
+
+  // 1. Fetch current user doc
+  const userDocSnap = await getDoc(doc(db, 'users', oldLower))
+  if (!userDocSnap.exists()) {
+    return { ok: false, error: 'Account not found.' }
+  }
+
+  const userData = userDocSnap.data()
+  const newUserData = {
+    ...userData,
+    username: newLower,
+    displayName: userData.displayName === oldLower ? newLower : userData.displayName,
+    updatedAt: serverTimestamp(),
+  }
+
+  // 2. Create new user doc with migrated state
+  await setDoc(doc(db, 'users', newLower), newUserData)
+
+  // 3. Migrate all historical sessions
+  try {
+    const q = query(collection(db, 'sessions'), where('userName', '==', oldLower))
+    const snap = await getDocs(q)
+    const updatePromises = snap.docs.map((d) =>
+      updateDoc(doc(db, 'sessions', d.id), { userName: newLower })
+    )
+    await Promise.all(updatePromises)
+  } catch (sessErr) {
+    console.warn('Error migrating sessions to new username:', sessErr)
+  }
+
+  // 4. Migrate liveStatus
+  try {
+    const liveSnap = await getDoc(doc(db, 'liveStatus', oldLower))
+    if (liveSnap.exists()) {
+      await setDoc(doc(db, 'liveStatus', newLower), {
+        ...liveSnap.data(),
+        userName: newLower,
+      })
+      await deleteDoc(doc(db, 'liveStatus', oldLower))
+    }
+  } catch (liveErr) {
+    console.warn('Error migrating liveStatus:', liveErr)
+  }
+
+  // 5. Delete old user doc
+  try {
+    await deleteDoc(doc(db, 'users', oldLower))
+  } catch (delErr) {
+    console.warn('Error deleting old user doc:', delErr)
+  }
+
+  // 6. Migrate local storage state keys
+  try {
+    const oldKeys = [
+      `stt_stopwatch_state_${oldLower}`,
+      `stt_syllabus_${oldLower}`,
+    ]
+    oldKeys.forEach((oldK) => {
+      const val = localStorage.getItem(oldK)
+      if (val) {
+        const newK = oldK.replace(oldLower, newLower)
+        localStorage.setItem(newK, val)
+        localStorage.removeItem(oldK)
+      }
+    })
+  } catch {}
+
+  return { ok: true, username: newLower, userDoc: newUserData }
 }
 
 // ─────────────────────────────────────────────

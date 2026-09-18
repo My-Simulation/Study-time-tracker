@@ -315,7 +315,7 @@ export default function Stopwatch({ userName }) {
       <div className="flex items-center justify-between px-4 pt-4 pb-0">
         <div className="flex items-center gap-2">
           {/* Profile pill */}
-          <ProfilePill userName={userName} avatarColor={avatarColor} onLogout={handleSwitchUser} />
+          <ProfilePill userName={userName} avatarColor={avatarColor} photoUrl={session?.photoUrl} onLogout={handleSwitchUser} />
           {!isStandalone && (
             <button
               onClick={handleInstallApp}
@@ -757,6 +757,7 @@ export default function Stopwatch({ userName }) {
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}
         userName={userName}
+        photoUrl={session?.photoUrl}
         todayStudiedSec={todayStudied + totalSeconds}
         dayNum={dayNum}
         streakCount={streakCount}
@@ -853,7 +854,7 @@ export default function Stopwatch({ userName }) {
 }
 
 // ── Profile Pill ──────────────────────────────────────────────────────────────
-function ProfilePill({ userName, avatarColor, onLogout }) {
+function ProfilePill({ userName, avatarColor, photoUrl, onLogout }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const navigate = useNavigate()
@@ -872,10 +873,14 @@ function ProfilePill({ userName, avatarColor, onLogout }) {
         className="flex items-center gap-2 rounded-full px-2 py-1.5 transition-colors hover:bg-[#1a1a1a]"
       >
         <div
-          className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+          className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden"
           style={{ background: avatarColor }}
         >
-          {userName[0].toUpperCase()}
+          {photoUrl ? (
+            <img src={photoUrl} alt={userName} className="w-full h-full object-cover" />
+          ) : (
+            userName[0].toUpperCase()
+          )}
         </div>
         <span className="text-sm text-gray-300 font-medium max-w-[100px] truncate">@{userName}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
@@ -887,8 +892,15 @@ function ProfilePill({ userName, avatarColor, onLogout }) {
           <div className="absolute left-0 top-10 z-50 card p-3 flex flex-col gap-1 min-w-[190px]" style={{ animation: 'scaleIn 150ms ease-out' }}>
             {/* Avatar header */}
             <div className="flex items-center gap-3 px-2 py-2">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0" style={{ background: avatarColor }}>
-                {userName[0].toUpperCase()}
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0 overflow-hidden"
+                style={{ background: avatarColor }}
+              >
+                {photoUrl ? (
+                  <img src={photoUrl} alt={userName} className="w-full h-full object-cover" />
+                ) : (
+                  userName[0].toUpperCase()
+                )}
               </div>
               <div>
                 <p className="text-sm font-semibold text-white">@{userName}</p>
@@ -897,6 +909,7 @@ function ProfilePill({ userName, avatarColor, onLogout }) {
             </div>
             <div className="border-t border-[#2a2a2a] my-1" />
             <MenuBtn icon="👤" label="My Profile & Stats" onClick={() => { navigate('/profile'); setOpen(false) }} />
+            <MenuBtn icon="✏️" label="Edit Profile" onClick={() => { navigate('/profile'); setOpen(false) }} />
             <MenuBtn icon="📈" label="Study Analytics" onClick={() => { navigate('/analytics'); setOpen(false) }} />
             <MenuBtn icon="📋" label="Weekly Plan" onClick={() => { navigate('/plan'); setOpen(false) }} />
             <MenuBtn icon="👁️" label="Watch Partner" onClick={() => { navigate('/watch'); setOpen(false) }} />

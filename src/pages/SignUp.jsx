@@ -115,7 +115,7 @@ export default function SignUp() {
             {step === 1 ? 'Choose a username' : step === 2 ? 'Set your password' : 'Pick your avatar'}
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            {step === 1 ? 'Like Instagram — unique, no spaces' : step === 2 ? 'Keep it safe — min 6 characters' : 'This shows on your profile'}
+            {step === 1 ? 'Like Instagram — unique, min 4 characters, no spaces' : step === 2 ? 'Keep it safe — min 6 characters' : 'This shows on your profile'}
           </p>
         </div>
 
@@ -134,7 +134,7 @@ export default function SignUp() {
                 className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 pl-8 pr-4 py-3 text-base outline-none focus:border-purple-500 transition-colors"
               />
             </div>
-            {username.trim().length >= 3 && (
+            {username.trim().length >= 4 && (
               <p className="text-xs text-gray-600 -mt-2 px-1">
                 Your profile: <span className="text-purple-400">@{username.trim().toLowerCase()}</span>
               </p>

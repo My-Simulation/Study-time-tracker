@@ -6,12 +6,14 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginUser } from '../utils/firestoreHelpers'
 import { saveSession } from '../utils/auth'
+import ForgotPasswordModal from '../components/ForgotPasswordModal'
 
 export default function SignIn() {
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showForgotModal, setShowForgotModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -80,7 +82,16 @@ export default function SignIn() {
 
           {/* Password */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-400">Password</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-400">Password</label>
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(true)}
+                className="text-xs text-purple-400 hover:text-purple-300 font-medium transition-colors"
+              >
+                Forgot password?
+              </button>
+            </div>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -146,6 +157,12 @@ export default function SignIn() {
           </button>
         </p>
       </div>
+
+      <ForgotPasswordModal
+        isOpen={showForgotModal}
+        onClose={() => setShowForgotModal(false)}
+        onResetSuccess={() => navigate('/', { replace: true })}
+      />
     </div>
   )
 }

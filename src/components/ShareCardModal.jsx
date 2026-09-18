@@ -10,6 +10,7 @@ export default function ShareCardModal({
   isOpen,
   onClose,
   userName,
+  photoUrl,
   todayStudiedSec,
   dayNum,
   streakCount,
@@ -126,8 +127,12 @@ export default function ShareCardModal({
           {/* Card Top */}
           <div className="relative z-10 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center font-black text-base shadow-md border border-white/20">
-                {(userName[0] || 'U').toUpperCase()}
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center font-black text-base shadow-md border border-white/20 overflow-hidden">
+                {photoUrl ? (
+                  <img src={photoUrl} alt={userName} className="w-full h-full object-cover" />
+                ) : (
+                  (userName[0] || 'U').toUpperCase()
+                )}
               </div>
               <div>
                 <p className="text-xs font-black text-white capitalize">@{userName}</p>

@@ -21,12 +21,14 @@ import {
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 import { clearSession } from '../utils/auth'
+import EditProfileModal from '../components/EditProfileModal'
 
 export default function Profile({ userName }) {
   const navigate = useNavigate()
   const today = todayString()
 
   const [loading, setLoading] = useState(true)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [allSessions, setAllSessions] = useState([])
   const [weeklyPlan, setWeeklyPlan] = useState({})
   const [dayPlanners, setDayPlanners] = useState({})
@@ -226,10 +228,19 @@ export default function Profile({ userName }) {
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
             {/* Big Avatar */}
             <div
-              className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-lg border-2 border-white/20 flex-shrink-0"
+              onClick={() => setShowEditModal(true)}
+              className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-lg border-2 border-white/20 flex-shrink-0 cursor-pointer relative group overflow-hidden"
               style={{ background: avatarBg }}
+              title="Click to edit profile & photo"
             >
-              {(userName[0] || 'U').toUpperCase()}
+              {userData?.photoUrl ? (
+                <img src={userData.photoUrl} alt={userName} className="w-full h-full object-cover" />
+              ) : (
+                (userName[0] || 'U').toUpperCase()
+              )}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] text-white font-bold transition-opacity">
+                📷 Edit
+              </div>
             </div>
 
             {/* User details */}
@@ -249,6 +260,12 @@ export default function Profile({ userName }) {
               </p>
 
               <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-start">
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <span>✏️</span> Edit Profile
+                </button>
                 <button
                   onClick={copyShareLink}
                   className="px-3 py-1 rounded-lg text-xs font-semibold bg-[#222] hover:bg-[#2c2c2c] border border-[#333] text-gray-200 transition-all flex items-center gap-1.5"
@@ -445,6 +462,19 @@ export default function Profile({ userName }) {
           </button>
         </div>
       </div>
+
+      <EditProfileModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        currentUser={userName}
+        userData={userData}
+        onUpdated={(updated, newU) => {
+          setUserData(updated)
+          if (newU && newU !== userName) {
+            window.location.href = '/profile'
+          }
+        }}
+      />
     </div>
   )
 }
