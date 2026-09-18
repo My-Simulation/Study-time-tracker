@@ -17,11 +17,12 @@ import SaveModal from '../components/SaveModal'
 import Toast from '../components/Toast'
 import ExamCountdown from '../components/ExamCountdown'
 import DailyMissions from '../components/DailyMissions'
+import ShareCardModal from '../components/ShareCardModal'
 import {
   getWeeklyPlan, getTargetForDate, getSessionsByDate, getSyllabus,
-  getDayPlanner, calculateDayNumber,
+  getDayPlanner, calculateDayNumber, getUserSessions, groupSessionsByDate, calculateStreaks,
 } from '../utils/firestoreHelpers'
-import { todayString, formatHoursMinutes } from '../utils/formatTime'
+import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 import { clearSession, getSession } from '../utils/auth'
 import { backgroundTimer } from '../utils/backgroundTimer'
 
@@ -41,6 +42,14 @@ export default function Stopwatch({ userName }) {
   const [dayNum, setDayNum] = useState(1)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [isStandalone, setIsStandalone] = useState(false)
+  const [timerMode, setTimerMode] = useState('stopwatch') // 'stopwatch' | 'pomodoro'
+  const [pomoMinutes, setPomoMinutes] = useState(25)
+  const [pomoBreakMinutes, setPomoBreakMinutes] = useState(5)
+  const [isZenMode, setIsZenMode] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [streakCount, setStreakCount] = useState(0)
+  const pomoAlertFiredRef = useRef(false)
+
   const [notifPermission, setNotifPermission] = useState(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       return Notification.permission
@@ -50,6 +59,50 @@ export default function Stopwatch({ userName }) {
   const captureRef = useRef(null)
 
   const hasTime = elapsed > 0
+
+  const playChime = useCallback(() => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) return
+      const ctx = new AudioContextClass()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime) // D5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15) // A5
+      gain.gain.setValueAtTime(0.25, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.8)
+    } catch (e) {
+      console.warn('Audio chime error:', e)
+    }
+  }, [])
+
+  // ── Keyboard shortcuts (Space = Start/Pause, F = Zen Fullscreen, Esc = Exit Zen) ──
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+        return
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if (isRunning) stop()
+        else start()
+      } else if (e.code === 'KeyF') {
+        e.preventDefault()
+        setIsZenMode((prev) => !prev)
+      } else if (e.code === 'Escape' && isZenMode) {
+        setIsZenMode(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isRunning, start, stop, isZenMode])
 
   const handleEnableNotification = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -105,17 +158,24 @@ export default function Stopwatch({ userName }) {
   useEffect(() => {
     async function loadData() {
       try {
-        const [plan, todaySessions, syl, dPlan, dNum] = await Promise.all([
+        const [plan, todaySessions, syl, dPlan, dNum, allUserSessions] = await Promise.all([
           getWeeklyPlan(userName),
           getSessionsByDate(userName, todayString()),
           getSyllabus(userName),
           getDayPlanner(userName, todayString()),
           calculateDayNumber(userName, todayString()),
+          getUserSessions(userName),
         ])
         const goal = getTargetForDate(todayString(), plan, dPlan ? { [todayString()]: dPlan } : null)
         setDailyGoal(goal)
         setDayPlan(dPlan)
         setDayNum(dNum || 1)
+
+        if (allUserSessions && allUserSessions.length > 0) {
+          const groups = groupSessionsByDate(allUserSessions)
+          const st = calculateStreaks(groups)
+          setStreakCount(st.currentStreak || 0)
+        }
 
         const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
         setTodayStudied(todaySec)
@@ -161,9 +221,17 @@ export default function Stopwatch({ userName }) {
       reset()
       if (userName) {
         try {
-          const todaySessions = await getSessionsByDate(userName, todayString())
+          const [todaySessions, allUserSessions] = await Promise.all([
+            getSessionsByDate(userName, todayString()),
+            getUserSessions(userName),
+          ])
           const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
           setTodayStudied(todaySec)
+          if (allUserSessions && allUserSessions.length > 0) {
+            const groups = groupSessionsByDate(allUserSessions)
+            const st = calculateStreaks(groups)
+            setStreakCount(st.currentStreak || 0)
+          }
         } catch {
           const added = Math.floor(elapsed / 1000)
           setTodayStudied((prev) => prev + added)
@@ -175,6 +243,31 @@ export default function Stopwatch({ userName }) {
 
   const dismissToast = useCallback(() => setToast({ visible: false, message: '' }), [])
   const totalSeconds = Math.floor(elapsed / 1000)
+
+  // ── Pomodoro Logic ────────────────────────────────────────────────────────
+  const pomoTargetSec = pomoMinutes * 60
+  const pomoRemainingSec = Math.max(0, pomoTargetSec - (totalSeconds % pomoTargetSec))
+
+  useEffect(() => {
+    if (timerMode !== 'pomodoro' || !isRunning) return
+    if (totalSeconds > 0 && totalSeconds % pomoTargetSec === 0 && !pomoAlertFiredRef.current) {
+      pomoAlertFiredRef.current = true
+      playChime()
+      setToast({
+        visible: true,
+        message: `🎉 Pomodoro ${pomoMinutes}m focus completed! Time for a ${pomoBreakMinutes}m break! ☕`,
+      })
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200])
+    } else if (totalSeconds % pomoTargetSec !== 0) {
+      pomoAlertFiredRef.current = false
+    }
+  }, [timerMode, isRunning, totalSeconds, pomoTargetSec, pomoMinutes, pomoBreakMinutes, playChime])
+
+  function formatPomodoroTime(seconds) {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
 
   // ── Daily goal progress ───────────────────────────────────────────────────
   const goalProgress = (() => {
@@ -274,6 +367,10 @@ export default function Stopwatch({ userName }) {
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
             </svg>
           </IconButton>
+          {/* Analytics icon */}
+          <IconButton onClick={() => navigate('/analytics')} title="Study Analytics" aria-label="Study Analytics">
+            <span className="text-base leading-none">📈</span>
+          </IconButton>
           {/* History icon */}
           <IconButton onClick={() => navigate('/history')} title="History" aria-label="View history">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -283,14 +380,39 @@ export default function Stopwatch({ userName }) {
         </div>
       </div>
 
-      {/* ── Mode label ── */}
-      <div className="flex justify-center px-4 pt-3 pb-1">
-        <div
-          className="px-5 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase select-none"
-          style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', color: '#aaa', letterSpacing: '0.15em' }}
-        >
-          Stopwatch
+      {/* ── Mode Selector (Stopwatch / Pomodoro) & Fullscreen ── */}
+      <div className="flex items-center justify-center gap-2 px-4 pt-3 pb-1">
+        <div className="inline-flex p-0.5 rounded-full bg-[#181818] border border-[#2a2a2a] shadow-inner">
+          <button
+            onClick={() => setTimerMode('stopwatch')}
+            className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
+              timerMode === 'stopwatch'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            ⏱️ Stopwatch
+          </button>
+          <button
+            onClick={() => setTimerMode('pomodoro')}
+            className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 ${
+              timerMode === 'pomodoro'
+                ? 'bg-teal-600 text-white shadow-sm'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            🍅 Pomodoro
+          </button>
         </div>
+
+        {/* Zen / Fullscreen Mode button */}
+        <button
+          onClick={() => setIsZenMode(true)}
+          title="Zen Fullscreen Mode (Press F)"
+          className="p-1.5 rounded-full bg-[#181818] hover:bg-[#252525] border border-[#2a2a2a] text-gray-300 hover:text-white transition-all text-xs flex items-center justify-center"
+        >
+          <span className="text-sm">⛶</span>
+        </button>
       </div>
 
       {/* ── Direct One-Tap Notification Permission Banner ── */}
@@ -500,7 +622,42 @@ export default function Stopwatch({ userName }) {
       {/* ── Main card ── */}
       <div className="flex-1 flex flex-col px-4 pb-3 max-w-lg mx-auto w-full">
         <div className="card flex flex-col flex-1 overflow-hidden mt-2">
-          <div ref={captureRef} className="bg-[#1a1a1a] rounded-2xl">
+          <div ref={captureRef} className="bg-[#1a1a1a] rounded-2xl overflow-hidden">
+            {/* Pomodoro countdown bar */}
+            {timerMode === 'pomodoro' && (
+              <div className="px-4 py-2.5 bg-[#141b24] border-b border-[#223344] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">🍅</span>
+                  <div className="text-left">
+                    <span className="text-xs font-extrabold text-teal-300">
+                      Focus Countdown: {formatPomodoroTime(pomoRemainingSec)}
+                    </span>
+                    <span className="text-[10px] text-gray-400 block">
+                      {pomoMinutes}m target focus block
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setPomoMinutes(25)}
+                    className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
+                      pomoMinutes === 25 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#222] text-gray-300'
+                    }`}
+                  >
+                    25m
+                  </button>
+                  <button
+                    onClick={() => setPomoMinutes(50)}
+                    className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
+                      pomoMinutes === 50 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#222] text-gray-300'
+                    }`}
+                  >
+                    50m
+                  </button>
+                </div>
+              </div>
+            )}
+
             <StopwatchDisplay displayTime={displayTime} />
             {laps.length > 0 && <div className="border-t border-[#2a2a2a]" />}
             <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
@@ -510,18 +667,29 @@ export default function Stopwatch({ userName }) {
 
           {/* Buttons */}
           <div className="flex flex-col gap-2.5 p-4 pt-3">
-            {hasTime && (
+            <div className="flex gap-2 w-full">
+              {hasTime && (
+                <button
+                  onClick={() => {
+                    if (isRunning) stop()
+                    setShowModal(true)
+                  }}
+                  className="pill-btn flex-1"
+                  style={{ background: '#8b5cf6', color: 'white' }}
+                >
+                  Save Session
+                </button>
+              )}
               <button
-                onClick={() => {
-                  if (isRunning) stop()
-                  setShowModal(true)
-                }}
-                className="pill-btn w-full"
-                style={{ background: '#8b5cf6', color: 'white' }}
+                onClick={() => setShowShareModal(true)}
+                title="Generate shareable study card for WhatsApp & Instagram"
+                className={`pill-btn flex items-center justify-center gap-1.5 ${hasTime ? 'w-auto px-4' : 'w-full'}`}
+                style={{ background: '#1c1b29', border: '1px solid #373554', color: '#c4b5fd' }}
               >
-                Save Session
+                <span>✨</span>
+                <span className="text-xs font-semibold">{hasTime ? 'Share' : 'Share Focus Card'}</span>
               </button>
-            )}
+            </div>
             {isRunning && (
               <button onClick={lap} className="pill-btn w-full" style={{ background: '#3b82f6', color: 'white' }}>
                 Lap
@@ -585,7 +753,101 @@ export default function Stopwatch({ userName }) {
         initialSubject={activeSubject}
         initialTopic={activeTopic}
       />
+      <ShareCardModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        userName={userName}
+        todayStudiedSec={todayStudied + totalSeconds}
+        dayNum={dayNum}
+        streakCount={streakCount}
+        dayPlan={dayPlan}
+        activeSubject={activeSubject}
+      />
       <Toast message={toast.message} visible={toast.visible} onDismiss={dismissToast} />
+
+      {/* ── Zen / Fullscreen Focus Mode Overlay ── */}
+      {isZenMode && (
+        <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col justify-between p-6 sm:p-12 text-white select-none animate-fadeIn">
+          {/* Top Header */}
+          <div className="flex items-center justify-between w-full max-w-4xl mx-auto">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                {timerMode === 'pomodoro' ? '🍅 Pomodoro Focus' : '⏱️ Stopwatch Zen'}
+              </span>
+              {activeSubject && (
+                <span className="text-xs font-semibold text-gray-400">
+                  • {activeSubject} {activeTopic ? `(${activeTopic})` : ''}
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={() => setIsZenMode(false)}
+              className="px-3.5 py-1.5 rounded-full bg-[#1e1e1e] hover:bg-[#2c2c2c] border border-[#333] text-xs font-bold text-gray-300 hover:text-white transition-colors flex items-center gap-1.5"
+            >
+              <span>✕</span>
+              <span>Exit Zen (Esc / F)</span>
+            </button>
+          </div>
+
+          {/* Center Immense Timer */}
+          <div className="flex flex-col items-center justify-center my-auto text-center w-full max-w-4xl mx-auto">
+            {timerMode === 'pomodoro' ? (
+              <>
+                <span className="text-xs font-bold uppercase tracking-widest text-teal-400 mb-2">
+                  Focus Countdown
+                </span>
+                <div className="text-7xl sm:text-9xl font-black font-mono tracking-tight text-white drop-shadow-2xl">
+                  {formatPomodoroTime(pomoRemainingSec)}
+                </div>
+                <span className="text-sm font-mono text-gray-400 mt-3">
+                  Total Elapsed: {displayTime}
+                </span>
+              </>
+            ) : (
+              <div className="text-7xl sm:text-9xl font-black font-mono tracking-tight text-white drop-shadow-2xl">
+                {displayTime}
+              </div>
+            )}
+
+            {/* Goal progress sub-bar */}
+            {goalProgress && goalProgress.hasTarget && (
+              <div className="mt-8 w-full max-w-md">
+                <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+                  <span>Today: {goalProgress.studiedLabel}</span>
+                  <span>Target: {goalProgress.label} ({goalProgress.pct}%)</span>
+                </div>
+                <div className="h-2 rounded-full bg-[#202020] overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400"
+                    style={{ width: `${goalProgress.pct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Controls */}
+          <div className="flex flex-col items-center gap-3 w-full max-w-4xl mx-auto">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={isRunning ? stop : start}
+                className="px-8 py-3.5 rounded-full font-extrabold text-base transition-all shadow-xl hover:scale-105"
+                style={{
+                  background: isRunning ? '#ef4444' : '#22c55e',
+                  color: isRunning ? 'white' : 'black',
+                  minWidth: '160px',
+                }}
+              >
+                {isRunning ? 'Pause (Space)' : 'Start (Space)'}
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-500">
+              Press <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">Space</kbd> to Start/Pause · <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">F</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">Esc</kbd> to Exit
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -634,6 +896,8 @@ function ProfilePill({ userName, avatarColor, onLogout }) {
               </div>
             </div>
             <div className="border-t border-[#2a2a2a] my-1" />
+            <MenuBtn icon="👤" label="My Profile & Stats" onClick={() => { navigate('/profile'); setOpen(false) }} />
+            <MenuBtn icon="📈" label="Study Analytics" onClick={() => { navigate('/analytics'); setOpen(false) }} />
             <MenuBtn icon="📋" label="Weekly Plan" onClick={() => { navigate('/plan'); setOpen(false) }} />
             <MenuBtn icon="👁️" label="Watch Partner" onClick={() => { navigate('/watch'); setOpen(false) }} />
             <MenuBtn icon={copied ? '✓' : '🔗'} label={copied ? 'Copied!' : 'Copy Live Link'} onClick={copyLink} />

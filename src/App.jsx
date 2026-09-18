@@ -21,6 +21,8 @@ const DayPlanner = lazy(() => import('./pages/DayPlanner'))
 const WatchPartner = lazy(() => import('./pages/WatchPartner'))
 const PartnerHistory = lazy(() => import('./pages/PartnerHistory'))
 const WatchSearch = lazy(() => import('./pages/WatchPartner').then(m => ({ default: m.WatchSearch })))
+const Analytics = lazy(() => import('./pages/Analytics'))
+const Profile = lazy(() => import('./pages/Profile'))
 
 function PageLoader() {
   return (
@@ -68,6 +70,8 @@ function AnimatedRoutes() {
           <Route path="/planner" element={<RequireAuth><DayPlanner userName={userName} /></RequireAuth>} />
           <Route path="/planner/:date" element={<RequireAuth><DayPlanner userName={userName} /></RequireAuth>} />
           <Route path="/syllabus" element={<RequireAuth><Syllabus userName={userName} /></RequireAuth>} />
+          <Route path="/analytics" element={<RequireAuth><Analytics userName={userName} /></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth><Profile userName={userName} /></RequireAuth>} />
 
           {/* Watch — public (no auth required to watch a partner) */}
           <Route path="/watch" element={<WatchSearch userName={userName} />} />

@@ -82,3 +82,20 @@ export function formatHoursMinutes(totalSeconds) {
   if (m === 0) return `${h}h`
   return `${h}h ${m}m`
 }
+
+/**
+ * Converts totalSeconds to a readable duration string.
+ * @param {number} totalSeconds
+ * @returns {string}
+ */
+export function formatDuration(totalSeconds) {
+  if (!totalSeconds || totalSeconds <= 0) return '0m'
+  const h = Math.floor(totalSeconds / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  const s = Math.floor(totalSeconds % 60)
+  if (h === 0 && m === 0) return `${s}s`
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
