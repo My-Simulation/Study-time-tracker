@@ -18,6 +18,14 @@ import Toast from '../components/Toast'
 import ExamCountdown from '../components/ExamCountdown'
 import DailyMissions from '../components/DailyMissions'
 import ShareCardModal from '../components/ShareCardModal'
+import BackgroundModal from '../components/BackgroundModal'
+import {
+  getWallpaper,
+  setWallpaper as saveWallpaperPref,
+  getWallpaperConfig,
+  setWallpaperConfig as saveWallpaperConfigPref,
+  clearWallpaper as clearWallpaperPref,
+} from '../utils/wallpaperStorage'
 import {
   getWeeklyPlan, getTargetForDate, getSessionsByDate, getSyllabus,
   getDayPlanner, calculateDayNumber, getUserSessions, groupSessionsByDate, calculateStreaks,
@@ -47,8 +55,37 @@ export default function Stopwatch({ userName }) {
   const [pomoBreakMinutes, setPomoBreakMinutes] = useState(5)
   const [isZenMode, setIsZenMode] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [showWallpaperModal, setShowWallpaperModal] = useState(false)
+  const [wallpaper, setWallpaper] = useState(() => getWallpaper(userName))
+  const [wallpaperConfig, setWallpaperConfig] = useState(() => getWallpaperConfig(userName))
   const [streakCount, setStreakCount] = useState(0)
   const pomoAlertFiredRef = useRef(false)
+
+  // Sync wallpaper when userName switches
+  useEffect(() => {
+    setWallpaper(getWallpaper(userName))
+    setWallpaperConfig(getWallpaperConfig(userName))
+  }, [userName])
+
+  const handleSelectWallpaper = (url) => {
+    setWallpaper(url)
+    saveWallpaperPref(userName, url)
+    setToast({ visible: true, message: '✨ Focus wallpaper updated!' })
+  }
+
+  const handleUpdateWallpaperConfig = (newCfg) => {
+    setWallpaperConfig((prev) => {
+      const merged = { ...prev, ...newCfg }
+      saveWallpaperConfigPref(userName, merged)
+      return merged
+    })
+  }
+
+  const handleResetWallpaper = () => {
+    setWallpaper(null)
+    clearWallpaperPref(userName)
+    setToast({ visible: true, message: '↺ Reset to minimalist default dark' })
+  }
 
   const [notifPermission, setNotifPermission] = useState(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -309,14 +346,35 @@ export default function Stopwatch({ userName }) {
   })()
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#0d0d0d' }}>
+    <div className="min-h-screen flex flex-col relative overflow-x-hidden" style={{ background: '#0d0d0d' }}>
+
+      {/* ── Fixed Personal Focus Wallpaper Layer ── */}
+      {wallpaper && (
+        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none">
+          <div
+            className="w-full h-full transition-all duration-500"
+            style={{
+              backgroundImage: `url(${wallpaper})`,
+              backgroundPosition: 'center',
+              backgroundSize: wallpaperConfig.fit === 'contain' ? 'contain' : 'cover',
+              backgroundRepeat: 'no-repeat',
+              filter: wallpaperConfig.blur ? 'blur(6px)' : 'none',
+              transform: wallpaperConfig.blur ? 'scale(1.06)' : 'none',
+            }}
+          />
+          {/* Dark Focus Dimming Overlay to ensure 100% text legibility */}
+          <div
+            className="absolute inset-0 bg-black transition-opacity duration-300"
+            style={{ opacity: wallpaperConfig.dim ?? 0.45 }}
+          />
+        </div>
+      )}
 
       {/* ── Top bar ── */}
-      {/* ── Top bar ── */}
-      <div className="flex items-center justify-between px-2 sm:px-4 pt-3 sm:pt-4 pb-0 max-w-lg mx-auto w-full">
+      <div className="relative z-10 flex items-center justify-between px-2 sm:px-4 pt-3 sm:pt-4 pb-0 max-w-lg mx-auto w-full">
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
           {/* Profile pill */}
-          <ProfilePill userName={userName} avatarColor={avatarColor} photoUrl={session?.photoUrl} onLogout={handleSwitchUser} />
+          <ProfilePill userName={userName} avatarColor={avatarColor} photoUrl={session?.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
           {!isStandalone && (
             <button
               onClick={handleInstallApp}
@@ -376,13 +434,13 @@ export default function Stopwatch({ userName }) {
           </IconButton>
           {/* Floating Mini Stopwatch (PiP) */}
           <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
-            <span className="text-sm sm:text-base leading-none">🖼️</span>
+            <span className="text-sm sm:text-base leading-none">🪟</span>
           </IconButton>
         </div>
       </div>
 
-      {/* ── Mode Selector (Stopwatch / Pomodoro) & Fullscreen ── */}
-      <div className="flex items-center justify-center gap-2 px-4 pt-3 pb-1">
+      {/* ── Mode Selector (Stopwatch / Pomodoro), Fullscreen & Wallpaper ── */}
+      <div className="relative z-10 flex items-center justify-center gap-2 px-4 pt-3 pb-1">
         <div className="inline-flex p-0.5 rounded-full bg-[#181818] border border-[#2a2a2a] shadow-inner">
           <button
             onClick={() => setTimerMode('stopwatch')}
@@ -413,6 +471,16 @@ export default function Stopwatch({ userName }) {
           className="p-1.5 rounded-full bg-[#181818] hover:bg-[#252525] border border-[#2a2a2a] text-gray-300 hover:text-white transition-all text-xs flex items-center justify-center"
         >
           <span className="text-sm">⛶</span>
+        </button>
+
+        {/* Wallpaper Picker button */}
+        <button
+          onClick={() => setShowWallpaperModal(true)}
+          title="Choose Focus Background Wallpaper"
+          className="px-2.5 py-1.5 rounded-full bg-[#181818] hover:bg-[#252525] border border-[#2a2a2a] text-gray-300 hover:text-white transition-all text-xs flex items-center justify-center gap-1.5"
+        >
+          <span className="text-xs">🎨</span>
+          <span className="text-[11px] font-semibold hidden sm:inline">Wallpaper</span>
         </button>
       </div>
 
@@ -621,9 +689,9 @@ export default function Stopwatch({ userName }) {
       )}
 
       {/* ── Main card ── */}
-      <div className="flex-1 flex flex-col px-4 pb-3 max-w-lg mx-auto w-full">
-        <div className="card flex flex-col flex-1 overflow-hidden mt-2">
-          <div ref={captureRef} className="bg-[#1a1a1a] rounded-2xl overflow-hidden">
+      <div className="relative z-10 flex-1 flex flex-col px-4 pb-3 max-w-lg mx-auto w-full">
+        <div className={`card flex flex-col flex-1 overflow-hidden mt-2 transition-all duration-300 ${wallpaper ? 'bg-[#141419]/90 backdrop-blur-md border-[#333348]' : ''}`}>
+          <div ref={captureRef} className={`rounded-2xl overflow-hidden ${wallpaper ? 'bg-[#161620]/90 backdrop-blur-md' : 'bg-[#1a1a1a]'}`}>
             {/* Pomodoro countdown bar */}
             {timerMode === 'pomodoro' && (
               <div className="px-4 py-2.5 bg-[#141b24] border-b border-[#223344] flex items-center justify-between">
@@ -729,7 +797,7 @@ export default function Stopwatch({ userName }) {
                   className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-200 border border-purple-500/40 hover:bg-purple-500/30 transition-all flex items-center gap-1 flex-shrink-0"
                   title="Open Floating Picture-in-Picture Mini Timer"
                 >
-                  <span>🖼️ Float Timer</span>
+                  <span>🪟 Float Timer</span>
                 </button>
               </div>
             )}
@@ -738,7 +806,7 @@ export default function Stopwatch({ userName }) {
       </div>
 
       {/* ── Daily Missions / Micro-Goals Checklist ── */}
-      <div className="px-4 pb-8 max-w-lg mx-auto w-full">
+      <div className="relative z-10 px-4 pb-8 max-w-lg mx-auto w-full">
         <DailyMissions userName={userName} />
       </div>
 
@@ -765,11 +833,42 @@ export default function Stopwatch({ userName }) {
         dayPlan={dayPlan}
         activeSubject={activeSubject}
       />
+      <BackgroundModal
+        isOpen={showWallpaperModal}
+        onClose={() => setShowWallpaperModal(false)}
+        userName={userName}
+        currentWallpaper={wallpaper}
+        wallpaperConfig={wallpaperConfig}
+        onSelectWallpaper={handleSelectWallpaper}
+        onUpdateConfig={handleUpdateWallpaperConfig}
+        onResetDefault={handleResetWallpaper}
+      />
       <Toast message={toast.message} visible={toast.visible} onDismiss={dismissToast} />
 
       {/* ── Zen / Fullscreen Focus Mode Overlay ── */}
       {isZenMode && (
-        <div className="fixed inset-0 z-50 bg-[#0a0a0a] flex flex-col justify-between p-4 sm:p-10 text-white select-none animate-fadeIn">
+        <div className={`fixed inset-0 z-50 flex flex-col justify-between p-4 sm:p-10 text-white select-none animate-fadeIn ${wallpaper ? 'bg-transparent' : 'bg-[#0a0a0a]'}`}>
+          {/* Zen Mode Wallpaper Background Layer */}
+          {wallpaper && (
+            <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden select-none">
+              <div
+                className="w-full h-full transition-all duration-500"
+                style={{
+                  backgroundImage: `url(${wallpaper})`,
+                  backgroundPosition: 'center',
+                  backgroundSize: wallpaperConfig.fit === 'contain' ? 'contain' : 'cover',
+                  backgroundRepeat: 'no-repeat',
+                  filter: wallpaperConfig.blur ? 'blur(6px)' : 'none',
+                  transform: wallpaperConfig.blur ? 'scale(1.06)' : 'none',
+                }}
+              />
+              <div
+                className="absolute inset-0 bg-black transition-opacity duration-300"
+                style={{ opacity: Math.max(wallpaperConfig.dim ?? 0.45, 0.4) }}
+              />
+            </div>
+          )}
+
           {/* Top Header */}
           <div className="flex items-center justify-between w-full max-w-4xl mx-auto">
             <div className="flex items-center gap-2 sm:gap-3">
@@ -783,13 +882,23 @@ export default function Stopwatch({ userName }) {
               )}
             </div>
 
-            <button
-              onClick={() => setIsZenMode(false)}
-              className="px-3 sm:px-3.5 py-1.5 rounded-full bg-[#1e1e1e] hover:bg-[#2c2c2c] border border-[#333] text-xs font-bold text-gray-300 hover:text-white transition-colors flex items-center gap-1.5"
-            >
-              <span>✕</span>
-              <span>Exit (Esc / F)</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowWallpaperModal(true)}
+                className="px-2.5 sm:px-3 py-1.5 rounded-full bg-[#1e1e1e]/90 hover:bg-[#2c2c2c] border border-[#333] text-xs font-bold text-gray-300 hover:text-white transition-colors flex items-center gap-1.5 backdrop-blur-sm"
+                title="Change Focus Wallpaper"
+              >
+                <span>🎨</span>
+                <span className="hidden sm:inline">Wallpaper</span>
+              </button>
+              <button
+                onClick={() => setIsZenMode(false)}
+                className="px-3 sm:px-3.5 py-1.5 rounded-full bg-[#1e1e1e]/90 hover:bg-[#2c2c2c] border border-[#333] text-xs font-bold text-gray-300 hover:text-white transition-colors flex items-center gap-1.5 backdrop-blur-sm"
+              >
+                <span>✕</span>
+                <span>Exit (Esc / F)</span>
+              </button>
+            </div>
           </div>
 
           {/* Center Immense Timer */}
@@ -870,7 +979,7 @@ export default function Stopwatch({ userName }) {
 }
 
 // ── Profile Pill ──────────────────────────────────────────────────────────────
-function ProfilePill({ userName, avatarColor, photoUrl, onLogout }) {
+function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpaper }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const navigate = useNavigate()
@@ -926,6 +1035,7 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout }) {
             <div className="border-t border-[#2a2a2a] my-1" />
             <MenuBtn icon="👤" label="My Profile & Stats" onClick={() => { navigate('/profile'); setOpen(false) }} />
             <MenuBtn icon="✏️" label="Edit Profile" onClick={() => { navigate('/profile'); setOpen(false) }} />
+            <MenuBtn icon="🎨" label="Change Wallpaper" onClick={() => { onOpenWallpaper?.(); setOpen(false) }} />
             <MenuBtn icon="📈" label="Study Analytics" onClick={() => { navigate('/analytics'); setOpen(false) }} />
             <MenuBtn icon="📋" label="Weekly Plan" onClick={() => { navigate('/plan'); setOpen(false) }} />
             <MenuBtn icon="👁️" label="Watch Partner" onClick={() => { navigate('/watch'); setOpen(false) }} />
