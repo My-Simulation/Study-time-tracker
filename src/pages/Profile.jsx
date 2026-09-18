@@ -80,17 +80,17 @@ export default function Profile({ userName }) {
 
   // Best Single Study Day
   const bestDay = useMemo(() => {
-    if (dateGroups.length === 0) return { date: '-', seconds: 0 }
+    if (!dateGroups || dateGroups.length === 0) return { date: '-', totalSeconds: 0 }
     let max = dateGroups[0]
     for (const g of dateGroups) {
-      if (g.totalSeconds > max.totalSeconds) max = g
+      if ((g.totalSeconds || 0) > (max.totalSeconds || 0)) max = g
     }
     return max
   }, [dateGroups])
 
   // Longest Single Session
   const longestSession = useMemo(() => {
-    if (allSessions.length === 0) return { seconds: 0 }
+    if (!allSessions || allSessions.length === 0) return { totalSeconds: 0 }
     let max = allSessions[0]
     for (const s of allSessions) {
       if ((s.totalSeconds || 0) > (max.totalSeconds || 0)) max = s
@@ -190,11 +190,11 @@ export default function Profile({ userName }) {
   const avatarBg = userData?.avatarColor || '#7c3aed'
 
   return (
-    <div className="min-h-screen pb-16" style={{ background: '#0d0d0d', color: '#f5f5f5' }}>
+    <div className="min-h-screen pb-16 bg-transparent" style={{ color: '#f5f5f5' }}>
       {/* ── Top Nav ── */}
       <div
-        className="sticky top-0 z-30 flex items-center justify-between px-4 py-3.5 border-b border-[#222] backdrop-blur-md"
-        style={{ background: 'rgba(13, 13, 13, 0.9)' }}
+        className="sticky top-0 z-30 flex items-center justify-between px-4 py-3.5 border-b border-[#222]/80 backdrop-blur-md"
+        style={{ background: 'rgba(13, 13, 13, 0.75)' }}
       >
         <div className="flex items-center gap-3">
           <button
@@ -309,7 +309,7 @@ export default function Profile({ userName }) {
                 🏆 BEST
               </span>
               <p className="text-xl font-black text-yellow-400 mt-0.5 font-mono">
-                {bestDay.seconds > 0 ? formatHoursMinutes(bestDay.seconds) : '0h'}
+                {(bestDay.totalSeconds || 0) > 0 ? formatHoursMinutes(bestDay.totalSeconds) : '0h'}
               </p>
               <span className="text-[9px] text-gray-500">Single day record</span>
             </div>
@@ -415,7 +415,7 @@ export default function Profile({ userName }) {
             <div className="bg-[#191919] border border-[#282828] rounded-xl p-3.5 flex flex-col justify-between">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Longest Session</span>
               <p className="text-lg font-black text-emerald-300 font-mono mt-1">
-                {longestSession.seconds > 0 ? formatDuration(longestSession.seconds) : '0m'}
+                {(longestSession.totalSeconds || 0) > 0 ? formatDuration(longestSession.totalSeconds) : '0m'}
               </p>
               <span className="text-[10px] text-gray-500 mt-1">Single uninterrupted stretch</span>
             </div>

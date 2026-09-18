@@ -346,7 +346,7 @@ export default function Stopwatch({ userName }) {
   })()
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-x-hidden" style={{ background: '#0d0d0d' }}>
+    <div className="min-h-screen flex flex-col relative overflow-x-hidden bg-transparent">
 
       {/* ── Fixed Personal Focus Wallpaper Layer ── */}
       {wallpaper && (
@@ -370,8 +370,8 @@ export default function Stopwatch({ userName }) {
         </div>
       )}
 
-      {/* ── Top bar ── */}
-      <div className="relative z-10 flex items-center justify-between px-2 sm:px-4 pt-3 sm:pt-4 pb-0 max-w-lg mx-auto w-full">
+      {/* ── Top bar (Spans max-w-7xl on desktop, responsive on mobile) ── */}
+      <div className="relative z-10 flex items-center justify-between px-3 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-0 max-w-7xl mx-auto w-full">
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
           {/* Profile pill */}
           <ProfilePill userName={userName} avatarColor={avatarColor} photoUrl={session?.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
@@ -429,7 +429,7 @@ export default function Stopwatch({ userName }) {
           {/* History icon */}
           <IconButton onClick={() => navigate('/history')} title="History" aria-label="View history">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
             </svg>
           </IconButton>
           {/* Floating Mini Stopwatch (PiP) */}
@@ -440,7 +440,7 @@ export default function Stopwatch({ userName }) {
       </div>
 
       {/* ── Mode Selector (Stopwatch / Pomodoro), Fullscreen & Wallpaper ── */}
-      <div className="relative z-10 flex items-center justify-center gap-2 px-4 pt-3 pb-1">
+      <div className="relative z-10 flex items-center justify-center gap-2 px-4 pt-3 pb-2 max-w-7xl mx-auto w-full">
         <div className="inline-flex p-0.5 rounded-full bg-[#181818] border border-[#2a2a2a] shadow-inner">
           <button
             onClick={() => setTimerMode('stopwatch')}
@@ -484,330 +484,334 @@ export default function Stopwatch({ userName }) {
         </button>
       </div>
 
-      {/* ── Direct One-Tap Notification Permission Banner ── */}
-      {notifPermission === 'default' && (
-        <div className="px-4 pt-1 pb-1 max-w-lg mx-auto w-full">
-          <div
-            onClick={handleEnableNotification}
-            className="p-3 rounded-2xl flex items-center justify-between gap-3 border border-amber-500/40 bg-amber-500/10 cursor-pointer hover:bg-amber-500/20 transition-all shadow-md btn-press"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-xl flex-shrink-0">🔔</span>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-amber-200 truncate">Enable Lock Screen & Notification Timer</p>
-                <p className="text-[10px] text-gray-300 mt-0.5 truncate">Tap to show running stopwatch on top of your screen</p>
-              </div>
-            </div>
-            <span className="text-xs font-bold text-black bg-amber-400 px-3 py-1 rounded-full flex-shrink-0 shadow-sm">
-              Turn On
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Day Study Planner Sheet Banner ── */}
-      <div className="px-4 pt-1 max-w-lg mx-auto w-full">
-        <div
-          onClick={() => navigate('/planner')}
-          className="p-3 rounded-2xl flex items-center justify-between gap-3 border border-pink-500/30 cursor-pointer hover:border-pink-500/60 transition-all btn-press shadow-md"
-          style={{
-            background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12) 0%, rgba(168, 85, 247, 0.08) 100%)',
-          }}
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-xl flex-shrink-0">🌸</span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-pink-300 uppercase tracking-wider whitespace-nowrap">
-                  DAY {dayNum} PLAN
-                </span>
-                {dayPlan?.goals?.[0] && (
-                  <span className="text-[11px] text-gray-300 truncate">
-                    · {dayPlan.goals[0]}
-                  </span>
+      {/* ── Main Responsive Content Area (2 Columns on Laptop / Desktop, Stacked on Mobile) ── */}
+      <div className="relative z-10 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pb-10 flex flex-col lg:grid lg:grid-cols-12 lg:gap-6 flex-1">
+        {/* Left Column: Timer, Topic Tag & Control Buttons (lg:col-span-7 xl:col-span-7) */}
+        <div className="order-2 lg:order-1 lg:col-span-7 xl:col-span-7 flex flex-col gap-3">
+          {/* Active Topic Tagging */}
+          {syllabus.length > 0 && (
+            <div className="card px-3.5 py-2 flex items-center justify-between text-xs bg-[#16161e]/90 backdrop-blur-md border border-[#2d2d40] shadow-md">
+              <span className="text-gray-400 font-medium text-[11px] flex items-center gap-1">
+                <span>🏷️</span> Topic Tag:
+              </span>
+              <div className="flex items-center gap-1.5 overflow-x-auto max-w-[80%]">
+                <select
+                  value={activeSubject}
+                  onChange={(e) => {
+                    setActiveSubject(e.target.value)
+                    setActiveTopic('')
+                  }}
+                  className="rounded-lg bg-[#141414] border border-[#2a2a2a] text-white text-[11px] px-2 py-1 outline-none focus:border-purple-500"
+                >
+                  <option value="">Select Subject</option>
+                  {syllabus.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                {activeSubject && (
+                  <select
+                    value={activeTopic}
+                    onChange={(e) => setActiveTopic(e.target.value)}
+                    className="rounded-lg bg-[#141414] border border-[#2a2a2a] text-white text-[11px] px-2 py-1 outline-none focus:border-purple-500 max-w-[150px] truncate"
+                  >
+                    <option value="">Select Topic</option>
+                    {(syllabus.find((s) => s.name === activeSubject)?.topics || []).map((t) => (
+                      <option key={t.id} value={t.name}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
-              <p className="text-[10px] text-gray-400 mt-0.5 truncate">
-                {dayPlan?.rows?.length
-                  ? `${dayPlan.rows.filter((r) => r.done).length}/${dayPlan.rows.length} topics done today`
-                  : 'Open today’s planner sheet & set your top goals'}
-              </p>
             </div>
-          </div>
+          )}
 
-          <span className="text-xs font-bold text-pink-300 bg-pink-500/20 border border-pink-500/30 px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0">
-            Open Sheet →
-          </span>
-        </div>
-      </div>
-
-      {/* ── Exam D-Day Countdown & Target Hours Widget ── */}
-      <div className="px-4 pt-1.5 max-w-lg mx-auto w-full">
-        <ExamCountdown userName={userName} totalStudiedSeconds={todayStudied + totalSeconds} />
-      </div>
-
-      {/* ── Daily goal progress bar ── */}
-      {goalProgress && (
-        <div className="px-4 pt-2 pb-0 max-w-lg mx-auto w-full">
-          {goalProgress.hasTarget ? (
-            <div
-              className="card px-4 py-3 flex flex-col gap-2.5 transition-all shadow-sm"
-              style={{
-                background: goalProgress.isAchieved
-                  ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(20, 20, 20, 0.95) 100%)'
-                  : '#1a1a1a',
-                border: goalProgress.isAchieved ? '1px solid rgba(34, 197, 94, 0.35)' : '1px solid #2a2a2a',
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{goalProgress.isAchieved ? '🎉' : '🎯'}</span>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-white tracking-wide">
-                        Today's Study Goal
+          {/* Main Stopwatch Timer Card */}
+          <div className="card flex flex-col flex-1 overflow-hidden transition-all duration-300 shadow-2xl bg-[#14141a]/95 backdrop-blur-md border border-[#2e2e42]">
+            <div ref={captureRef} className="rounded-2xl overflow-hidden bg-[#181822]/95 backdrop-blur-md">
+              {/* Pomodoro countdown bar */}
+              {timerMode === 'pomodoro' && (
+                <div className="px-4 py-2.5 bg-[#141b24] border-b border-[#223344] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🍅</span>
+                    <div className="text-left">
+                      <span className="text-xs font-extrabold text-teal-300">
+                        Focus Countdown: {formatPomodoroTime(pomoRemainingSec)}
                       </span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
-                        {goalProgress.source}
+                      <span className="text-[10px] text-gray-400 block">
+                        {pomoMinutes}m target focus block
                       </span>
                     </div>
-                    {dailyGoal?.subjects && (
-                      <span className="text-[11px] text-gray-400 block truncate max-w-[200px]">
-                        {dailyGoal.subjects}
-                      </span>
-                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setPomoMinutes(25)}
+                      className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
+                        pomoMinutes === 25 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#222] text-gray-300'
+                      }`}
+                    >
+                      25m
+                    </button>
+                    <button
+                      onClick={() => setPomoMinutes(50)}
+                      className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
+                        pomoMinutes === 50 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#222] text-gray-300'
+                      }`}
+                    >
+                      50m
+                    </button>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className={`text-xs font-bold font-mono ${goalProgress.isAchieved ? 'text-green-400' : 'text-purple-400'}`}>
-                    {goalProgress.studiedLabel} / {goalProgress.label}
-                  </span>
-                  <span className="block text-[10px] text-gray-400 font-medium">
-                    {goalProgress.pct}% done
-                  </span>
-                </div>
-              </div>
+              )}
 
-              {/* Progress Bar */}
-              <div className="relative h-2 rounded-full bg-[#262626] overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${goalProgress.pct}%`,
-                    background: goalProgress.isAchieved
-                      ? 'linear-gradient(90deg, #10b981, #22c55e)'
-                      : 'linear-gradient(90deg, #7c3aed, #ec4899)',
-                    boxShadow: goalProgress.isAchieved ? '0 0 10px rgba(34, 197, 94, 0.5)' : '0 0 10px rgba(124, 58, 237, 0.3)',
-                  }}
-                />
-              </div>
-
-              {/* Status Message */}
-              <div className="flex items-center justify-between text-[11px]">
-                {goalProgress.isAchieved ? (
-                  <span className="text-green-400 font-medium flex items-center gap-1">
-                    ✓ Daily goal achieved for today! Great job! 🎉
-                  </span>
-                ) : goalProgress.studiedSec > 0 ? (
-                  <span className="text-amber-400/90 font-medium">
-                    ⏳ In Progress · {goalProgress.remainingLabel} left to reach target
-                  </span>
-                ) : (
-                  <span className="text-gray-400">
-                    Not started yet today · Target: {goalProgress.label}
-                  </span>
-                )}
-                <button
-                  onClick={() => navigate('/planner')}
-                  className="text-[10px] text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-0.5 hover:underline"
-                >
-                  Day Sheet →
-                </button>
+              <StopwatchDisplay displayTime={displayTime} />
+              {laps.length > 0 && <div className="border-t border-[#2a2a2a]" />}
+              <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
+                <LapTable laps={laps} />
               </div>
             </div>
-          ) : (
-            /* If no target set yet today */
+
+            {/* Buttons */}
+            <div className="flex flex-col gap-2.5 p-4 pt-3">
+              <div className="flex gap-2 w-full">
+                {hasTime && (
+                  <button
+                    onClick={() => {
+                      if (isRunning) stop()
+                      setShowModal(true)
+                    }}
+                    className="pill-btn flex-1"
+                    style={{ background: '#8b5cf6', color: 'white' }}
+                  >
+                    Save Session
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  title="Generate shareable study card for WhatsApp & Instagram"
+                  className={`pill-btn flex items-center justify-center gap-1.5 ${hasTime ? 'w-auto px-4' : 'w-full'}`}
+                  style={{ background: '#1c1b29', border: '1px solid #373554', color: '#c4b5fd' }}
+                >
+                  <span>✨</span>
+                  <span className="text-xs font-semibold">{hasTime ? 'Share' : 'Share Focus Card'}</span>
+                </button>
+              </div>
+              {isRunning && (
+                <button onClick={lap} className="pill-btn w-full" style={{ background: '#3b82f6', color: 'white' }}>
+                  Lap
+                </button>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={reset}
+                  disabled={isRunning || elapsed === 0}
+                  className="pill-btn flex-1"
+                  style={{ background: '#2a2a2a', color: isRunning || elapsed === 0 ? '#555' : 'white', cursor: isRunning || elapsed === 0 ? 'not-allowed' : 'pointer' }}
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={isRunning ? stop : start}
+                  className="pill-btn flex-1"
+                  style={{ background: isRunning ? '#ef4444' : '#22c55e', color: isRunning ? 'white' : 'black' }}
+                >
+                  {isRunning ? 'Stop' : 'Start'}
+                </button>
+              </div>
+
+              {/* Lock Screen & Background Controller active banner */}
+              {isRunning && (
+                <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#181229] border border-purple-500/30 text-[11px] mt-1 shadow-sm">
+                  <div className="flex items-center gap-2 text-purple-200 min-w-0">
+                    <span className="relative flex h-2 w-2 flex-shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    <span className="font-medium truncate">Lock Screen & Notification Active</span>
+                  </div>
+                  <button
+                    onClick={togglePictureInPicture}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-200 border border-purple-500/40 hover:bg-purple-500/30 transition-all flex items-center gap-1 flex-shrink-0"
+                    title="Open Floating Picture-in-Picture Mini Timer"
+                  >
+                    <span>🪟 Float Timer</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Day Plan, Exam Goals, Progress & Daily Missions (lg:col-span-5 xl:col-span-5) */}
+        <div className="order-1 lg:order-2 lg:col-span-5 xl:col-span-5 flex flex-col gap-3">
+          {/* Direct One-Tap Notification Permission Banner */}
+          {notifPermission === 'default' && (
             <div
-              onClick={() => navigate('/planner')}
-              className="card px-3.5 py-2.5 flex items-center justify-between border-dashed border-[#333] hover:border-purple-500/50 cursor-pointer transition-colors"
+              onClick={handleEnableNotification}
+              className="p-3 rounded-2xl flex items-center justify-between gap-3 border border-amber-500/40 bg-amber-500/10 cursor-pointer hover:bg-amber-500/20 transition-all shadow-md btn-press backdrop-blur-md"
             >
-              <div className="flex items-center gap-2">
-                <span className="text-base">🎯</span>
-                <div>
-                  <p className="text-xs font-semibold text-gray-300">Set Today's Target Hours</p>
-                  <p className="text-[10px] text-gray-500">
-                    {goalProgress.studiedSec > 0
-                      ? `Studied ${goalProgress.studiedLabel} today · Set a goal to track completion!`
-                      : 'Define how many hours you want to study today'}
-                  </p>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-xl flex-shrink-0">🔔</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-amber-200 truncate">Enable Lock Screen & Notification Timer</p>
+                  <p className="text-[10px] text-gray-300 mt-0.5 truncate">Tap to show running stopwatch on top of your screen</p>
                 </div>
               </div>
-              <span className="text-[11px] px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 font-medium transition-all">
-                + Set Goal
+              <span className="text-xs font-bold text-black bg-amber-400 px-3 py-1 rounded-full flex-shrink-0 shadow-sm">
+                Turn On
               </span>
             </div>
           )}
-        </div>
-      )}
 
-      {/* ── Active Topic Tagging ── */}
-      {syllabus.length > 0 && (
-        <div className="px-4 pt-2 max-w-lg mx-auto w-full flex items-center justify-between text-xs">
-          <span className="text-gray-500 font-medium text-[11px]">Topic Tag:</span>
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-[80%]">
-            <select
-              value={activeSubject}
-              onChange={(e) => {
-                setActiveSubject(e.target.value)
-                setActiveTopic('')
-              }}
-              className="rounded-lg bg-[#141414] border border-[#2a2a2a] text-white text-[11px] px-2 py-1 outline-none focus:border-purple-500"
-            >
-              <option value="">Select Subject</option>
-              {syllabus.map((s) => (
-                <option key={s.id} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            {activeSubject && (
-              <select
-                value={activeTopic}
-                onChange={(e) => setActiveTopic(e.target.value)}
-                className="rounded-lg bg-[#141414] border border-[#2a2a2a] text-white text-[11px] px-2 py-1 outline-none focus:border-purple-500 max-w-[130px] truncate"
-              >
-                <option value="">Select Topic</option>
-                {(syllabus.find((s) => s.name === activeSubject)?.topics || []).map((t) => (
-                  <option key={t.id} value={t.name}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Main card ── */}
-      <div className="relative z-10 flex-1 flex flex-col px-4 pb-3 max-w-lg mx-auto w-full">
-        <div className={`card flex flex-col flex-1 overflow-hidden mt-2 transition-all duration-300 ${wallpaper ? 'bg-[#141419]/90 backdrop-blur-md border-[#333348]' : ''}`}>
-          <div ref={captureRef} className={`rounded-2xl overflow-hidden ${wallpaper ? 'bg-[#161620]/90 backdrop-blur-md' : 'bg-[#1a1a1a]'}`}>
-            {/* Pomodoro countdown bar */}
-            {timerMode === 'pomodoro' && (
-              <div className="px-4 py-2.5 bg-[#141b24] border-b border-[#223344] flex items-center justify-between">
+          {/* Day Study Planner Sheet Banner */}
+          <div
+            onClick={() => navigate('/planner')}
+            className="p-3.5 rounded-2xl flex items-center justify-between gap-3 border border-pink-500/40 cursor-pointer hover:border-pink-500/60 transition-all btn-press shadow-lg backdrop-blur-md"
+            style={{
+              background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.22) 0%, rgba(168, 85, 247, 0.16) 100%)',
+            }}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-xl flex-shrink-0">🌸</span>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm">🍅</span>
-                  <div className="text-left">
-                    <span className="text-xs font-extrabold text-teal-300">
-                      Focus Countdown: {formatPomodoroTime(pomoRemainingSec)}
+                  <span className="text-xs font-black text-pink-300 uppercase tracking-wider whitespace-nowrap">
+                    DAY {dayNum} PLAN
+                  </span>
+                  {dayPlan?.goals?.[0] && (
+                    <span className="text-[11px] text-gray-200 font-medium truncate">
+                      · {dayPlan.goals[0]}
                     </span>
-                    <span className="text-[10px] text-gray-400 block">
-                      {pomoMinutes}m target focus block
-                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-300 mt-0.5 truncate">
+                  {dayPlan?.rows?.length
+                    ? `${dayPlan.rows.filter((r) => r.done).length}/${dayPlan.rows.length} topics done today`
+                    : 'Open today’s planner sheet & set your top goals'}
+                </p>
+              </div>
+            </div>
+
+            <span className="text-xs font-bold text-pink-200 bg-pink-500/30 border border-pink-500/50 px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0">
+              Open Sheet →
+            </span>
+          </div>
+
+          {/* Exam D-Day Countdown Widget */}
+          <div className="backdrop-blur-md rounded-2xl">
+            <ExamCountdown userName={userName} totalStudiedSeconds={todayStudied + totalSeconds} />
+          </div>
+
+          {/* Daily Goal Progress Bar */}
+          {goalProgress && (
+            <div>
+              {goalProgress.hasTarget ? (
+                <div
+                  className="card px-4 py-3.5 flex flex-col gap-2.5 transition-all shadow-lg bg-[#161622]/90 backdrop-blur-md border border-[#2d2d42]"
+                  style={{
+                    background: goalProgress.isAchieved
+                      ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.18) 0%, rgba(20, 20, 28, 0.95) 100%)'
+                      : undefined,
+                    borderColor: goalProgress.isAchieved ? 'rgba(34, 197, 94, 0.45)' : undefined,
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{goalProgress.isAchieved ? '🎉' : '🎯'}</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-white tracking-wide">
+                            Today's Study Goal
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-500/25 text-purple-200 font-semibold border border-purple-500/40">
+                            {goalProgress.source}
+                          </span>
+                        </div>
+                        {dailyGoal?.subjects && (
+                          <span className="text-[11px] text-gray-300 block truncate max-w-[200px]">
+                            {dailyGoal.subjects}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-xs font-bold font-mono ${goalProgress.isAchieved ? 'text-green-400' : 'text-purple-300'}`}>
+                        {goalProgress.studiedLabel} / {goalProgress.label}
+                      </span>
+                      <span className="block text-[10px] text-gray-300 font-medium">
+                        {goalProgress.pct}% done
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="relative h-2 rounded-full bg-[#262635] overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${goalProgress.pct}%`,
+                        background: goalProgress.isAchieved
+                          ? 'linear-gradient(90deg, #10b981, #22c55e)'
+                          : 'linear-gradient(90deg, #7c3aed, #ec4899)',
+                        boxShadow: goalProgress.isAchieved ? '0 0 10px rgba(34, 197, 94, 0.5)' : '0 0 10px rgba(124, 58, 237, 0.3)',
+                      }}
+                    />
+                  </div>
+
+                  {/* Status Message */}
+                  <div className="flex items-center justify-between text-[11px]">
+                    {goalProgress.isAchieved ? (
+                      <span className="text-green-400 font-medium flex items-center gap-1">
+                        ✓ Daily goal achieved for today! Great job! 🎉
+                      </span>
+                    ) : goalProgress.studiedSec > 0 ? (
+                      <span className="text-amber-300 font-medium">
+                        ⏳ In Progress · {goalProgress.remainingLabel} left to reach target
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">
+                        Not started yet today · Target: {goalProgress.label}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => navigate('/planner')}
+                      className="text-[10px] text-purple-300 hover:text-purple-200 font-semibold flex items-center gap-0.5 hover:underline"
+                    >
+                      Day Sheet →
+                    </button>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setPomoMinutes(25)}
-                    className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
-                      pomoMinutes === 25 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#222] text-gray-300'
-                    }`}
-                  >
-                    25m
-                  </button>
-                  <button
-                    onClick={() => setPomoMinutes(50)}
-                    className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
-                      pomoMinutes === 50 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#222] text-gray-300'
-                    }`}
-                  >
-                    50m
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <StopwatchDisplay displayTime={displayTime} />
-            {laps.length > 0 && <div className="border-t border-[#2a2a2a]" />}
-            <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
-              <LapTable laps={laps} />
-            </div>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex flex-col gap-2.5 p-4 pt-3">
-            <div className="flex gap-2 w-full">
-              {hasTime && (
-                <button
-                  onClick={() => {
-                    if (isRunning) stop()
-                    setShowModal(true)
-                  }}
-                  className="pill-btn flex-1"
-                  style={{ background: '#8b5cf6', color: 'white' }}
+              ) : (
+                <div
+                  onClick={() => navigate('/planner')}
+                  className="card px-3.5 py-2.5 flex items-center justify-between border-dashed border-[#3d3d52] hover:border-purple-500/60 bg-[#161622]/90 backdrop-blur-md cursor-pointer transition-colors"
                 >
-                  Save Session
-                </button>
-              )}
-              <button
-                onClick={() => setShowShareModal(true)}
-                title="Generate shareable study card for WhatsApp & Instagram"
-                className={`pill-btn flex items-center justify-center gap-1.5 ${hasTime ? 'w-auto px-4' : 'w-full'}`}
-                style={{ background: '#1c1b29', border: '1px solid #373554', color: '#c4b5fd' }}
-              >
-                <span>✨</span>
-                <span className="text-xs font-semibold">{hasTime ? 'Share' : 'Share Focus Card'}</span>
-              </button>
-            </div>
-            {isRunning && (
-              <button onClick={lap} className="pill-btn w-full" style={{ background: '#3b82f6', color: 'white' }}>
-                Lap
-              </button>
-            )}
-            <div className="flex gap-3">
-              <button
-                onClick={reset}
-                disabled={isRunning || elapsed === 0}
-                className="pill-btn flex-1"
-                style={{ background: '#2a2a2a', color: isRunning || elapsed === 0 ? '#555' : 'white', cursor: isRunning || elapsed === 0 ? 'not-allowed' : 'pointer' }}
-              >
-                Reset
-              </button>
-              <button
-                onClick={isRunning ? stop : start}
-                className="pill-btn flex-1"
-                style={{ background: isRunning ? '#ef4444' : '#22c55e', color: isRunning ? 'white' : 'black' }}
-              >
-                {isRunning ? 'Stop' : 'Start'}
-              </button>
-            </div>
-
-            {/* Lock Screen & Background Controller active banner */}
-            {isRunning && (
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#181229] border border-purple-500/30 text-[11px] mt-1 shadow-sm">
-                <div className="flex items-center gap-2 text-purple-200 min-w-0">
-                  <span className="relative flex h-2 w-2 flex-shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🎯</span>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-200">Set Today's Target Hours</p>
+                      <p className="text-[10px] text-gray-400">
+                        {goalProgress.studiedSec > 0
+                          ? `Studied ${goalProgress.studiedLabel} today · Set a goal to track completion!`
+                          : 'Define how many hours you want to study today'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 hover:bg-purple-500/30 font-medium transition-all">
+                    + Set Goal
                   </span>
-                  <span className="font-medium truncate">Lock Screen & Notification Active</span>
                 </div>
-                <button
-                  onClick={togglePictureInPicture}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-200 border border-purple-500/40 hover:bg-purple-500/30 transition-all flex items-center gap-1 flex-shrink-0"
-                  title="Open Floating Picture-in-Picture Mini Timer"
-                >
-                  <span>🪟 Float Timer</span>
-                </button>
-              </div>
-            )}
+              )}
+            </div>
+          )}
+
+          {/* Daily Missions Checklist */}
+          <div className="backdrop-blur-md rounded-2xl">
+            <DailyMissions userName={userName} />
           </div>
         </div>
-      </div>
-
-      {/* ── Daily Missions / Micro-Goals Checklist ── */}
-      <div className="relative z-10 px-4 pb-8 max-w-lg mx-auto w-full">
-        <DailyMissions userName={userName} />
       </div>
 
       <SaveModal

@@ -45,7 +45,7 @@ export default function HistoryDetail({ userName }) {
   return (
     <div
       className="min-h-screen flex flex-col"
-      style={{ background: '#0d0d0d' }}
+      style={{ background: 'transparent' }}
     >
       {/* ── Top bar ── */}
       <div className="flex items-center justify-between px-4 pt-5 pb-3">

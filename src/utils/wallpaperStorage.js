@@ -117,6 +117,9 @@ export function setWallpaper(userName, bgUrl) {
     } else {
       localStorage.removeItem(key);
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('study_wallpaper_changed', { detail: { userName, bgUrl } }));
+    }
   } catch (e) {
     console.warn("Could not save wallpaper preference:", e);
   }
@@ -143,6 +146,9 @@ export function setWallpaperConfig(userName, config) {
     const key = `${CONFIG_KEY_PREFIX}${userName.toLowerCase()}`;
     const merged = { ...DEFAULT_CONFIG, ...config };
     localStorage.setItem(key, JSON.stringify(merged));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('study_wallpaper_changed', { detail: { userName, config: merged } }));
+    }
   } catch (e) {
     console.warn("Could not save wallpaper config:", e);
   }
@@ -154,6 +160,9 @@ export function clearWallpaper(userName) {
   try {
     localStorage.removeItem(`${BG_KEY_PREFIX}${userName.toLowerCase()}`);
     localStorage.removeItem(`${CONFIG_KEY_PREFIX}${userName.toLowerCase()}`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('study_wallpaper_changed', { detail: { userName, bgUrl: null } }));
+    }
   } catch (e) {
     console.warn("Could not clear wallpaper:", e);
   }

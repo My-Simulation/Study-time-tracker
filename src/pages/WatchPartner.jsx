@@ -4,10 +4,10 @@
  * Route: /watch/:partnerName
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useWatchPartner } from '../hooks/useWatchPartner'
-import { getUserSessions, groupSessionsByDate } from '../utils/firestoreHelpers'
+import { getUserSessions, groupSessionsByDate, getUserDoc } from '../utils/firestoreHelpers'
 import { formatHoursMinutes } from '../utils/formatTime'
 
 export default function WatchPartner() {
@@ -16,7 +16,19 @@ export default function WatchPartner() {
   const { status, displayTime, isLoading, notFound, isLive, lastSeenText } =
     useWatchPartner(partnerName)
 
+  const [partnerDoc, setPartnerDoc] = useState(null)
   const [partnerInput, setPartnerInput] = useState('')
+
+  useEffect(() => {
+    if (!partnerName) return
+    let isMounted = true
+    getUserDoc(partnerName)
+      .then((docData) => {
+        if (isMounted && docData) setPartnerDoc(docData)
+      })
+      .catch(() => {})
+    return () => { isMounted = false }
+  }, [partnerName])
 
   if (isLoading) {
     return (
@@ -56,14 +68,23 @@ export default function WatchPartner() {
         <div className="flex items-center justify-center gap-3 mt-4">
           {/* Avatar */}
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white"
-            style={{ background: stringToColor(partnerName) }}
+            className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center font-bold text-lg text-white shadow-md flex-shrink-0"
+            style={{ background: partnerDoc?.avatarColor || stringToColor(partnerName) }}
           >
-            {partnerName[0].toUpperCase()}
+            {partnerDoc?.photoUrl ? (
+              <img src={partnerDoc.photoUrl} alt={partnerName} className="w-full h-full object-cover" />
+            ) : (
+              partnerName[0].toUpperCase()
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-white font-semibold">@{partnerName}</span>
+              <span className="text-white font-semibold text-base">
+                {partnerDoc?.displayName || `@${partnerName}`}
+              </span>
+              {partnerDoc?.displayName && (
+                <span className="text-xs text-gray-400 font-mono">@{partnerName}</span>
+              )}
               {isLive && (
                 <span className="flex items-center gap-1 text-xs font-semibold text-green-400 bg-green-400/10 border border-green-400/30 px-2 py-0.5 rounded-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
@@ -157,6 +178,27 @@ export default function WatchPartner() {
 export function WatchSearch({ userName }) {
   const navigate = useNavigate()
   const [input, setInput] = useState('')
+  const [previewUser, setPreviewUser] = useState(null)
+
+  useEffect(() => {
+    const trimmed = input.trim().toLowerCase()
+    if (trimmed.length < 3) {
+      setPreviewUser(null)
+      return
+    }
+    let active = true
+    const timer = setTimeout(() => {
+      getUserDoc(trimmed).then((docData) => {
+        if (active) setPreviewUser(docData)
+      }).catch(() => {
+        if (active) setPreviewUser(null)
+      })
+    }, 250)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [input])
 
   const go = () => {
     const n = input.trim().toLowerCase()
@@ -164,7 +206,7 @@ export function WatchSearch({ userName }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#0d0d0d' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'transparent' }}>
       <div className="flex items-center justify-between px-4 pt-5 pb-3">
         <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors">
           <span>←</span><span>Back</span>
@@ -191,6 +233,34 @@ export function WatchSearch({ userName }) {
                 className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 pl-8 pr-4 py-3 text-base outline-none focus:border-purple-500 transition-colors"
               />
             </div>
+
+            {/* Instant user search preview */}
+            {previewUser && (
+              <div
+                onClick={() => navigate(`/watch/${previewUser.username || input.trim().toLowerCase()}`)}
+                className="flex items-center gap-3 p-2.5 rounded-xl bg-[#181822] border border-purple-500/40 hover:border-purple-500/70 cursor-pointer transition-all mt-1 shadow-md"
+              >
+                <div
+                  className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center font-bold text-sm text-white flex-shrink-0"
+                  style={{ background: previewUser.avatarColor || '#8b5cf6' }}
+                >
+                  {previewUser.photoUrl ? (
+                    <img src={previewUser.photoUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    (previewUser.username || input)[0].toUpperCase()
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">
+                    {previewUser.displayName || previewUser.username}
+                  </p>
+                  <p className="text-xs text-purple-300 font-mono">@{previewUser.username}</p>
+                </div>
+                <span className="text-xs text-purple-300 font-bold px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/40">
+                  Watch Live →
+                </span>
+              </div>
+            )}
           </div>
           <button
             onClick={go}
@@ -229,7 +299,7 @@ export function WatchSearch({ userName }) {
 // ── Helper components ─────────────────────────────────────────────────────────
 function Screen({ children, partnerName, navigate }) {
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#0d0d0d' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'transparent' }}>
       <div className="flex items-center justify-between px-4 pt-5 pb-3">
         <button
           onClick={() => navigate ? navigate('/watch') : window.history.back()}

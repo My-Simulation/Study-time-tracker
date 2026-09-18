@@ -253,7 +253,7 @@ export default function DayPlanner({ userName }) {
   const quote = QUOTES[(dayNumber - 1) % QUOTES.length]
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#0d0d0d' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'transparent' }}>
       {/* Top Navbar */}
       <div className="flex items-center justify-between px-4 pt-5 pb-3 max-w-4xl mx-auto w-full">
         <button

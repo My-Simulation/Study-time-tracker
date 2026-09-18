@@ -201,11 +201,11 @@ export default function Analytics({ userName }) {
   }, [allSessions, currentYear])
 
   return (
-    <div className="min-h-screen pb-16" style={{ background: '#0d0d0d', color: '#f5f5f5' }}>
+    <div className="min-h-screen pb-16 bg-transparent" style={{ color: '#f5f5f5' }}>
       {/* ── Top Header Bar ── */}
       <div
-        className="sticky top-0 z-30 flex items-center justify-between px-4 py-3.5 border-b border-[#222] backdrop-blur-md"
-        style={{ background: 'rgba(13, 13, 13, 0.9)' }}
+        className="sticky top-0 z-30 flex items-center justify-between px-4 py-3.5 border-b border-[#222]/80 backdrop-blur-md"
+        style={{ background: 'rgba(13, 13, 13, 0.75)' }}
       >
         <div className="flex items-center gap-3">
           <button

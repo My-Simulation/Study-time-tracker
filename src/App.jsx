@@ -8,6 +8,7 @@ import { getSession, clearSession } from './utils/auth'
 
 import Stopwatch from './pages/Stopwatch'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
+import { getWallpaper, getWallpaperConfig } from './utils/wallpaperStorage'
 
 // Route-level code splitting: loads pages on-demand instead of blocking the initial app load
 const Welcome = lazy(() => import('./pages/Welcome'))
@@ -90,16 +91,47 @@ function AnimatedRoutes() {
 
 export default function App() {
   const [, setTick] = useState(0)
+  const session = getSession()
+  const userName = session?.username || ''
+  const wallpaper = getWallpaper(userName)
+  const wallpaperConfig = getWallpaperConfig(userName)
 
   useEffect(() => {
     const handler = () => setTick((t) => t + 1)
     window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
+    window.addEventListener('study_wallpaper_changed', handler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener('study_wallpaper_changed', handler)
+    }
   }, [])
 
   return (
     <BrowserRouter>
-      <AnimatedRoutes />
+      {/* ── Global Personal Focus Wallpaper Layer across all pages ── */}
+      {wallpaper && (
+        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none">
+          <div
+            className="w-full h-full transition-all duration-500"
+            style={{
+              backgroundImage: `url(${wallpaper})`,
+              backgroundPosition: 'center',
+              backgroundSize: wallpaperConfig.fit === 'contain' ? 'contain' : 'cover',
+              backgroundRepeat: 'no-repeat',
+              filter: wallpaperConfig.blur ? 'blur(6px)' : 'none',
+              transform: wallpaperConfig.blur ? 'scale(1.06)' : 'none',
+            }}
+          />
+          {/* Global Dark Focus Dimming Overlay */}
+          <div
+            className="absolute inset-0 bg-black transition-opacity duration-300"
+            style={{ opacity: wallpaperConfig.dim ?? 0.45 }}
+          />
+        </div>
+      )}
+      <div className="relative z-10 min-h-screen">
+        <AnimatedRoutes />
+      </div>
     </BrowserRouter>
   )
 }
