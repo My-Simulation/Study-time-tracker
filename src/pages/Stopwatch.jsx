@@ -197,50 +197,65 @@ export default function Stopwatch({ userName }) {
   }, [isRunning, displayTime, activeSubject, activeTopic])
 
   // ── Load today's goal, syllabus, day plan and studied time ─────────────────
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [plan, todaySessions, syl, dPlan, dNum, allUserSessions] = await Promise.all([
-          getWeeklyPlan(userName),
-          getSessionsByDate(userName, todayString()),
-          getSyllabus(userName),
-          getDayPlanner(userName, todayString()),
-          calculateDayNumber(userName, todayString()),
-          getUserSessions(userName),
-        ])
-        const goal = getTargetForDate(todayString(), plan, dPlan ? { [todayString()]: dPlan } : null)
-        setDailyGoal(goal)
-        setDayPlan(dPlan)
-        setDayNum(dNum || 1)
+  const loadData = useCallback(async () => {
+    if (!userName) return
+    try {
+      const [plan, todaySessions, syl, dPlan, dNum, allUserSessions] = await Promise.all([
+        getWeeklyPlan(userName),
+        getSessionsByDate(userName, todayString()),
+        getSyllabus(userName),
+        getDayPlanner(userName, todayString()),
+        calculateDayNumber(userName, todayString()),
+        getUserSessions(userName),
+      ])
+      const goal = getTargetForDate(todayString(), plan, dPlan ? { [todayString()]: dPlan } : null)
+      setDailyGoal(goal)
+      setDayPlan(dPlan)
+      setDayNum(dNum || 1)
 
-        if (allUserSessions && allUserSessions.length > 0) {
-          const groups = groupSessionsByDate(allUserSessions)
-          const st = calculateStreaks(groups)
-          setStreakCount(st.currentStreak || 0)
-        }
-
-        const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
-        setTodayStudied(todaySec)
-
-        // If the stopwatch is paused and its elapsed time matches an already saved session,
-        // cleanly reset it to 0 so it never double-counts on the dashboard
-        if (!isRunning && elapsed > 0 && todaySessions && todaySessions.length > 0) {
-          const currentSec = Math.floor(elapsed / 1000)
-          const alreadySaved = todaySessions.some((s) => Math.abs((s.totalSeconds || 0) - currentSec) <= 3)
-          if (alreadySaved) {
-            reset()
-          }
-        }
-
-        if (Array.isArray(syl) && syl.length > 0) {
-          setSyllabus(syl)
-        }
-      } catch (err) {
-        console.warn('Could not load stopwatch extra data:', err)
+      if (allUserSessions && allUserSessions.length > 0) {
+        const groups = groupSessionsByDate(allUserSessions)
+        const st = calculateStreaks(groups)
+        setStreakCount(st.currentStreak || 0)
       }
+
+      const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+      setTodayStudied(todaySec)
+
+      // If the stopwatch is paused and its elapsed time matches an already saved session,
+      // cleanly reset it to 0 so it never double-counts on the dashboard
+      if (!isRunning && elapsed > 0 && todaySessions && todaySessions.length > 0) {
+        const currentSec = Math.floor(elapsed / 1000)
+        const alreadySaved = todaySessions.some((s) => Math.abs((s.totalSeconds || 0) - currentSec) <= 3)
+        if (alreadySaved) {
+          reset()
+        }
+      }
+
+      if (Array.isArray(syl) && syl.length > 0) {
+        setSyllabus(syl)
+      }
+    } catch (err) {
+      console.warn('Could not load stopwatch extra data:', err)
     }
+  }, [userName, isRunning, elapsed, reset])
+
+  useEffect(() => {
     loadData()
-  }, [userName])
+  }, [loadData])
+
+  // Real-time synchronization listeners for study plan and sessions
+  useEffect(() => {
+    const handleUpdate = () => {
+      loadData()
+    }
+    window.addEventListener('study_plan_updated', handleUpdate)
+    window.addEventListener('study_sessions_updated', handleUpdate)
+    return () => {
+      window.removeEventListener('study_plan_updated', handleUpdate)
+      window.removeEventListener('study_sessions_updated', handleUpdate)
+    }
+  }, [loadData])
 
   // Update active subject/topic if navigated with state
   useEffect(() => {

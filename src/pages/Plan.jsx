@@ -130,6 +130,19 @@ export default function Plan({ userName }) {
     load()
   }, [load])
 
+  // Real-time synchronization listeners across tabs & pages
+  useEffect(() => {
+    const handleUpdate = () => {
+      load()
+    }
+    window.addEventListener('study_plan_updated', handleUpdate)
+    window.addEventListener('study_sessions_updated', handleUpdate)
+    return () => {
+      window.removeEventListener('study_plan_updated', handleUpdate)
+      window.removeEventListener('study_sessions_updated', handleUpdate)
+    }
+  }, [load])
+
   const handleHoursChange = (dayKey, minutes) => {
     setPlan((prev) => ({
       ...prev,
@@ -152,22 +165,30 @@ export default function Plan({ userName }) {
       // 1. Save weekly plan template
       await saveWeeklyPlan(userName, plan)
 
-      // 2. If today's target was changed, also sync it into today's Day Planner sheet
-      const todayDateStr = todayString()
-      const todayDayKey = DAYS.find((d) => weekDates[d.key]?.isToday)?.key
-      if (todayDayKey && plan[todayDayKey]) {
-        const targetHours = Number((plan[todayDayKey].targetMinutes / 60).toFixed(1))
-        try {
-          const existingDayPlan = await getDayPlanner(userName, todayDateStr)
-          if (existingDayPlan) {
-            await saveDayPlanner(userName, todayDateStr, {
-              ...existingDayPlan,
-              targetHours,
-            })
+      // 2. Synchronize target hours into Day Planner sheets for the entire active week
+      const syncPromises = DAYS.map(async ({ key }) => {
+        const dStr = weekDates[key]?.dateStr
+        const targetMin = plan[key]?.targetMinutes || 0
+        const targetHours = Number((targetMin / 60).toFixed(1))
+        if (dStr) {
+          try {
+            const existingDayPlan = await getDayPlanner(userName, dStr)
+            const updated = existingDayPlan
+              ? { ...existingDayPlan, targetHours }
+              : { date: dStr, targetHours, goals: ['', '', ''], rows: [] }
+            await saveDayPlanner(userName, dStr, updated)
+          } catch (e) {
+            console.warn(`Could not sync to day planner for ${dStr}:`, e)
           }
-        } catch (e) {
-          console.warn('Could not sync to today planner:', e)
         }
+      })
+      await Promise.all(syncPromises)
+
+      // 3. Broadcast real-time update
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('study_plan_updated', { detail: { userName, weeklyPlan: plan } })
+        )
       }
 
       setSaved(true)

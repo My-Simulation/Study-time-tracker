@@ -40,33 +40,41 @@ export default function Analytics({ userName }) {
   const [dayPlanners, setDayPlanners] = useState({})
 
   // Load user data
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
     if (!userName) return
-    let isMounted = true
-
-    async function fetchData() {
-      setLoading(true)
-      try {
-        const [sessions, plan, planners] = await Promise.all([
-          getUserSessions(userName),
-          getWeeklyPlan(userName),
-          getAllDayPlanners(userName),
-        ])
-        if (isMounted) {
-          setAllSessions(sessions || [])
-          setWeeklyPlan(plan || {})
-          setDayPlanners(planners || {})
-        }
-      } catch (err) {
-        console.error('Error fetching analytics data:', err)
-      } finally {
-        if (isMounted) setLoading(false)
-      }
+    setLoading(true)
+    try {
+      const [sessions, plan, planners] = await Promise.all([
+        getUserSessions(userName),
+        getWeeklyPlan(userName),
+        getAllDayPlanners(userName),
+      ])
+      setAllSessions(sessions || [])
+      setWeeklyPlan(plan || {})
+      setDayPlanners(planners || {})
+    } catch (err) {
+      console.error('Error fetching analytics data:', err)
+    } finally {
+      setLoading(false)
     }
-
-    fetchData()
-    return () => { isMounted = false }
   }, [userName])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // Real-time synchronization listeners across tabs & pages
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchData()
+    }
+    window.addEventListener('study_plan_updated', handleUpdate)
+    window.addEventListener('study_sessions_updated', handleUpdate)
+    return () => {
+      window.removeEventListener('study_plan_updated', handleUpdate)
+      window.removeEventListener('study_sessions_updated', handleUpdate)
+    }
+  }, [fetchData])
 
   // Filter sessions for selected Year and Month
   const filteredSessions = useMemo(() => {
@@ -89,8 +97,23 @@ export default function Analytics({ userName }) {
   }, [allSessions, today])
 
   const todayStudiedSec = useMemo(() => {
-    return todaySessions.reduce((acc, s) => acc + (s.totalSeconds || 0), 0)
-  }, [todaySessions])
+    let sec = todaySessions.reduce((acc, s) => acc + (s.totalSeconds || 0), 0)
+    // If active stopwatch is running, also include its elapsed seconds for today
+    if (userName) {
+      try {
+        const rawState = localStorage.getItem(`stt_stopwatch_state_${userName.toLowerCase()}`)
+        if (rawState) {
+          const parsed = JSON.parse(rawState)
+          let activeElapsedMs = parsed.baseElapsed || 0
+          if (parsed.isRunning && parsed.startTimestamp) {
+            activeElapsedMs += Math.max(0, Date.now() - parsed.startTimestamp)
+          }
+          sec += Math.floor(activeElapsedMs / 1000)
+        }
+      } catch {}
+    }
+    return sec
+  }, [todaySessions, userName])
 
   const todayTarget = useMemo(() => {
     return getTargetForDate(today, weeklyPlan, dayPlanners)

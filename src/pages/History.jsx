@@ -50,7 +50,20 @@ export default function History({ userName }) {
     }
   }, [userName])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    const handleUpdate = (e) => {
+      if (!e.detail?.userName || e.detail.userName === userName) {
+        load()
+      }
+    }
+    window.addEventListener('study_plan_updated', handleUpdate)
+    window.addEventListener('study_sessions_updated', handleUpdate)
+    return () => {
+      window.removeEventListener('study_plan_updated', handleUpdate)
+      window.removeEventListener('study_sessions_updated', handleUpdate)
+    }
+  }, [load, userName])
 
   const handleLogout = () => {
     clearSession()

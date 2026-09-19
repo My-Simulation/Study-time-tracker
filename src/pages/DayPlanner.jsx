@@ -18,6 +18,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   getDayPlanner, saveDayPlanner, calculateDayNumber,
   getSyllabus, getUserSessions, finalizeAndRolloverDay,
+  getWeeklyPlan, syncTargetHours,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes } from '../utils/formatTime'
 
@@ -55,6 +56,7 @@ export default function DayPlanner({ userName }) {
   // Sheet fields
   const [targetHours, setTargetHours] = useState(6)
   const [actualSeconds, setActualSeconds] = useState(0)
+  const [targetSynced, setTargetSynced] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
   const [goals, setGoals] = useState(['', '', ''])
   const [rows, setRows] = useState([])
@@ -69,22 +71,52 @@ export default function DayPlanner({ userName }) {
   const loadDay = useCallback(async (targetDate) => {
     setLoading(true)
     try {
-      const [savedPlan, computedDay, syllabus, sessions] = await Promise.all([
+      const [savedPlan, computedDay, syllabus, sessions, weeklyPlan] = await Promise.all([
         getDayPlanner(userName, targetDate),
         calculateDayNumber(userName, targetDate),
         getSyllabus(userName),
         getUserSessions(userName),
+        getWeeklyPlan(userName),
       ])
 
       setDayNumber(computedDay || 1)
 
       // Calculate actual studied time from sessions recorded on targetDate
       const daySessions = (sessions || []).filter((s) => s.date === targetDate)
-      const sec = daySessions.reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+      let sec = daySessions.reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+
+      // If viewing today, also include active running stopwatch time if active
+      if (targetDate === todayString() && userName) {
+        try {
+          const rawState = localStorage.getItem(`stt_stopwatch_state_${userName.toLowerCase()}`)
+          if (rawState) {
+            const parsed = JSON.parse(rawState)
+            let activeElapsedMs = parsed.baseElapsed || 0
+            if (parsed.isRunning && parsed.startTimestamp) {
+              activeElapsedMs += Math.max(0, Date.now() - parsed.startTimestamp)
+            }
+            sec += Math.floor(activeElapsedMs / 1000)
+          }
+        } catch {}
+      }
       setActualSeconds(sec)
 
+      // Determine day-of-week key (Sun..Sat)
+      const [y, m, d] = targetDate.split('-').map(Number)
+      const dateObj = new Date(y, m - 1, d)
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      const dayKey = days[dateObj.getDay()]
+
+      // Target hours priority: savedPlan -> weeklyPlan for day of week -> default 6
+      let effectiveTargetHours = 6
+      if (savedPlan && savedPlan.targetHours !== undefined && !isNaN(Number(savedPlan.targetHours)) && Number(savedPlan.targetHours) > 0) {
+        effectiveTargetHours = Number(savedPlan.targetHours)
+      } else if (weeklyPlan && weeklyPlan[dayKey]?.targetMinutes > 0) {
+        effectiveTargetHours = Number((weeklyPlan[dayKey].targetMinutes / 60).toFixed(1))
+      }
+      setTargetHours(effectiveTargetHours)
+
       if (savedPlan) {
-        setTargetHours(savedPlan.targetHours !== undefined ? savedPlan.targetHours : 6)
         setIsLocked(Boolean(savedPlan.isLocked))
         setGoals(savedPlan.goals || ['', '', ''])
         setRows(savedPlan.rows || [])
@@ -112,7 +144,6 @@ export default function DayPlanner({ userName }) {
             done: false,
           }))
         }
-        setTargetHours(6)
         setIsLocked(false)
         setGoals(['', '', ''])
         setRows(initialRows)
@@ -130,6 +161,30 @@ export default function DayPlanner({ userName }) {
     loadDay(currentDate)
   }, [currentDate, loadDay])
 
+  // Real-time synchronization listeners across tabs & pages
+  useEffect(() => {
+    const handleUpdate = () => {
+      loadDay(currentDate)
+    }
+    window.addEventListener('study_plan_updated', handleUpdate)
+    window.addEventListener('study_sessions_updated', handleUpdate)
+    return () => {
+      window.removeEventListener('study_plan_updated', handleUpdate)
+      window.removeEventListener('study_sessions_updated', handleUpdate)
+    }
+  }, [currentDate, loadDay])
+
+  // Instant Target Hours dropdown change with bidirectional sync
+  const handleTargetChange = async (newVal) => {
+    const hoursNum = Number(newVal) || 6
+    setTargetHours(hoursNum)
+    setTargetSynced(true)
+    setTimeout(() => setTargetSynced(false), 2500)
+
+    // Automatically sync target hours to both dayPlanners and weeklyPlan in Firestore
+    await syncTargetHours(userName, currentDate, hoursNum)
+  }
+
   // Save current sheet
   const handleSave = async (lockStatus = isLocked) => {
     setSaving(true)
@@ -145,6 +200,8 @@ export default function DayPlanner({ userName }) {
       updatedAt: Date.now(),
     }
     await saveDayPlanner(userName, currentDate, planData)
+    // Also sync to weekly plan for this day of week
+    await syncTargetHours(userName, currentDate, Number(targetHours) || 6)
     setSaving(false)
     setSavedBadge(true)
     setTimeout(() => setSavedBadge(false), 2000)
@@ -441,19 +498,26 @@ export default function DayPlanner({ userName }) {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Planned Target Hours Input */}
+                {/* Planned Target Hours Dropdown with Instant Sync */}
                 <div className="flex items-center gap-1.5 text-xs text-gray-300">
-                  <span className="text-gray-500">Planned Target:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="24"
+                  <span className="text-gray-400 font-medium">🎯 Target:</span>
+                  <select
                     value={targetHours}
                     disabled={isLocked}
-                    onChange={(e) => setTargetHours(e.target.value)}
-                    className="w-12 text-center rounded-lg bg-[#111] border border-[#333] text-purple-300 font-bold font-mono py-0.5 outline-none focus:border-purple-500 disabled:opacity-60"
-                  />
-                  <span className="font-semibold text-gray-400">Hours</span>
+                    onChange={(e) => handleTargetChange(e.target.value)}
+                    className="px-2.5 py-1 rounded-xl bg-[#13131c] border border-[#2e2e42] text-purple-300 font-bold font-mono text-xs outline-none focus:border-purple-500 disabled:opacity-60 cursor-pointer hover:border-purple-500/50 transition-all shadow-inner"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20].map((h) => (
+                      <option key={h} value={h} className="bg-[#13131c] text-white">
+                        {h} {h === 1 ? 'Hour' : 'Hours'}
+                      </option>
+                    ))}
+                  </select>
+                  {targetSynced && (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full animate-fadeIn whitespace-nowrap">
+                      Synced ✓
+                    </span>
+                  )}
                 </div>
 
                 {/* Status Badge */}

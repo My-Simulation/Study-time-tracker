@@ -224,6 +224,9 @@ export async function changeUsername(oldUsername, newUsername) {
 
 export async function saveWeeklyPlan(userName, weeklyPlan) {
   await updateDoc(doc(db, 'users', userName.toLowerCase()), { weeklyPlan })
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('study_plan_updated', { detail: { userName, weeklyPlan } }))
+  }
 }
 
 export async function getWeeklyPlan(userName) {
@@ -356,6 +359,9 @@ export async function saveSession({
     if (duplicate) {
       console.warn('Duplicate session detected, updating existing session instead of inserting duplicate:', duplicate.id)
       await updateDoc(doc(db, 'sessions', duplicate.id), sessionData)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('study_sessions_updated', { detail: { userName, date } }))
+      }
       return duplicate.id
     }
   } catch (dupErr) {
@@ -363,6 +369,9 @@ export async function saveSession({
   }
 
   const ref2 = await addDoc(collection(db, 'sessions'), sessionData)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('study_sessions_updated', { detail: { userName, date } }))
+  }
   return ref2.id
 }
 
@@ -433,10 +442,13 @@ export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
   if (!dateStr) return null
 
   // 1. Priority: check if specific Day Planner sheet has targetHours for this date
-  if (dayPlanners && dayPlanners[dateStr] && typeof dayPlanners[dateStr].targetHours === 'number' && dayPlanners[dateStr].targetHours > 0) {
+  const dp = dayPlanners?.[dateStr]
+  const dpHours = Number(dp?.targetHours)
+  if (dp && !isNaN(dpHours) && dpHours > 0) {
     return {
-      targetMinutes: Math.round(dayPlanners[dateStr].targetHours * 60),
-      subjects: dayPlanners[dateStr].goals?.[0] || '',
+      targetMinutes: Math.round(dpHours * 60),
+      targetHours: dpHours,
+      subjects: dp.goals?.[0] || '',
       source: 'dayPlanner',
     }
   }
@@ -447,7 +459,16 @@ export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
   const date = new Date(y, m - 1, d)
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const wp = weeklyPlan[days[date.getDay()]]
-  return wp ? { ...wp, source: 'weeklyPlan' } : null
+  const wpMin = Number(wp?.targetMinutes)
+  if (wp && !isNaN(wpMin) && wpMin > 0) {
+    return {
+      ...wp,
+      targetMinutes: wpMin,
+      targetHours: Number((wpMin / 60).toFixed(1)),
+      source: 'weeklyPlan',
+    }
+  }
+  return null
 }
 
 // ─────────────────────────────────────────────
@@ -624,6 +645,74 @@ export async function saveDayPlanner(userName, dateStr, planData) {
     })
   } catch (err) {
     console.warn('Failed to save day planner to Firestore:', err)
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('study_plan_updated', { detail: { userName, dateStr, planData } }))
+  }
+}
+
+/**
+ * Bidirectionally syncs target hours between DayPlanner and WeeklyPlan:
+ * - Updates dayPlanners[dateStr].targetHours
+ * - Maps dateStr to day-of-week (Mon..Sun) and updates weeklyPlan[dayKey].targetMinutes
+ * - Writes to Firestore and updates localStorage caches
+ * - Dispatches 'study_plan_updated' event for instant real-time sync across all components
+ */
+export async function syncTargetHours(userName, dateStr, targetHours) {
+  if (!userName || !dateStr) return
+  const uKey = userName.toLowerCase()
+  const numHours = Number(targetHours) || 0
+  const targetMinutes = Math.round(numHours * 60)
+
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dateObj = new Date(y, m - 1, d)
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const dayKey = days[dateObj.getDay()]
+
+  // 1. Update local cache for dayPlanner
+  try {
+    const raw = localStorage.getItem(`stt_day_plan_${uKey}_${dateStr}`)
+    const existing = raw ? JSON.parse(raw) : { date: dateStr }
+    existing.targetHours = numHours
+    existing.updatedAt = Date.now()
+    localStorage.setItem(`stt_day_plan_${uKey}_${dateStr}`, JSON.stringify(existing))
+  } catch {}
+
+  // 2. Update Firestore document atomically with merge
+  try {
+    const userDoc = await getUserDoc(uKey)
+    const existingDayPlan = userDoc?.dayPlanners?.[dateStr] || { date: dateStr }
+    const updatedDayPlan = { ...existingDayPlan, targetHours: numHours, updatedAt: Date.now() }
+
+    const existingWeeklyPlan = userDoc?.weeklyPlan || {}
+    const existingDayWeekly = existingWeeklyPlan[dayKey] || {}
+    const updatedWeeklyPlan = {
+      ...existingWeeklyPlan,
+      [dayKey]: {
+        ...existingDayWeekly,
+        targetMinutes,
+      },
+    }
+
+    await setDoc(
+      doc(db, 'users', uKey),
+      {
+        [`dayPlanners.${dateStr}`]: updatedDayPlan,
+        weeklyPlan: updatedWeeklyPlan,
+      },
+      { merge: true }
+    )
+  } catch (err) {
+    console.warn('Failed to sync target hours to Firestore:', err)
+  }
+
+  // 3. Dispatch broadcast event for 0ms reactivity on all views
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('study_plan_updated', {
+        detail: { userName, dateStr, dayKey, targetHours: numHours, targetMinutes },
+      })
+    )
   }
 }
 
