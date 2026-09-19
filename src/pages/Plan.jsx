@@ -16,6 +16,7 @@ import {
   saveWeeklyPlan, getWeeklyPlan,
   getUserSessions, getAllDayPlanners,
   saveDayPlanner, getDayPlanner,
+  syncTargetHours,
 } from '../utils/firestoreHelpers'
 import { formatHoursMinutes, todayString } from '../utils/formatTime'
 
@@ -107,10 +108,10 @@ export default function Plan({ userName }) {
       if (weekOffset === 0 && allDayPlans) {
         DAYS.forEach(({ key }) => {
           const dStr = weekDates[key]?.dateStr
-          if (dStr && allDayPlans[dStr]?.targetHours > 0) {
+          if (dStr && Number(allDayPlans[dStr]?.targetHours) > 0) {
             merged[key] = {
               ...merged[key],
-              targetMinutes: Math.round(allDayPlans[dStr].targetHours * 60),
+              targetMinutes: Math.round(Number(allDayPlans[dStr].targetHours) * 60),
             }
           }
         })
@@ -151,6 +152,19 @@ export default function Plan({ userName }) {
     setSaved(false)
   }
 
+  // Instant sync when slider is released/touched
+  const handleSliderRelease = async (dayKey, minutes) => {
+    const dStr = weekDates[dayKey]?.dateStr
+    const targetHours = Number((minutes / 60).toFixed(2))
+    if (dStr && userName) {
+      try {
+        await syncTargetHours(userName, dStr, targetHours)
+      } catch (e) {
+        console.warn('Auto-sync target failed:', e)
+      }
+    }
+  }
+
   const handleSubjectsChange = (dayKey, subjects) => {
     setPlan((prev) => ({
       ...prev,
@@ -169,7 +183,7 @@ export default function Plan({ userName }) {
       const syncPromises = DAYS.map(async ({ key }) => {
         const dStr = weekDates[key]?.dateStr
         const targetMin = plan[key]?.targetMinutes || 0
-        const targetHours = Number((targetMin / 60).toFixed(1))
+        const targetHours = Number((targetMin / 60).toFixed(2))
         if (dStr) {
           try {
             const existingDayPlan = await getDayPlanner(userName, dStr)
@@ -523,18 +537,20 @@ export default function Plan({ userName }) {
                 <div className="flex flex-col gap-1 pt-1">
                   <div className="flex justify-between text-[11px] text-gray-500">
                     <span>0h</span>
-                    <span>3h</span>
-                    <span>6h</span>
-                    <span>9h</span>
+                    <span>4h</span>
+                    <span>8h</span>
                     <span>12h</span>
+                    <span>16h</span>
                   </div>
                   <input
                     type="range"
                     min={0}
-                    max={720}
+                    max={960}
                     step={30}
                     value={d.targetMinutes}
                     onChange={(e) => handleHoursChange(key, Number(e.target.value))}
+                    onPointerUp={(e) => handleSliderRelease(key, Number(e.target.value))}
+                    onTouchEnd={(e) => handleSliderRelease(key, Number(e.target.value))}
                     className="w-full accent-purple-500 cursor-pointer"
                     style={{ accentColor: '#8b5cf6' }}
                   />

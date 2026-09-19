@@ -464,7 +464,7 @@ export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
     return {
       ...wp,
       targetMinutes: wpMin,
-      targetHours: Number((wpMin / 60).toFixed(1)),
+      targetHours: Number((wpMin / 60).toFixed(2)),
       source: 'weeklyPlan',
     }
   }

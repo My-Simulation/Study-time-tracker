@@ -20,7 +20,11 @@ import {
   getSyllabus, getUserSessions, finalizeAndRolloverDay,
   getWeeklyPlan, syncTargetHours,
 } from '../utils/firestoreHelpers'
-import { todayString, formatHoursMinutes } from '../utils/formatTime'
+import { todayString, formatHoursMinutes, formatTargetHoursText, parseHoursInput } from '../utils/formatTime'
+
+const TARGET_HOURS_OPTIONS = [
+  0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 18, 20
+]
 
 const DEFAULT_SUBJECTS = [
   { subject: 'राजनीति / Polity', color: '#9d72e7', bg: 'rgba(157, 114, 231, 0.15)' },
@@ -55,9 +59,22 @@ export default function DayPlanner({ userName }) {
 
   // Sheet fields
   const [targetHours, setTargetHours] = useState(6)
+  const [customInputMode, setCustomInputMode] = useState(false)
+  const [customInputVal, setCustomInputVal] = useState('')
   const [actualSeconds, setActualSeconds] = useState(0)
   const [targetSynced, setTargetSynced] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
+
+  // Memoized available target options (dynamically adds current targetHours if unique)
+  const availableTargetOptions = React.useMemo(() => {
+    const list = [...TARGET_HOURS_OPTIONS]
+    const cur = Number(targetHours)
+    if (!isNaN(cur) && cur > 0 && !list.includes(cur)) {
+      list.push(cur)
+      list.sort((a, b) => a - b)
+    }
+    return list
+  }, [targetHours])
   const [goals, setGoals] = useState(['', '', ''])
   const [rows, setRows] = useState([])
   const [notes, setNotes] = useState('')
@@ -112,7 +129,7 @@ export default function DayPlanner({ userName }) {
       if (savedPlan && savedPlan.targetHours !== undefined && !isNaN(Number(savedPlan.targetHours)) && Number(savedPlan.targetHours) > 0) {
         effectiveTargetHours = Number(savedPlan.targetHours)
       } else if (weeklyPlan && weeklyPlan[dayKey]?.targetMinutes > 0) {
-        effectiveTargetHours = Number((weeklyPlan[dayKey].targetMinutes / 60).toFixed(1))
+        effectiveTargetHours = Number((weeklyPlan[dayKey].targetMinutes / 60).toFixed(2))
       }
       setTargetHours(effectiveTargetHours)
 
@@ -176,13 +193,26 @@ export default function DayPlanner({ userName }) {
 
   // Instant Target Hours dropdown change with bidirectional sync
   const handleTargetChange = async (newVal) => {
-    const hoursNum = Number(newVal) || 6
+    const hoursNum = parseHoursInput(newVal)
     setTargetHours(hoursNum)
     setTargetSynced(true)
     setTimeout(() => setTargetSynced(false), 2500)
 
     // Automatically sync target hours to both dayPlanners and weeklyPlan in Firestore
     await syncTargetHours(userName, currentDate, hoursNum)
+  }
+
+  // Handle custom target manual entry submission (e.g. 5:30 or 5.5)
+  const handleCustomSubmit = (e) => {
+    e?.preventDefault()
+    if (!customInputVal.trim()) {
+      setCustomInputMode(false)
+      return
+    }
+    const parsed = parseHoursInput(customInputVal)
+    handleTargetChange(parsed)
+    setCustomInputMode(false)
+    setCustomInputVal('')
   }
 
   // Save current sheet
@@ -498,21 +528,77 @@ export default function DayPlanner({ userName }) {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Planned Target Hours Dropdown with Instant Sync */}
+                {/* Planned Target Hours Dropdown & Custom Time Input with Instant Sync */}
                 <div className="flex items-center gap-1.5 text-xs text-gray-300">
                   <span className="text-gray-400 font-medium">🎯 Target:</span>
-                  <select
-                    value={targetHours}
-                    disabled={isLocked}
-                    onChange={(e) => handleTargetChange(e.target.value)}
-                    className="px-2.5 py-1 rounded-xl bg-[#13131c] border border-[#2e2e42] text-purple-300 font-bold font-mono text-xs outline-none focus:border-purple-500 disabled:opacity-60 cursor-pointer hover:border-purple-500/50 transition-all shadow-inner"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20].map((h) => (
-                      <option key={h} value={h} className="bg-[#13131c] text-white">
-                        {h} {h === 1 ? 'Hour' : 'Hours'}
-                      </option>
-                    ))}
-                  </select>
+
+                  {customInputMode ? (
+                    <form onSubmit={handleCustomSubmit} className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={customInputVal}
+                        onChange={(e) => setCustomInputVal(e.target.value)}
+                        placeholder="e.g. 5:30, 5.5"
+                        className="w-24 px-2 py-1 rounded-xl bg-[#13131c] border border-purple-500 text-purple-300 font-bold font-mono text-xs outline-none focus:ring-1 focus:ring-purple-500 shadow-inner"
+                      />
+                      <button
+                        type="submit"
+                        className="px-2 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors shadow"
+                        title="Set target"
+                      >
+                        Set
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomInputMode(false)}
+                        className="px-1.5 py-1 text-gray-400 hover:text-gray-200 text-xs transition-colors"
+                        title="Cancel"
+                      >
+                        ✕
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <select
+                        value={targetHours}
+                        disabled={isLocked}
+                        onChange={(e) => {
+                          if (e.target.value === 'custom') {
+                            setCustomInputVal(String(targetHours))
+                            setCustomInputMode(true)
+                          } else {
+                            handleTargetChange(e.target.value)
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-[#13131c] border border-[#2e2e42] text-purple-300 font-bold font-mono text-xs outline-none focus:border-purple-500 disabled:opacity-60 cursor-pointer hover:border-purple-500/50 transition-all shadow-inner"
+                      >
+                        {availableTargetOptions.map((h) => (
+                          <option key={h} value={h} className="bg-[#13131c] text-white">
+                            {formatTargetHoursText(h, true)}
+                          </option>
+                        ))}
+                        <option value="custom" className="bg-[#13131c] text-purple-400 font-semibold">
+                          ✏️ Custom (type 5:30, etc.)...
+                        </option>
+                      </select>
+
+                      {!isLocked && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomInputVal(String(targetHours))
+                            setCustomInputMode(true)
+                          }}
+                          className="text-gray-400 hover:text-purple-300 p-1 rounded-lg hover:bg-purple-500/10 transition-colors text-xs"
+                          title="Type custom target (e.g. 5:30 or 5.5)"
+                        >
+                          ✏️
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {targetSynced && (
                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full animate-fadeIn whitespace-nowrap">
                       Synced ✓
@@ -544,7 +630,7 @@ export default function DayPlanner({ userName }) {
                   Actual Time Studied: <strong className="text-white font-mono">{formatHoursMinutes(actualSeconds)}</strong>
                 </span>
                 <span className="font-mono font-bold text-purple-400">
-                  {formatHoursMinutes(actualSeconds)} / {targetHours}h ({hoursPct}%)
+                  {formatHoursMinutes(actualSeconds)} / {formatTargetHoursText(targetHours, false)} ({hoursPct}%)
                 </span>
               </div>
 
@@ -936,7 +1022,7 @@ export default function DayPlanner({ userName }) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Target Goal:</span>
-                  <span className="font-bold text-purple-400">{targetHours} Hours ({goalMet ? 'Achieved ✓' : 'Incomplete'})</span>
+                  <span className="font-bold text-purple-400">{formatTargetHoursText(targetHours, true)} ({goalMet ? 'Achieved ✓' : 'Incomplete'})</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Completed Topics:</span>

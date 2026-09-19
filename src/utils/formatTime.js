@@ -99,3 +99,66 @@ export function formatDuration(totalSeconds) {
   return `${h}h ${m}m`
 }
 
+/**
+ * Formats a decimal hour number (e.g. 5.5) into a readable string like "5h 30m (5:30)" or "5h 30m".
+ * @param {number|string} hours
+ * @param {boolean} includeClock - if true, appends "(H:MM)"
+ * @returns {string}
+ */
+export function formatTargetHoursText(hours, includeClock = false) {
+  const num = Number(hours) || 0
+  const h = Math.floor(num)
+  const m = Math.round((num - h) * 60)
+  const clock = `${h}:${String(m).padStart(2, '0')}`
+  let base = '0h'
+  if (h === 0 && m > 0) base = `${m}m`
+  else if (m === 0) base = `${h}h`
+  else base = `${h}h ${m}m`
+  return includeClock ? `${base} (${clock})` : base
+}
+
+/**
+ * Parses user input into a decimal hours number.
+ * Supports:
+ * - "5:30" or "05:30" -> 5.5
+ * - "5.5" or "5,5" -> 5.5
+ * - "5h 30m" or "30m" or "5h" -> 5.5 or 0.5
+ * - 5.5 (number) -> 5.5
+ * @param {string|number} input
+ * @returns {number}
+ */
+export function parseHoursInput(input) {
+  if (typeof input === 'number') {
+    return isNaN(input) || input <= 0 ? 6 : Number(input.toFixed(2))
+  }
+  const str = String(input || '').trim().replace(',', '.')
+  if (!str) return 6
+
+  // Check H:MM pattern (e.g. "5:30", "0:45")
+  if (str.includes(':')) {
+    const parts = str.split(':').map(Number)
+    const h = parts[0] || 0
+    const m = parts[1] || 0
+    if (!isNaN(h) && !isNaN(m)) {
+      return Number((h + m / 60).toFixed(2))
+    }
+  }
+
+  // Check "Xh Ym" pattern (e.g. "5h 30m", "5h", "30m", "30min")
+  const hMatch = str.match(/(\d+(?:\.\d+)?)\s*h/i)
+  const mMatch = str.match(/(\d+(?:\.\d+)?)\s*m/i)
+  if (hMatch || mMatch) {
+    const h = hMatch ? parseFloat(hMatch[1]) : 0
+    const m = mMatch ? parseFloat(mMatch[1]) : 0
+    return Number((h + m / 60).toFixed(2))
+  }
+
+  // Float number (e.g. "5.5", "6")
+  const num = parseFloat(str)
+  if (!isNaN(num) && num > 0) {
+    return Number(num.toFixed(2))
+  }
+  return 6
+}
+
+
