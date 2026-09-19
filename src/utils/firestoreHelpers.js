@@ -5,7 +5,7 @@
 import {
   collection, doc, setDoc, getDoc, addDoc,
   getDocs, query, where, serverTimestamp, updateDoc,
-  deleteDoc, onSnapshot,
+  deleteDoc, onSnapshot, limit,
 } from 'firebase/firestore'
 import { db, getStorageInstance } from '../firebase'
 import { hashPassword, verifyPassword } from './auth'
@@ -858,5 +858,175 @@ export async function finalizeAndRolloverDay(userName, currentDateStr, nextDateS
   await saveDayPlanner(userName, nextDateStr, nextPlanData)
   return { finalizedCurrent, nextPlanData }
 }
+
+// ─────────────────────────────────────────────
+// PRIVACY & LIVE ACTIVITY VISIBILITY
+// ─────────────────────────────────────────────
+
+/**
+ * Updates privacy settings for a user:
+ * - visibility: 'public' | 'selected' | 'private'
+ * - allowedUsers: array of string usernames permitted to view live timer & history
+ */
+export async function updatePrivacySettings(userName, { visibility = 'public', allowedUsers = [] }) {
+  if (!userName) return null
+  const uKey = userName.trim().toLowerCase()
+  const cleanAllowed = Array.isArray(allowedUsers)
+    ? Array.from(new Set(allowedUsers.map((u) => String(u).trim().toLowerCase()).filter(Boolean)))
+    : []
+
+  const privacyData = {
+    visibility, // 'public' | 'selected' | 'private'
+    allowedUsers: cleanAllowed,
+    updatedAt: Date.now(),
+  }
+
+  // 1. Update user document
+  try {
+    await setDoc(doc(db, 'users', uKey), { privacy: privacyData }, { merge: true })
+  } catch (err) {
+    console.error('Failed to update privacy in users collection:', err)
+  }
+
+  // 2. Sync to liveStatus for instantaneous check on watch page
+  try {
+    await setDoc(
+      doc(db, 'liveStatus', uKey),
+      {
+        visibility: privacyData.visibility,
+        allowedUsers: privacyData.allowedUsers,
+      },
+      { merge: true }
+    )
+  } catch (err) {
+    console.warn('Failed to sync privacy to liveStatus:', err)
+  }
+
+  // 3. Update localStorage cache if any
+  try {
+    const cached = localStorage.getItem(`stt_user_doc_${uKey}`)
+    if (cached) {
+      const parsed = JSON.parse(cached)
+      parsed.privacy = privacyData
+      localStorage.setItem(`stt_user_doc_${uKey}`, JSON.stringify(parsed))
+    }
+  } catch {}
+
+  // 4. Dispatch event for instant UI reactivity
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('study_privacy_updated', {
+        detail: { userName: uKey, privacy: privacyData },
+      })
+    )
+  }
+
+  return privacyData
+}
+
+/**
+ * Evaluates whether viewerUserName is permitted to view targetUserDocOrLiveStatus
+ * Returns { allowed: boolean, reason?: 'private' | 'selected' | 'notFound', isOwner?: boolean }
+ */
+export function checkUserPrivacyAccess(targetUserDocOrLiveStatus, viewerUserName) {
+  if (!targetUserDocOrLiveStatus) {
+    return { allowed: false, reason: 'notFound' }
+  }
+
+  const targetName = (
+    targetUserDocOrLiveStatus.username ||
+    targetUserDocOrLiveStatus.name ||
+    ''
+  ).toLowerCase()
+  const viewer = (viewerUserName || '').trim().toLowerCase()
+
+  // Owner always has access
+  if (viewer && targetName && viewer === targetName) {
+    return { allowed: true, isOwner: true }
+  }
+
+  const privacy = targetUserDocOrLiveStatus.privacy || {}
+  const visibility = privacy.visibility || targetUserDocOrLiveStatus.visibility || 'public'
+  const allowedUsers = privacy.allowedUsers || targetUserDocOrLiveStatus.allowedUsers || []
+  const allowedSet = new Set(allowedUsers.map((u) => String(u).toLowerCase()))
+
+  if (visibility === 'public') {
+    return { allowed: true, visibility: 'public' }
+  }
+
+  if (visibility === 'private') {
+    return { allowed: false, reason: 'private', visibility: 'private' }
+  }
+
+  if (visibility === 'selected') {
+    if (viewer && allowedSet.has(viewer)) {
+      return { allowed: true, visibility: 'selected', isPartner: true }
+    }
+    return {
+      allowed: false,
+      reason: 'selected',
+      visibility: 'selected',
+      needsLogin: !viewer,
+    }
+  }
+
+  return { allowed: true, visibility: 'public' }
+}
+
+/**
+ * Searches users by username or prefix in Firestore
+ */
+export async function searchUsers(searchTerm, limitCount = 6) {
+  if (!searchTerm || searchTerm.trim().length < 2) return []
+  const qTerm = searchTerm.trim().toLowerCase().replace(/^@/, '')
+  const results = []
+  const seenUsernames = new Set()
+
+  // 1. Direct exact lookup
+  try {
+    const directDoc = await getUserDoc(qTerm)
+    if (directDoc) {
+      const uName = (directDoc.username || qTerm).toLowerCase()
+      seenUsernames.add(uName)
+      results.push({
+        username: directDoc.username || qTerm,
+        displayName: directDoc.displayName || directDoc.username || qTerm,
+        photoUrl: directDoc.photoUrl || '',
+        avatarColor: directDoc.avatarColor || '#7c3aed',
+        privacy: directDoc.privacy || { visibility: 'public', allowedUsers: [] },
+      })
+    }
+  } catch {}
+
+  // 2. Prefix search on document IDs (__name__)
+  try {
+    const q = query(
+      collection(db, 'users'),
+      where('__name__', '>=', qTerm),
+      where('__name__', '<=', qTerm + '\uf8ff'),
+      limit(limitCount)
+    )
+    const snap = await getDocs(q)
+    snap.forEach((d) => {
+      const data = d.data()
+      const uName = (data.username || d.id).toLowerCase()
+      if (!seenUsernames.has(uName)) {
+        seenUsernames.add(uName)
+        results.push({
+          username: data.username || d.id,
+          displayName: data.displayName || data.username || d.id,
+          photoUrl: data.photoUrl || '',
+          avatarColor: data.avatarColor || '#7c3aed',
+          privacy: data.privacy || { visibility: 'public', allowedUsers: [] },
+        })
+      }
+    })
+  } catch (err) {
+    console.warn('searchUsers prefix query error:', err)
+  }
+
+  return results.slice(0, limitCount)
+}
+
 
 

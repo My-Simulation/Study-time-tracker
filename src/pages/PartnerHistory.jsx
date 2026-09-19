@@ -6,8 +6,9 @@
 
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getUserSessions, groupSessionsByDate, calculateStreaks } from '../utils/firestoreHelpers'
+import { getUserSessions, groupSessionsByDate, calculateStreaks, getUserDoc, checkUserPrivacyAccess } from '../utils/firestoreHelpers'
 import { formatDateDisplay, formatHoursMinutes } from '../utils/formatTime'
+import { getSession } from '../utils/auth'
 
 export default function PartnerHistory() {
   const { partnerName } = useParams()
@@ -15,13 +16,27 @@ export default function PartnerHistory() {
   const [dateGroups, setDateGroups] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [partnerDoc, setPartnerDoc] = useState(null)
+  const [privacyBlock, setPrivacyBlock] = useState(null)
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setLoading(true)
       setError(null)
+      setPrivacyBlock(null)
       try {
+        const session = getSession()
+        const viewerName = session?.username || ''
+        const pDoc = await getUserDoc(partnerName)
+        if (!cancelled) setPartnerDoc(pDoc)
+
+        const access = checkUserPrivacyAccess(pDoc, viewerName)
+        if (pDoc && !access.allowed) {
+          if (!cancelled) setPrivacyBlock(access)
+          return
+        }
+
         const sessions = await getUserSessions(partnerName)
         if (!cancelled) setDateGroups(groupSessionsByDate(sessions))
       } catch (err) {
@@ -74,7 +89,58 @@ export default function PartnerHistory() {
       </div>
 
       <div className="flex-1 flex flex-col px-4 pb-10 max-w-lg mx-auto w-full gap-4">
-        {loading ? (
+        {privacyBlock ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center max-w-sm mx-auto py-10">
+            <div className="w-16 h-16 rounded-full bg-[#181820] border border-[#2e2e38] flex items-center justify-center text-3xl shadow-xl">
+              {privacyBlock.reason === 'private' ? '🔒' : '👥'}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <h2 className="text-white font-bold text-lg">
+                {privacyBlock.reason === 'private' ? 'Study History is Private' : 'Restricted to Selected Partners'}
+              </h2>
+              <p className="text-gray-400 text-xs leading-relaxed">
+                {privacyBlock.reason === 'private' ? (
+                  <>
+                    <span className="text-purple-300 font-mono font-bold">@{partnerName}</span> has set their study session history to Private.
+                  </>
+                ) : (
+                  <>
+                    <span className="text-purple-300 font-mono font-bold">@{partnerName}</span> only shares study history with approved partners.
+                    {privacyBlock.needsLogin ? (
+                      <span className="block mt-2 text-amber-300">
+                        Please sign in to verify your partner access.
+                      </span>
+                    ) : (
+                      <span className="block mt-2 text-gray-400">
+                        Ask @{partnerName} to add you in their Allowed Study Partners list in their Profile.
+                      </span>
+                    )}
+                  </>
+                )}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 mt-3">
+              {privacyBlock.needsLogin && (
+                <button
+                  onClick={() => navigate('/signin')}
+                  className="pill-btn px-6 text-xs font-bold"
+                  style={{ background: '#8b5cf6', color: 'white' }}
+                >
+                  Sign In
+                </button>
+              )}
+              <button
+                onClick={() => navigate('/watch')}
+                className="pill-btn px-6 text-xs"
+                style={{ background: '#242424', color: 'white' }}
+              >
+                Back to Watch
+              </button>
+            </div>
+          </div>
+        ) : loading ? (
           <div className="flex-1 flex items-center justify-center py-16">
             <div className="w-8 h-8 rounded-full border-2 border-[#2a2a2a] animate-spin" style={{ borderTopColor: '#8b5cf6' }} />
           </div>

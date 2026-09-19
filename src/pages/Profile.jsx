@@ -18,6 +18,8 @@ import {
   groupSessionsByDate,
   getTargetForDate,
   getUserDoc,
+  updatePrivacySettings,
+  searchUsers,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 import { clearSession } from '../utils/auth'
@@ -34,6 +36,132 @@ export default function Profile({ userName }) {
   const [dayPlanners, setDayPlanners] = useState({})
   const [userData, setUserData] = useState(null)
   const [copied, setCopied] = useState(false)
+
+  // ── Privacy & Live Activity Visibility State ──
+  const [visibility, setVisibility] = useState('public') // 'public' | 'selected' | 'private'
+  const [allowedUsers, setAllowedUsers] = useState([])
+  const [privacySaved, setPrivacySaved] = useState(false)
+  const [partnerQuery, setPartnerQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [searchFeedback, setSearchFeedback] = useState('')
+
+  // Sync privacy state from loaded userData
+  useEffect(() => {
+    if (userData?.privacy) {
+      setVisibility(userData.privacy.visibility || 'public')
+      setAllowedUsers(userData.privacy.allowedUsers || [])
+    }
+  }, [userData])
+
+  // Real-time search for study partners
+  useEffect(() => {
+    const trimmed = partnerQuery.trim().toLowerCase().replace(/^@/, '')
+    if (trimmed.length < 2) {
+      setSearchResults([])
+      setSearching(false)
+      setSearchFeedback('')
+      return
+    }
+    setSearching(true)
+    setSearchFeedback('')
+    let active = true
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchUsers(trimmed, 6)
+        if (active) {
+          const filtered = res.filter(
+            (u) => u.username.toLowerCase() !== (userName || '').toLowerCase()
+          )
+          setSearchResults(filtered)
+          if (filtered.length === 0) {
+            setSearchFeedback(`No user found matching "@${trimmed}"`)
+          }
+        }
+      } catch (err) {
+        console.warn('User search error:', err)
+      } finally {
+        if (active) setSearching(false)
+      }
+    }, 250)
+
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [partnerQuery, userName])
+
+  const handleVisibilityChange = async (newVis) => {
+    setVisibility(newVis)
+    setPrivacySaved(true)
+    setTimeout(() => setPrivacySaved(false), 2500)
+    try {
+      await updatePrivacySettings(userName, {
+        visibility: newVis,
+        allowedUsers,
+      })
+      setUserData((prev) => ({
+        ...prev,
+        privacy: { ...(prev?.privacy || {}), visibility: newVis, allowedUsers },
+      }))
+    } catch (e) {
+      console.error('Failed to update privacy visibility:', e)
+    }
+  }
+
+  const handleAddAllowedUser = async (targetUser) => {
+    const clean = targetUser.trim().toLowerCase().replace(/^@/, '')
+    if (!clean) return
+    if (clean === (userName || '').toLowerCase()) {
+      alert('You cannot add your own username. You always have full access to your account.')
+      return
+    }
+    if (allowedUsers.includes(clean)) {
+      setPartnerQuery('')
+      setSearchResults([])
+      setSearchFeedback('')
+      return
+    }
+    const updated = [...allowedUsers, clean]
+    setAllowedUsers(updated)
+    setPartnerQuery('')
+    setSearchResults([])
+    setSearchFeedback('')
+    setPrivacySaved(true)
+    setTimeout(() => setPrivacySaved(false), 2500)
+    try {
+      await updatePrivacySettings(userName, {
+        visibility,
+        allowedUsers: updated,
+      })
+      setUserData((prev) => ({
+        ...prev,
+        privacy: { ...(prev?.privacy || {}), visibility, allowedUsers: updated },
+      }))
+    } catch (e) {
+      console.error('Failed to add allowed partner:', e)
+    }
+  }
+
+  const handleRemoveAllowedUser = async (targetUser) => {
+    const clean = targetUser.trim().toLowerCase()
+    const updated = allowedUsers.filter((u) => u !== clean)
+    setAllowedUsers(updated)
+    setPrivacySaved(true)
+    setTimeout(() => setPrivacySaved(false), 2500)
+    try {
+      await updatePrivacySettings(userName, {
+        visibility,
+        allowedUsers: updated,
+      })
+      setUserData((prev) => ({
+        ...prev,
+        privacy: { ...(prev?.privacy || {}), visibility, allowedUsers: updated },
+      }))
+    } catch (e) {
+      console.error('Failed to remove allowed partner:', e)
+    }
+  }
 
   // Load all user details
   useEffect(() => {
@@ -325,6 +453,266 @@ export default function Profile({ userName }) {
               <span className="text-[9px] text-gray-500">Total active days</span>
             </div>
           </div>
+        </div>
+
+        {/* ── Live Activity & History Privacy Card ── */}
+        <div className="bg-[#141414] border border-[#242424] rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#222] pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🛡️</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">Live Activity & History Privacy</h3>
+                  {privacySaved && (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full animate-fadeIn">
+                      Saved ✓
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Control who can watch your live stopwatch timer and view your session history
+                </p>
+              </div>
+            </div>
+
+            {/* Current status pill */}
+            <div className="self-start sm:self-auto">
+              {visibility === 'public' && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  🌍 Public (Everyone)
+                </span>
+              )}
+              {visibility === 'selected' && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-400 bg-purple-500/10 border border-purple-500/30 px-2.5 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-purple-400" />
+                  👥 Selected ({allowedUsers.length} Partners)
+                </span>
+              )}
+              {visibility === 'private' && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2.5 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-rose-400" />
+                  🔒 Private (Off)
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 3 Visibility Toggle Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {/* Option 1: Public */}
+            <button
+              type="button"
+              onClick={() => handleVisibilityChange('public')}
+              className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                visibility === 'public'
+                  ? 'bg-emerald-950/20 border-emerald-500/50 shadow-md ring-1 ring-emerald-500/30'
+                  : 'bg-[#181818] border-[#262626] hover:border-[#383838]'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xl">🌍</span>
+                <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                  visibility === 'public' ? 'border-emerald-400 bg-emerald-500' : 'border-gray-600'
+                }`}>
+                  {visibility === 'public' && <span className="w-1.5 h-1.5 bg-black rounded-full" />}
+                </span>
+              </div>
+              <div>
+                <p className={`text-xs font-bold ${visibility === 'public' ? 'text-emerald-300' : 'text-white'}`}>
+                  Public (Live to All)
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5 leading-snug">
+                  Sabko dikhe — Anyone can search and watch your live timer & study history.
+                </p>
+              </div>
+            </button>
+
+            {/* Option 2: Selected */}
+            <button
+              type="button"
+              onClick={() => handleVisibilityChange('selected')}
+              className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                visibility === 'selected'
+                  ? 'bg-purple-950/25 border-purple-500/50 shadow-md ring-1 ring-purple-500/30'
+                  : 'bg-[#181818] border-[#262626] hover:border-[#383838]'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xl">👥</span>
+                <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                  visibility === 'selected' ? 'border-purple-400 bg-purple-500' : 'border-gray-600'
+                }`}>
+                  {visibility === 'selected' && <span className="w-1.5 h-1.5 bg-black rounded-full" />}
+                </span>
+              </div>
+              <div>
+                <p className={`text-xs font-bold ${visibility === 'selected' ? 'text-purple-300' : 'text-white'}`}>
+                  Selected Users Only
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5 leading-snug">
+                  Sirf chune hue users ko — Only approved partners you choose can view your activity.
+                </p>
+              </div>
+            </button>
+
+            {/* Option 3: Private */}
+            <button
+              type="button"
+              onClick={() => handleVisibilityChange('private')}
+              className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                visibility === 'private'
+                  ? 'bg-rose-950/20 border-rose-500/50 shadow-md ring-1 ring-rose-500/30'
+                  : 'bg-[#181818] border-[#262626] hover:border-[#383838]'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xl">🔒</span>
+                <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                  visibility === 'private' ? 'border-rose-400 bg-rose-500' : 'border-gray-600'
+                }`}>
+                  {visibility === 'private' && <span className="w-1.5 h-1.5 bg-black rounded-full" />}
+                </span>
+              </div>
+              <div>
+                <p className={`text-xs font-bold ${visibility === 'private' ? 'text-rose-300' : 'text-white'}`}>
+                  Private (Off)
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5 leading-snug">
+                  Kisi ko na dikhe — Turn off sharing completely. Nobody can watch or view history.
+                </p>
+              </div>
+            </button>
+          </div>
+
+          {/* Interactive Partner Search & Management (When 'selected' is active) */}
+          {visibility === 'selected' && (
+            <div className="p-4 rounded-xl bg-[#181820] border border-purple-500/30 flex flex-col gap-3 mt-1 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>🔍</span> Add Study Partners
+                  </h4>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    Search usernames to allow them to watch your live timer & view your study history.
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono font-bold text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+                  {allowedUsers.length} Approved {allowedUsers.length === 1 ? 'Partner' : 'Partners'}
+                </span>
+              </div>
+
+              {/* Search Input Box */}
+              <div className="relative">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">@</span>
+                    <input
+                      type="text"
+                      value={partnerQuery}
+                      onChange={(e) => setPartnerQuery(e.target.value)}
+                      placeholder="Search by username (e.g. rahul, priya)..."
+                      className="w-full pl-7 pr-3 py-2 rounded-xl bg-[#111] border border-[#333] text-white placeholder-gray-500 text-xs outline-none focus:border-purple-500 transition-colors"
+                    />
+                  </div>
+                  {partnerQuery && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddAllowedUser(partnerQuery)}
+                      className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors flex items-center gap-1"
+                    >
+                      <span>+</span> Add
+                    </button>
+                  )}
+                </div>
+
+                {searching && (
+                  <p className="text-[10px] text-gray-400 mt-1 italic">Searching users...</p>
+                )}
+
+                {searchFeedback && !searching && (
+                  <p className="text-[10px] text-amber-400/80 mt-1">{searchFeedback}</p>
+                )}
+
+                {/* Live Search Suggestions Dropdown */}
+                {searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1.5 rounded-xl bg-[#14141c] border border-purple-500/40 shadow-2xl overflow-hidden z-20">
+                    {searchResults.map((user) => {
+                      const isAlreadyAdded = allowedUsers.includes(user.username.toLowerCase())
+                      return (
+                        <div
+                          key={user.username}
+                          className="flex items-center justify-between px-3 py-2 hover:bg-purple-600/10 border-b border-[#252535] last:border-0 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                              style={{ background: user.avatarColor || '#7c3aed' }}
+                            >
+                              {user.photoUrl ? (
+                                <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                user.username[0].toUpperCase()
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white truncate">{user.displayName || user.username}</p>
+                              <p className="text-[10px] text-gray-400 font-mono truncate">@{user.username}</p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isAlreadyAdded}
+                            onClick={() => handleAddAllowedUser(user.username)}
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${
+                              isAlreadyAdded
+                                ? 'bg-gray-800 text-gray-500 cursor-default'
+                                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-sm'
+                            }`}
+                          >
+                            {isAlreadyAdded ? 'Added ✓' : '+ Add Partner'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Allowed Users Chips List */}
+              <div className="pt-2 border-t border-[#252535] flex flex-col gap-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  Currently Allowed Study Partners:
+                </span>
+
+                {allowedUsers.length === 0 ? (
+                  <p className="text-xs text-amber-300/80 italic bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5">
+                    ⚠️ Koi partner add nahi hai. Upar search box me username search karke add karein taaki sirf unhe aapka timer aur history dikhe.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {allowedUsers.map((u) => (
+                      <span
+                        key={u}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/35 text-xs text-purple-200 font-mono shadow-sm"
+                      >
+                        <span>@{u}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAllowedUser(u)}
+                          className="w-4 h-4 rounded-full bg-purple-500/20 hover:bg-purple-500 text-gray-300 hover:text-white flex items-center justify-center text-[10px] transition-colors"
+                          title={`Remove @${u}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Weekly Study Target Card (Matches Screenshot 1) ── */}

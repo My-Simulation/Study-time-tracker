@@ -7,8 +7,9 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useWatchPartner } from '../hooks/useWatchPartner'
-import { getUserSessions, groupSessionsByDate, getUserDoc } from '../utils/firestoreHelpers'
+import { getUserSessions, groupSessionsByDate, getUserDoc, checkUserPrivacyAccess } from '../utils/firestoreHelpers'
 import { formatHoursMinutes } from '../utils/formatTime'
+import { getSession } from '../utils/auth'
 
 export default function WatchPartner() {
   const { partnerName } = useParams()
@@ -18,6 +19,9 @@ export default function WatchPartner() {
 
   const [partnerDoc, setPartnerDoc] = useState(null)
   const [partnerInput, setPartnerInput] = useState('')
+
+  const session = getSession()
+  const viewerName = session?.username || ''
 
   useEffect(() => {
     if (!partnerName) return
@@ -55,6 +59,65 @@ export default function WatchPartner() {
           >
             Try Another
           </button>
+        </div>
+      </Screen>
+    )
+  }
+
+  // ── Privacy Access Check ──
+  const access = checkUserPrivacyAccess(partnerDoc, viewerName)
+  if (partnerDoc && !access.allowed) {
+    return (
+      <Screen partnerName={partnerName} navigate={navigate}>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center max-w-sm mx-auto">
+          <div className="w-16 h-16 rounded-full bg-[#181820] border border-[#2e2e38] flex items-center justify-center text-3xl shadow-xl">
+            {access.reason === 'private' ? '🔒' : '👥'}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <h2 className="text-white font-bold text-lg">
+              {access.reason === 'private' ? 'Live Activity is Private' : 'Restricted to Selected Partners'}
+            </h2>
+            <p className="text-gray-400 text-xs leading-relaxed">
+              {access.reason === 'private' ? (
+                <>
+                  <span className="text-purple-300 font-mono font-bold">@{partnerName}</span> has turned off live activity sharing. Their live stopwatch and study history are private.
+                </>
+              ) : (
+                <>
+                  <span className="text-purple-300 font-mono font-bold">@{partnerName}</span> only shares live activity with approved study partners.
+                  {access.needsLogin ? (
+                    <span className="block mt-2 text-amber-300">
+                      Please sign in to check if you have partner access.
+                    </span>
+                  ) : (
+                    <span className="block mt-2 text-gray-400">
+                      Ask @{partnerName} to add your username (<span className="text-purple-300 font-mono">@{viewerName}</span>) to their Allowed Study Partners list in their Profile.
+                    </span>
+                  )}
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 mt-3">
+            {access.needsLogin && (
+              <button
+                onClick={() => navigate('/signin')}
+                className="pill-btn px-6 text-xs font-bold"
+                style={{ background: '#8b5cf6', color: 'white' }}
+              >
+                Sign In
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/watch')}
+              className="pill-btn px-6 text-xs"
+              style={{ background: '#242424', color: 'white' }}
+            >
+              Search Another User
+            </button>
+          </div>
         </div>
       </Screen>
     )
@@ -256,9 +319,28 @@ export function WatchSearch({ userName }) {
                   </p>
                   <p className="text-xs text-purple-300 font-mono">@{previewUser.username}</p>
                 </div>
-                <span className="text-xs text-purple-300 font-bold px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/40">
-                  Watch Live →
-                </span>
+                {(() => {
+                  const pAccess = checkUserPrivacyAccess(previewUser, userName)
+                  if (pAccess.allowed) {
+                    return (
+                      <span className="text-xs text-purple-300 font-bold px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/40">
+                        Watch Live →
+                      </span>
+                    )
+                  }
+                  if (pAccess.reason === 'private') {
+                    return (
+                      <span className="text-xs text-rose-300 font-bold px-2.5 py-1 rounded-lg bg-rose-500/20 border border-rose-500/40">
+                        🔒 Private
+                      </span>
+                    )
+                  }
+                  return (
+                    <span className="text-xs text-amber-300 font-bold px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40">
+                      👥 Restricted
+                    </span>
+                  )
+                })()}
               </div>
             )}
           </div>
