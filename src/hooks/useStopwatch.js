@@ -145,7 +145,7 @@ export function useStopwatch(userName) {
     if (!userName) return
 
     if (isRunning && startTimestampRef.current) {
-      // Periodic heartbeat
+      // Periodic heartbeat (every 45s to keep write quota light while ensuring partner presence)
       heartbeatRef.current = setInterval(() => {
         updateLiveStatus(userName, {
           isRunning: true,
@@ -154,7 +154,7 @@ export function useStopwatch(userName) {
           deviceId: deviceIdRef.current,
           laps,
         }).catch(() => {})
-      }, 10000)
+      }, 45000)
     } else {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
     }
