@@ -29,6 +29,7 @@ import {
 import {
   getWeeklyPlan, getTargetForDate, getSessionsByDate, getSyllabus,
   getDayPlanner, calculateDayNumber, getUserSessions, groupSessionsByDate, calculateStreaks,
+  getUserDoc,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 import { clearSession, getSession } from '../utils/auth'
@@ -196,18 +197,28 @@ export default function Stopwatch({ userName }) {
     })
   }, [isRunning, displayTime, activeSubject, activeTopic])
 
+  const isRunningRef = useRef(isRunning)
+  isRunningRef.current = isRunning
+  const elapsedRef = useRef(elapsed)
+  elapsedRef.current = elapsed
+  const resetRef = useRef(reset)
+  resetRef.current = reset
+
   // ── Load today's goal, syllabus, day plan and studied time ─────────────────
   const loadData = useCallback(async () => {
     if (!userName) return
     try {
-      const [plan, todaySessions, syl, dPlan, dNum, allUserSessions] = await Promise.all([
-        getWeeklyPlan(userName),
-        getSessionsByDate(userName, todayString()),
-        getSyllabus(userName),
-        getDayPlanner(userName, todayString()),
-        calculateDayNumber(userName, todayString()),
+      const [allUserSessions, userDoc] = await Promise.all([
         getUserSessions(userName),
+        getUserDoc(userName),
       ])
+
+      const plan = userDoc?.weeklyPlan || {}
+      const syl = userDoc?.syllabus || []
+      const dPlan = userDoc?.dayPlanners?.[todayString()] || null
+      const dNum = await calculateDayNumber(userName, todayString(), allUserSessions, userDoc)
+      const todaySessions = (allUserSessions || []).filter((s) => s.date === todayString())
+
       const goal = getTargetForDate(todayString(), plan, dPlan ? { [todayString()]: dPlan } : null)
       setDailyGoal(goal)
       setDayPlan(dPlan)
@@ -219,16 +230,16 @@ export default function Stopwatch({ userName }) {
         setStreakCount(st.currentStreak || 0)
       }
 
-      const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+      const todaySec = todaySessions.reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
       setTodayStudied(todaySec)
 
       // If the stopwatch is paused and its elapsed time matches an already saved session,
       // cleanly reset it to 0 so it never double-counts on the dashboard
-      if (!isRunning && elapsed > 0 && todaySessions && todaySessions.length > 0) {
-        const currentSec = Math.floor(elapsed / 1000)
+      if (!isRunningRef.current && elapsedRef.current > 0 && todaySessions.length > 0) {
+        const currentSec = Math.floor(elapsedRef.current / 1000)
         const alreadySaved = todaySessions.some((s) => Math.abs((s.totalSeconds || 0) - currentSec) <= 3)
         if (alreadySaved) {
-          reset()
+          resetRef.current()
         }
       }
 
@@ -238,7 +249,7 @@ export default function Stopwatch({ userName }) {
     } catch (err) {
       console.warn('Could not load stopwatch extra data:', err)
     }
-  }, [userName, isRunning, elapsed, reset])
+  }, [userName])
 
   useEffect(() => {
     loadData()
@@ -278,11 +289,9 @@ export default function Stopwatch({ userName }) {
       reset()
       if (userName) {
         try {
-          const [todaySessions, allUserSessions] = await Promise.all([
-            getSessionsByDate(userName, todayString()),
-            getUserSessions(userName),
-          ])
-          const todaySec = (todaySessions || []).reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+          const allUserSessions = await getUserSessions(userName, true)
+          const todaySessions = (allUserSessions || []).filter((s) => s.date === todayString())
+          const todaySec = todaySessions.reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
           setTodayStudied(todaySec)
           if (allUserSessions && allUserSessions.length > 0) {
             const groups = groupSessionsByDate(allUserSessions)
@@ -290,12 +299,12 @@ export default function Stopwatch({ userName }) {
             setStreakCount(st.currentStreak || 0)
           }
         } catch {
-          const added = Math.floor(elapsed / 1000)
+          const added = Math.floor(elapsedRef.current / 1000)
           setTodayStudied((prev) => prev + added)
         }
       }
     },
-    [reset, elapsed, userName]
+    [reset, userName]
   )
 
   const dismissToast = useCallback(() => setToast({ visible: false, message: '' }), [])

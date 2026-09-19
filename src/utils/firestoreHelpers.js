@@ -91,12 +91,42 @@ export async function loginUser(username, password) {
   return { ok: true, userDoc: data }
 }
 
+// ─────────────────────────────────────────────
+// HIGH-PERFORMANCE IN-MEMORY CACHING (Quota Protection)
+// ─────────────────────────────────────────────
+const CACHE_TTL_MS = 30000 // 30 seconds
+
+const memoryCache = {
+  userDocs: new Map(), // key: lowerUsername -> { data, ts }
+  userSessions: new Map(), // key: lowerUsername -> { data, ts }
+}
+
+export function invalidateUserCache(userName) {
+  if (!userName) return
+  const u = userName.toLowerCase()
+  memoryCache.userDocs.delete(u)
+  memoryCache.userSessions.delete(u)
+}
+
 /**
- * Gets a user document by username.
+ * Gets a user document by username (cached for 30s to prevent quota burnout).
  */
-export async function getUserDoc(username) {
-  const snap = await getDoc(doc(db, 'users', username.toLowerCase()))
-  return snap.exists() ? snap.data() : null
+export async function getUserDoc(username, force = false) {
+  if (!username) return null
+  const uKey = username.toLowerCase()
+  const cached = memoryCache.userDocs.get(uKey)
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return cached.data
+  }
+  try {
+    const snap = await getDoc(doc(db, 'users', uKey))
+    const data = snap.exists() ? snap.data() : null
+    memoryCache.userDocs.set(uKey, { data, ts: Date.now() })
+    return data
+  } catch (err) {
+    if (cached) return cached.data
+    throw err
+  }
 }
 
 /**
@@ -224,6 +254,7 @@ export async function changeUsername(oldUsername, newUsername) {
 // ─────────────────────────────────────────────
 
 export async function saveWeeklyPlan(userName, weeklyPlan) {
+  invalidateUserCache(userName)
   await updateDoc(doc(db, 'users', userName.toLowerCase()), { weeklyPlan })
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('study_plan_updated', { detail: { userName, weeklyPlan } }))
@@ -360,6 +391,7 @@ export async function saveSession({
     if (duplicate) {
       console.warn('Duplicate session detected, updating existing session instead of inserting duplicate:', duplicate.id)
       await updateDoc(doc(db, 'sessions', duplicate.id), sessionData)
+      invalidateUserCache(userName)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('study_sessions_updated', { detail: { userName, date } }))
       }
@@ -370,28 +402,45 @@ export async function saveSession({
   }
 
   const ref2 = await addDoc(collection(db, 'sessions'), sessionData)
+  invalidateUserCache(userName)
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('study_sessions_updated', { detail: { userName, date } }))
   }
   return ref2.id
 }
 
-export async function getUserSessions(userName) {
-  const q = query(collection(db, 'sessions'), where('userName', '==', userName.toLowerCase()))
-  const snap = await getDocs(q)
-  const sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  return sessions.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
+/**
+ * Gets all user sessions (cached for 30s to prevent quota burnout).
+ */
+export async function getUserSessions(userName, force = false) {
+  if (!userName) return []
+  const uKey = userName.toLowerCase()
+  const cached = memoryCache.userSessions.get(uKey)
+  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return cached.data
+  }
+  try {
+    const q = query(collection(db, 'sessions'), where('userName', '==', uKey))
+    const snap = await getDocs(q)
+    const sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    const sorted = sessions.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
+    memoryCache.userSessions.set(uKey, { data: sorted, ts: Date.now() })
+    return sorted
+  } catch (err) {
+    if (cached) return cached.data
+    throw err
+  }
 }
 
+/**
+ * Gets sessions for a date — derives from cached getUserSessions with 0 extra Firestore reads!
+ */
 export async function getSessionsByDate(userName, dateStr) {
-  const q = query(
-    collection(db, 'sessions'),
-    where('userName', '==', userName.toLowerCase()),
-    where('date', '==', dateStr)
-  )
-  const snap = await getDocs(q)
-  const sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  return sessions.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
+  if (!userName || !dateStr) return []
+  const allSessions = await getUserSessions(userName)
+  return allSessions
+    .filter((s) => s.date === dateStr)
+    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
 }
 
 export function groupSessionsByDate(sessions) {
@@ -478,6 +527,7 @@ export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
 
 export async function saveSyllabus(userName, syllabus) {
   if (!userName) return
+  invalidateUserCache(userName)
   const uKey = userName.toLowerCase()
   try {
     localStorage.setItem(`stt_syllabus_${uKey}`, JSON.stringify(syllabus))
@@ -512,6 +562,7 @@ export async function getSyllabus(userName) {
 
 export async function saveExamGoal(userName, examGoal) {
   if (!userName) return
+  invalidateUserCache(userName)
   const uKey = userName.toLowerCase()
   try {
     localStorage.setItem(`stt_exam_goal_${uKey}`, JSON.stringify(examGoal))
@@ -636,6 +687,7 @@ export function getSpacedRepetitionDue(sessions) {
 
 export async function saveDayPlanner(userName, dateStr, planData) {
   if (!userName || !dateStr) return
+  invalidateUserCache(userName)
   const uKey = userName.toLowerCase()
   try {
     localStorage.setItem(`stt_day_plan_${uKey}_${dateStr}`, JSON.stringify(planData))
@@ -661,6 +713,7 @@ export async function saveDayPlanner(userName, dateStr, planData) {
  */
 export async function syncTargetHours(userName, dateStr, targetHours) {
   if (!userName || !dateStr) return
+  invalidateUserCache(userName)
   const uKey = userName.toLowerCase()
   const numHours = Number(targetHours) || 0
   const targetMinutes = Math.round(numHours * 60)
@@ -749,12 +802,12 @@ export async function getAllDayPlanners(userName) {
  * Calculates a sequential Day Number (Day 1, Day 2, Day 3...)
  * based on user's first planned or studied date.
  */
-export async function calculateDayNumber(userName, targetDateStr) {
+export async function calculateDayNumber(userName, targetDateStr, existingSessions = null, existingUserDoc = null) {
   if (!userName || !targetDateStr) return 1
   try {
     const [sessions, userDoc] = await Promise.all([
-      getUserSessions(userName),
-      getUserDoc(userName),
+      existingSessions ? Promise.resolve(existingSessions) : getUserSessions(userName),
+      existingUserDoc ? Promise.resolve(existingUserDoc) : getUserDoc(userName),
     ])
     const allDates = new Set()
     if (sessions) {
@@ -884,6 +937,7 @@ export async function updatePrivacySettings(userName, { visibility = 'public', a
 
   // 1. Update user document
   try {
+    invalidateUserCache(uKey)
     await setDoc(doc(db, 'users', uKey), { privacy: privacyData }, { merge: true })
   } catch (err) {
     console.error('Failed to update privacy in users collection:', err)
