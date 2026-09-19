@@ -13,7 +13,7 @@
  *  - Day Locking (🔒 read-only past records prevention)
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   getDayPlanner, saveDayPlanner, calculateDayNumber,

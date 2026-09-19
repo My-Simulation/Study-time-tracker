@@ -9,7 +9,7 @@
  * - Responsive, deep dark aesthetic matching #0d0d0d
  */
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   getUserSessions,
