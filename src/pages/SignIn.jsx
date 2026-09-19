@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { loginUser } from '../utils/firestoreHelpers'
 import { saveSession } from '../utils/auth'
 import ForgotPasswordModal from '../components/ForgotPasswordModal'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function SignIn() {
   const navigate = useNavigate()
@@ -58,6 +59,16 @@ export default function SignIn() {
               <p className="text-xs text-gray-500">Sign in to your account</p>
             </div>
           </div>
+        </div>
+
+        {/* Google Sign-in */}
+        <GoogleSignInButton text="Sign in with Google" />
+
+        {/* Divider */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-[#2a2a2a]" />
+          <span className="text-xs text-gray-500">or sign in with password</span>
+          <div className="flex-1 h-px bg-[#2a2a2a]" />
         </div>
 
         {/* Form */}

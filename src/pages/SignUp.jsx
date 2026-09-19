@@ -9,6 +9,7 @@ import {
   isUsernameTaken, generateUsernameSuggestions, createUser,
 } from '../utils/firestoreHelpers'
 import { saveSession } from '../utils/auth'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 const AVATAR_COLORS = [
   { color: '#7c3aed', label: 'Purple' },
@@ -121,19 +122,28 @@ export default function SignUp() {
 
         {/* ── Step 1: Username ── */}
         {step === 1 && (
-          <form onSubmit={handleCheckUsername} className="flex flex-col gap-4">
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">@</span>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => { setUsername(e.target.value); setError(''); setSuggestions([]) }}
-                placeholder="your_username"
-                maxLength={20}
-                autoFocus
-                className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 pl-8 pr-4 py-3 text-base outline-none focus:border-purple-500 transition-colors"
-              />
+          <div className="flex flex-col gap-4">
+            <GoogleSignInButton text="Sign up with Google" />
+
+            <div className="flex items-center gap-3 my-0.5">
+              <div className="flex-1 h-px bg-[#2a2a2a]" />
+              <span className="text-xs text-gray-500">or choose username manually</span>
+              <div className="flex-1 h-px bg-[#2a2a2a]" />
             </div>
+
+            <form onSubmit={handleCheckUsername} className="flex flex-col gap-4">
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">@</span>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => { setUsername(e.target.value); setError(''); setSuggestions([]) }}
+                  placeholder="your_username"
+                  maxLength={20}
+                  autoFocus
+                  className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 pl-8 pr-4 py-3 text-base outline-none focus:border-purple-500 transition-colors"
+                />
+              </div>
             {username.trim().length >= 4 && (
               <p className="text-xs text-gray-600 -mt-2 px-1">
                 Your profile: <span className="text-purple-400">@{username.trim().toLowerCase()}</span>
@@ -157,6 +167,7 @@ export default function SignUp() {
               {loading ? 'Checking…' : 'Continue →'}
             </PrimaryBtn>
           </form>
+          </div>
         )}
 
         {/* ── Step 2: Password ── */}

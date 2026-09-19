@@ -6,6 +6,7 @@
 
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function Welcome() {
   const navigate = useNavigate()
@@ -62,6 +63,14 @@ export default function Welcome() {
 
         {/* CTA buttons */}
         <div className="w-full flex flex-col gap-3">
+          <GoogleSignInButton text="Continue with Google" />
+
+          <div className="flex items-center gap-3 my-1">
+            <div className="flex-1 h-px bg-[#2a2a2a]" />
+            <span className="text-[11px] text-gray-500 uppercase tracking-wider">or</span>
+            <div className="flex-1 h-px bg-[#2a2a2a]" />
+          </div>
+
           <button
             onClick={() => navigate('/signup')}
             className="pill-btn w-full"
@@ -78,7 +87,7 @@ export default function Welcome() {
             className="pill-btn w-full"
             style={{ background: '#1a1a1a', color: 'white', border: '1px solid #2a2a2a' }}
           >
-            Sign In
+            Sign In with Username
           </button>
         </div>
 

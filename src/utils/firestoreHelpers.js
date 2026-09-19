@@ -7,7 +7,8 @@ import {
   getDocs, query, where, serverTimestamp, updateDoc,
   deleteDoc, onSnapshot, limit,
 } from 'firebase/firestore'
-import { db, getStorageInstance } from '../firebase'
+import { signInWithPopup } from 'firebase/auth'
+import { db, getStorageInstance, auth, googleProvider } from '../firebase'
 import { hashPassword, verifyPassword } from './auth'
 
 // ─────────────────────────────────────────────
@@ -1027,6 +1028,171 @@ export async function searchUsers(searchTerm, limitCount = 6) {
 
   return results.slice(0, limitCount)
 }
+
+// ─────────────────────────────────────────────
+// GOOGLE AUTHENTICATION & ONBOARDING
+// ─────────────────────────────────────────────
+
+/**
+ * Generates an intelligent, clean, and guaranteed unique username based on Google name/email
+ */
+export async function generateSmartUniqueUsername(displayName, email) {
+  const baseCandidates = []
+
+  if (displayName) {
+    // E.g. "Jeetesh Sharma" -> "jeetesh_sharma", "jeetesh"
+    const cleaned = displayName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+    if (cleaned.length >= 4) baseCandidates.push(cleaned)
+    const firstName = cleaned.split('_')[0]
+    if (firstName && firstName.length >= 4) baseCandidates.push(firstName)
+  }
+
+  if (email) {
+    const emailPrefix = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+    if (emailPrefix.length >= 4 && !baseCandidates.includes(emailPrefix)) {
+      baseCandidates.push(emailPrefix)
+    }
+  }
+
+  baseCandidates.push(`scholar_${Math.floor(1000 + Math.random() * 9000)}`)
+
+  for (const cand of baseCandidates) {
+    try {
+      const taken = await isUsernameTaken(cand)
+      if (!taken) return cand
+    } catch {}
+  }
+
+  // If initial candidates are taken, append sequential numbers
+  const prime = baseCandidates[0] || 'student'
+  for (let i = 1; i <= 50; i++) {
+    const test = `${prime}${i}`
+    try {
+      const taken = await isUsernameTaken(test)
+      if (!taken) return test
+    } catch {}
+  }
+
+  return `${prime}_${Date.now().toString().slice(-4)}`
+}
+
+/**
+ * Triggers Google Sign-In Popup:
+ * - If user already has an account linked with this email or googleUid: returns { isNewUser: false, userDoc, username }
+ * - If new user: returns { isNewUser: true, googleData: { email, displayName, photoUrl, googleUid, suggestedUsername } }
+ */
+export async function signInWithGoogleAuth() {
+  const result = await signInWithPopup(auth, googleProvider)
+  const gUser = result.user
+  if (!gUser) throw new Error('Google Sign-In was cancelled or failed.')
+
+  const email = (gUser.email || '').trim().toLowerCase()
+  const displayName = gUser.displayName || ''
+  const photoUrl = gUser.photoURL || ''
+  const googleUid = gUser.uid
+
+  // 1. Check if user already exists with this email
+  let existingUser = null
+  if (email) {
+    try {
+      const qEmail = query(collection(db, 'users'), where('email', '==', email), limit(1))
+      const snap = await getDocs(qEmail)
+      if (!snap.empty) {
+        const docSnap = snap.docs[0]
+        existingUser = { ...docSnap.data(), username: docSnap.id }
+      }
+    } catch (err) {
+      console.warn('Error checking existing user by email:', err)
+    }
+  }
+
+  // 2. Check if user already exists with this googleUid
+  if (!existingUser && googleUid) {
+    try {
+      const qUid = query(collection(db, 'users'), where('googleUid', '==', googleUid), limit(1))
+      const snap = await getDocs(qUid)
+      if (!snap.empty) {
+        const docSnap = snap.docs[0]
+        existingUser = { ...docSnap.data(), username: docSnap.id }
+      }
+    } catch (err) {
+      console.warn('Error checking existing user by googleUid:', err)
+    }
+  }
+
+  // Existing user: direct login!
+  if (existingUser) {
+    // If user has no photoUrl, attach Google photoUrl
+    if (!existingUser.photoUrl && photoUrl) {
+      try {
+        await updateDoc(doc(db, 'users', existingUser.username), { photoUrl, googleUid, email })
+        existingUser.photoUrl = photoUrl
+      } catch {}
+    }
+    return {
+      isNewUser: false,
+      userDoc: existingUser,
+      username: existingUser.username,
+    }
+  }
+
+  // New user: suggest smart username
+  const suggestedUsername = await generateSmartUniqueUsername(displayName, email)
+
+  return {
+    isNewUser: true,
+    googleData: {
+      email,
+      displayName,
+      photoUrl,
+      googleUid,
+      suggestedUsername,
+    },
+  }
+}
+
+/**
+ * Completes new user registration after Google Authentication:
+ * Enforces username validation, uniqueness, and password protection
+ */
+export async function completeGoogleRegistration({
+  username,
+  password,
+  displayName,
+  email,
+  googleUid,
+  photoUrl,
+}) {
+  const lowerUsername = username.trim().toLowerCase()
+  const userErr = validateUsername(lowerUsername)
+  if (userErr) throw new Error(userErr)
+
+  const taken = await isUsernameTaken(lowerUsername)
+  if (taken) throw new Error(`@${lowerUsername} is already taken. Please choose another username.`)
+
+  const passErr = validatePassword(password)
+  if (passErr) throw new Error(passErr)
+
+  const passwordHash = await hashPassword(password)
+
+  const userData = {
+    username: lowerUsername,
+    displayName: displayName?.trim() || lowerUsername,
+    email: email?.trim().toLowerCase() || '',
+    googleUid: googleUid || '',
+    photoUrl: photoUrl || '',
+    passwordHash,
+    avatarColor: '#7c3aed',
+    authProvider: 'google',
+    createdAt: serverTimestamp(),
+    weeklyPlan: {},
+    privacy: { visibility: 'public', allowedUsers: [] },
+  }
+
+  await setDoc(doc(db, 'users', lowerUsername), userData)
+  return { ok: true, userDoc: userData, username: lowerUsername }
+}
+
 
 
 
