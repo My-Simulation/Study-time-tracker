@@ -21,6 +21,9 @@ import {
   getWeeklyPlan, syncTargetHours,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatTargetHoursText, parseHoursInput } from '../utils/formatTime'
+import AITimeTableModal from '../components/AITimeTableModal'
+import AICoachDrawer from '../components/AICoachDrawer'
+import { buildUserAIContext } from '../utils/aiService'
 
 const TARGET_HOURS_OPTIONS = [
   0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 18, 20
@@ -37,6 +40,21 @@ const DEFAULT_SUBJECTS = [
   { subject: 'हिंदी / Hindi', color: '#fb923c', bg: 'rgba(251, 146, 60, 0.15)' },
   { subject: 'Current Affairs', color: '#22d3ee', bg: 'rgba(34, 211, 238, 0.15)' },
   { subject: 'Revision / Practice', color: '#c084fc', bg: 'rgba(192, 132, 252, 0.15)' },
+]
+
+export const SLOT_TYPES = [
+  { id: 'Core Study', label: '📘 Core Study', badge: 'bg-blue-500/15 text-blue-300 border-blue-500/30' },
+  { id: 'Revision', label: '🧠 Revision', badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+  { id: 'Mock Test', label: '📝 Mock Test', badge: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  { id: 'Practice', label: '🎯 Practice', badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  { id: 'Break', label: '☕ Break', badge: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
+]
+
+export const TIME_BLOCKS = [
+  { id: 'Morning', label: '🌅 Morning' },
+  { id: 'Afternoon', label: '☀️ Afternoon' },
+  { id: 'Evening', label: '🌆 Evening' },
+  { id: 'Night', label: '🌙 Night' },
 ]
 
 const QUOTES = [
@@ -79,10 +97,53 @@ export default function DayPlanner({ userName }) {
   const [rows, setRows] = useState([])
   const [notes, setNotes] = useState('')
   const [progressRating, setProgressRating] = useState('good') // 'not_good' | 'average' | 'good' | 'excellent'
+  const [availableSubjects, setAvailableSubjects] = useState([])
 
   // Rollover modal
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [completing, setCompleting] = useState(false)
+
+  // AI Integration states
+  const [showAIModal, setShowAIModal] = useState(false)
+  const [showAICoach, setShowAICoach] = useState(false)
+  const [userAIContext, setUserAIContext] = useState(null)
+
+  const handleOpenAIModal = async () => {
+    const ctx = await buildUserAIContext(userName)
+    setUserAIContext(ctx)
+    setShowAIModal(true)
+  }
+
+  const handleOpenAICoach = async () => {
+    const ctx = await buildUserAIContext(userName)
+    setUserAIContext(ctx)
+    setShowAICoach(true)
+  }
+
+  const handleApplyAISlots = async (newSlots, newTargetHours) => {
+    setRows(newSlots)
+    let effHours = targetHours
+    if (newTargetHours && !isNaN(newTargetHours) && newTargetHours > 0) {
+      effHours = newTargetHours
+      setTargetHours(newTargetHours)
+      await syncTargetHours(userName, currentDate, newTargetHours)
+    }
+
+    const planData = {
+      date: currentDate,
+      dayNumber,
+      targetHours: effHours,
+      isLocked: false,
+      goals,
+      rows: newSlots,
+      notes,
+      progressRating,
+      updatedAt: Date.now(),
+    }
+    await saveDayPlanner(userName, currentDate, planData)
+    setSavedBadge(true)
+    setTimeout(() => setSavedBadge(false), 2500)
+  }
 
   // Load data for currentDate
   const loadDay = useCallback(async (targetDate) => {
@@ -97,6 +158,11 @@ export default function DayPlanner({ userName }) {
       ])
 
       setDayNumber(computedDay || 1)
+      if (syllabus && syllabus.length > 0) {
+        setAvailableSubjects(syllabus.map((s) => s.name))
+      } else {
+        setAvailableSubjects(DEFAULT_SUBJECTS.map((s) => s.subject))
+      }
 
       // Calculate actual studied time from sessions recorded on targetDate
       const daySessions = (sessions || []).filter((s) => s.date === targetDate)
@@ -264,17 +330,25 @@ export default function DayPlanner({ userName }) {
     )
   }
 
-  const addCustomRow = () => {
+  const addCustomRow = (block = 'Morning') => {
     if (isLocked) return
+    const defaultTimeMap = {
+      Morning: '06:30 AM - 08:30 AM',
+      Afternoon: '02:00 PM - 04:00 PM',
+      Evening: '05:30 PM - 07:30 PM',
+      Night: '09:00 PM - 10:30 PM',
+    }
     const newRow = {
-      id: `row_${Date.now()}`,
-      time: '',
-      subject: 'New Subject',
+      id: `slot_${Date.now()}`,
+      block,
+      time: defaultTimeMap[block] || '08:00 AM - 10:00 AM',
+      slotType: 'Core Study',
+      subject: DEFAULT_SUBJECTS[0].subject,
       topic: '',
       plan: '',
       done: false,
     }
-    setRows([...rows, newRow])
+    setRows((prev) => [...prev, newRow])
   }
 
   const deleteRow = (id) => {
@@ -352,6 +426,29 @@ export default function DayPlanner({ userName }) {
         </button>
 
         <div className="flex items-center gap-2">
+          {/* AI Time Table Button */}
+          <button
+            type="button"
+            onClick={handleOpenAIModal}
+            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-[0.98] cursor-pointer"
+            title="Generate custom study timetable with AI"
+          >
+            <span>✨</span>
+            <span className="hidden sm:inline">AI Time Table</span>
+            <span className="sm:hidden">AI Plan</span>
+          </button>
+
+          {/* AI Mentor Button */}
+          <button
+            type="button"
+            onClick={handleOpenAICoach}
+            className="px-3 py-1.5 rounded-xl bg-[#1d1d28] hover:bg-[#272738] border border-purple-500/30 text-purple-300 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Chat with your AI Study Mentor"
+          >
+            <span>🤖</span>
+            <span className="hidden sm:inline">AI Coach</span>
+          </button>
+
           {savedBadge && (
             <span className="text-xs text-green-400 font-semibold bg-green-500/10 border border-green-500/30 px-2 py-0.5 rounded-full animate-pulse">
               ✓ Saved!
@@ -423,46 +520,6 @@ export default function DayPlanner({ userName }) {
               </button>
             </div>
           )}
-
-          {/* Header Banners & Sticky Notes */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#242426] pb-5">
-            {/* Left Sticky Note */}
-            <div
-              className="p-3 rounded-2xl transform -rotate-1 shadow-md max-w-[190px] border"
-              style={{
-                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(245, 158, 11, 0.04) 100%)',
-                borderColor: 'rgba(245, 158, 11, 0.3)',
-              }}
-            >
-              <p className="text-[11px] font-bold text-amber-300 tracking-tight leading-snug">
-                📌 Little Progress Everyday Adds to Big Results ⭐
-              </p>
-            </div>
-
-            {/* Center Title */}
-            <div className="text-center flex flex-col items-center">
-              <h1 className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 tracking-tight">
-                ✨ My Plan. My Time. My Success. ✨
-              </h1>
-              <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5 font-medium">
-                <span>💕 Discipline Today, Success Tomorrow.</span>
-                <span>🌱</span>
-              </p>
-            </div>
-
-            {/* Right Sticky Note */}
-            <div
-              className="p-3 rounded-2xl transform rotate-1 shadow-md max-w-[190px] border text-center"
-              style={{
-                background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.12) 0%, rgba(236, 72, 153, 0.04) 100%)',
-                borderColor: 'rgba(236, 72, 153, 0.3)',
-              }}
-            >
-              <p className="text-[11px] font-black text-pink-300 tracking-wider uppercase leading-snug">
-                FOCUS • STUDY<br />IMPROVE • REPEAT 💕
-              </p>
-            </div>
-          </div>
 
           {/* ── Day Badge, Date & Quote Bar ── */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#18181b] p-3 sm:p-4 rounded-2xl border border-[#2b2b30]">
@@ -649,248 +706,305 @@ export default function DayPlanner({ userName }) {
             </div>
           </div>
 
-          {/* ── 3 Focus & Affirmation Cards Row ── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Card 1: TODAY'S FOCUS */}
-            <div
-              className="p-4 rounded-2xl flex flex-col gap-2.5 border"
-              style={{
-                background: 'linear-gradient(135deg, rgba(244, 114, 182, 0.07) 0%, rgba(244, 114, 182, 0.02) 100%)',
-                borderColor: 'rgba(244, 114, 182, 0.25)',
-              }}
-            >
-              <div className="flex items-center gap-1.5 border-b border-pink-500/20 pb-1.5">
-                <span className="text-xs font-black text-pink-300 tracking-wider uppercase">
-                  TODAY'S FOCUS
+          {/* ── Today's Top 3 Priorities & Goals Card ── */}
+          <div className="p-4 rounded-2xl bg-[#161619] border border-[#2a2a2f] flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-[#242428] pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎯</span>
+                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  Today's Top 3 Priorities & Goals
                 </span>
-                <span className="ml-auto text-xs">⭐</span>
               </div>
-              <ul className="flex flex-col gap-1.5 text-xs text-gray-300">
-                <li className="flex items-center gap-2">
-                  <span className="text-pink-400 text-xs">❤️</span>
-                  <span>Plan your study</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-pink-400 text-xs">❤️</span>
-                  <span>Stay away from distractions</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-pink-400 text-xs">❤️</span>
-                  <span>Be consistent</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-pink-400 text-xs">❤️</span>
-                  <span>Trust the process</span>
-                </li>
-              </ul>
+              <span className="text-[11px] text-purple-400 font-medium hidden sm:inline">
+                Focus on the most important targets today
+              </span>
             </div>
 
-            {/* Card 2: TODAY'S TOP 3 GOALS */}
-            <div
-              className="p-4 rounded-2xl flex flex-col gap-2.5 border"
-              style={{
-                background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(168, 85, 247, 0.02) 100%)',
-                borderColor: 'rgba(168, 85, 247, 0.3)',
-              }}
-            >
-              <div className="flex items-center justify-between border-b border-purple-500/20 pb-1.5">
-                <span className="text-xs font-black text-purple-300 tracking-wider uppercase">
-                  TODAY'S TOP 3 GOALS
-                </span>
-                <span className="text-xs">⭐️</span>
-              </div>
-              <div className="flex flex-col gap-2 pt-0.5">
-                {[0, 1, 2].map((idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <span className="font-bold text-xs text-purple-400 font-mono">{idx + 1}.</span>
-                    <input
-                      type="text"
-                      disabled={isLocked}
-                      value={goals[idx] || ''}
-                      onChange={(e) => updateGoal(idx, e.target.value)}
-                      placeholder={`Goal #${idx + 1}...`}
-                      className="flex-1 bg-transparent border-b border-[#333] focus:border-purple-400 text-xs text-white placeholder-gray-600 outline-none pb-0.5 transition-colors disabled:opacity-75"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Card 3: TODAY I WILL... */}
-            <div
-              className="p-4 rounded-2xl flex flex-col gap-2.5 border"
-              style={{
-                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.07) 0%, rgba(59, 130, 246, 0.02) 100%)',
-                borderColor: 'rgba(59, 130, 246, 0.25)',
-              }}
-            >
-              <div className="flex items-center gap-1.5 border-b border-blue-500/20 pb-1.5">
-                <span className="text-xs font-black text-blue-300 tracking-wider uppercase">
-                  TODAY I WILL...
-                </span>
-                <span className="ml-auto text-xs">😊</span>
-              </div>
-              <ul className="flex flex-col gap-1.5 text-xs text-gray-300">
-                <li className="flex items-center gap-2">
-                  <span className="text-blue-400 text-xs">💜</span>
-                  <span>Give my 100%</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-blue-400 text-xs">💜</span>
-                  <span>Learn with interest</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-blue-400 text-xs">💜</span>
-                  <span>Make my family proud</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-blue-400 text-xs">💜</span>
-                  <span>Achieve my dreams 💕</span>
-                </li>
-              </ul>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[0, 1, 2].map((idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#121214] border border-[#242428] focus-within:border-purple-500/80 transition-colors shadow-inner"
+                >
+                  <span className="w-5 h-5 rounded-full bg-purple-500/15 text-purple-400 font-bold text-xs flex items-center justify-center font-mono flex-shrink-0">
+                    {idx + 1}
+                  </span>
+                  <input
+                    type="text"
+                    disabled={isLocked}
+                    value={goals[idx] || ''}
+                    onChange={(e) => updateGoal(idx, e.target.value)}
+                    placeholder={`Priority #${idx + 1}...`}
+                    className="flex-1 bg-transparent text-xs text-white placeholder-gray-600 outline-none disabled:opacity-75"
+                  />
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* ── Subject & Topic Schedule Table ── */}
-          <div className="flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white uppercase tracking-wider">
-                  📖 Daily Study Schedule
+          {/* Datalist for fast subject auto-completion */}
+          <datalist id="dayplanner-subjects">
+            {availableSubjects.map((sub, i) => (
+              <option key={i} value={sub} />
+            ))}
+          </datalist>
+
+          {/* ── Modern Daily Study Time Table ── */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📋</span>
+                  <span>Daily Study Time Table</span>
                 </span>
-                <span className="text-xs font-mono text-purple-400 bg-purple-500/10 border border-purple-500/30 px-2 py-0.5 rounded-full">
-                  {completedCount}/{totalCount} Done
+                <span className="text-xs font-mono text-purple-300 bg-purple-500/15 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
+                  {completedCount}/{totalCount} Slots Done
                 </span>
               </div>
+
               {!isLocked && (
-                <button
-                  onClick={addCustomRow}
-                  className="text-xs px-2.5 py-1 rounded-xl bg-[#222] hover:bg-[#333] text-gray-300 border border-[#333] transition-colors"
-                >
-                  + Add Row
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenAIModal}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer"
+                    title="Generate personalized study schedule with AI"
+                  >
+                    <span>✨</span>
+                    <span>AI Generate Plan</span>
+                  </button>
+
+                  <div className="flex items-center bg-[#18181c] border border-[#2e2e38] rounded-xl p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => addCustomRow('Morning')}
+                      className="text-xs px-2.5 py-1 rounded-lg hover:bg-[#272730] text-gray-200 transition-colors"
+                      title="Add Morning Slot"
+                    >
+                      + Morning
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addCustomRow('Afternoon')}
+                      className="text-xs px-2.5 py-1 rounded-lg hover:bg-[#272730] text-gray-200 transition-colors hidden sm:inline"
+                      title="Add Afternoon Slot"
+                    >
+                      + Afternoon
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addCustomRow('Evening')}
+                      className="text-xs px-2.5 py-1 rounded-lg hover:bg-[#272730] text-gray-200 transition-colors hidden sm:inline"
+                      title="Add Evening Slot"
+                    >
+                      + Evening
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addCustomRow('Night')}
+                      className="text-xs px-2.5 py-1 rounded-lg hover:bg-[#272730] text-gray-200 transition-colors hidden sm:inline"
+                      title="Add Night Slot"
+                    >
+                      + Night
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addCustomRow('Morning')}
+                      className="text-xs px-2 py-1 rounded-lg bg-purple-600/30 text-purple-300 hover:bg-purple-600 hover:text-white transition-colors sm:hidden font-semibold"
+                    >
+                      + Slot
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
-            {/* Table Container */}
-            <div className="overflow-x-auto rounded-2xl border border-[#2b2b30] bg-[#121214]">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[#2b2b30] text-gray-400 font-bold uppercase tracking-wider bg-[#18181c]">
-                    <th className="p-3 w-28 whitespace-nowrap">TIME ⏰</th>
-                    <th className="p-3 w-48 whitespace-nowrap">SUBJECT 📑</th>
-                    <th className="p-3 w-48 whitespace-nowrap">TOPIC / CHAPTER ✏️</th>
-                    <th className="p-3 whitespace-nowrap">PLAN (What will I study?) 💡</th>
-                    <th className="p-3 w-16 text-center whitespace-nowrap">DONE ✓</th>
-                    <th className="p-3 w-28 text-center whitespace-nowrap">TIMER ▶️</th>
-                    {!isLocked && <th className="p-3 w-10"></th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#222226]">
-                  {rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className={`transition-colors hover:bg-[#19191d] ${
-                        row.done ? 'bg-[#101012] opacity-75' : ''
-                      }`}
-                    >
-                      {/* Time */}
-                      <td className="p-2.5">
-                        <input
-                          type="text"
-                          disabled={isLocked}
-                          value={row.time || ''}
-                          onChange={(e) => updateRow(row.id, 'time', e.target.value)}
-                          placeholder="09:00 - 11:00"
-                          className="w-full bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-xs text-gray-300 font-mono outline-none disabled:opacity-75"
-                        />
-                      </td>
-
-                      {/* Subject with Backlog badge if rolled over */}
-                      <td className="p-2.5">
-                        <div className="flex flex-col gap-1">
-                          {row.isRollover && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap w-fit">
-                              ⚠️ Backlog (Kal nahi hua tha)
-                            </span>
-                          )}
-                          <input
-                            type="text"
-                            disabled={isLocked}
-                            value={row.subject || ''}
-                            onChange={(e) => updateRow(row.id, 'subject', e.target.value)}
-                            className="w-full font-bold text-xs bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-purple-300 outline-none disabled:opacity-75"
-                          />
-                        </div>
-                      </td>
-
-                      {/* Topic / Chapter */}
-                      <td className="p-2.5">
-                        <input
-                          type="text"
-                          disabled={isLocked}
-                          value={row.topic || ''}
-                          onChange={(e) => updateRow(row.id, 'topic', e.target.value)}
-                          placeholder="e.g. Chapter 4..."
-                          className={`w-full bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-xs text-white outline-none disabled:opacity-75 ${
-                            row.done ? 'line-through text-gray-500' : ''
-                          }`}
-                        />
-                      </td>
-
-                      {/* Plan */}
-                      <td className="p-2.5">
-                        <input
-                          type="text"
-                          disabled={isLocked}
-                          value={row.plan || ''}
-                          onChange={(e) => updateRow(row.id, 'plan', e.target.value)}
-                          placeholder="e.g. 30 PYQs & revise notes"
-                          className="w-full bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-xs text-gray-300 outline-none disabled:opacity-75"
-                        />
-                      </td>
-
-                      {/* Done Checkbox */}
-                      <td className="p-2.5 text-center">
-                        <input
-                          type="checkbox"
-                          disabled={isLocked}
-                          checked={row.done || false}
-                          onChange={(e) => updateRow(row.id, 'done', e.target.checked)}
-                          className="w-4 h-4 rounded accent-purple-500 cursor-pointer disabled:opacity-60"
-                        />
-                      </td>
-
-                      {/* Start Timer Action */}
-                      <td className="p-2.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleStartTimer(row)}
-                          className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600 hover:text-white transition-all whitespace-nowrap"
-                          title="Open Stopwatch with this topic"
-                        >
-                          ▶️ Start
-                        </button>
-                      </td>
-
-                      {/* Delete */}
-                      {!isLocked && (
-                        <td className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => deleteRow(row.id)}
-                            className="text-gray-600 hover:text-red-400 text-xs"
-                            title="Delete row"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      )}
+            {/* Time Table / Schedule Grid */}
+            {rows.length === 0 ? (
+              <div className="p-8 rounded-2xl border border-dashed border-[#2f2f38] text-center flex flex-col items-center justify-center gap-3 bg-[#131316]">
+                <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-2xl">
+                  📅
+                </div>
+                <h4 className="text-sm font-bold text-white">No Study Slots Added for Day {dayNumber}</h4>
+                <p className="text-xs text-gray-400 max-w-sm">
+                  Apne routine aur exam ke hisaab se AI se best time table banwayein, ya manually slots add karein.
+                </p>
+                <div className="flex items-center gap-2.5 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenAIModal}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-purple-600/20"
+                  >
+                    <span>✨</span>
+                    <span>Generate with AI</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addCustomRow('Morning')}
+                    className="px-4 py-2 rounded-xl bg-[#222] hover:bg-[#2b2b30] border border-[#333] text-gray-200 font-semibold text-xs"
+                  >
+                    + Add Slot Manually
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-[#2b2b30] bg-[#121214] shadow-inner">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-[#2b2b30] text-gray-400 font-bold uppercase tracking-wider bg-[#17171b]">
+                      <th className="p-3 w-40 whitespace-nowrap">BLOCK & TIME ⏰</th>
+                      <th className="p-3 w-32 whitespace-nowrap">TYPE 🏷️</th>
+                      <th className="p-3 w-44 whitespace-nowrap">SUBJECT 📑</th>
+                      <th className="p-3 w-52 whitespace-nowrap">TOPIC / CHAPTER ✏️</th>
+                      <th className="p-3 whitespace-nowrap">TARGET & PLAN 💡</th>
+                      <th className="p-3 w-16 text-center whitespace-nowrap">DONE ✓</th>
+                      <th className="p-3 w-24 text-center whitespace-nowrap">TIMER ▶️</th>
+                      {!isLocked && <th className="p-3 w-10 text-center"></th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-[#202025]">
+                    {rows.map((row) => {
+                      const currentType = SLOT_TYPES.find((t) => t.id === row.slotType) || SLOT_TYPES[0]
+                      return (
+                        <tr
+                          key={row.id}
+                          className={`transition-colors hover:bg-[#18181c] ${
+                            row.done ? 'bg-[#101012] opacity-75' : ''
+                          }`}
+                        >
+                          {/* Block & Time */}
+                          <td className="p-2.5">
+                            <div className="flex flex-col gap-1">
+                              <select
+                                disabled={isLocked}
+                                value={row.block || 'Morning'}
+                                onChange={(e) => updateRow(row.id, 'block', e.target.value)}
+                                className="w-full bg-[#16161a] border border-[#2a2a35] rounded px-1.5 py-0.5 text-[11px] font-semibold text-gray-300 outline-none focus:border-purple-500 cursor-pointer disabled:opacity-75"
+                              >
+                                {TIME_BLOCKS.map((tb) => (
+                                  <option key={tb.id} value={tb.id} className="bg-[#16161a] text-white">
+                                    {tb.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                disabled={isLocked}
+                                value={row.time || ''}
+                                onChange={(e) => updateRow(row.id, 'time', e.target.value)}
+                                placeholder="09:00 - 11:00 AM"
+                                className="w-full bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-0.5 text-[11px] text-gray-400 font-mono outline-none disabled:opacity-75"
+                              />
+                            </div>
+                          </td>
+
+                          {/* Slot Type */}
+                          <td className="p-2.5">
+                            <select
+                              disabled={isLocked}
+                              value={row.slotType || 'Core Study'}
+                              onChange={(e) => updateRow(row.id, 'slotType', e.target.value)}
+                              className={`w-full rounded px-2 py-1 text-[11px] font-bold border outline-none cursor-pointer disabled:opacity-75 ${currentType.badge}`}
+                            >
+                              {SLOT_TYPES.map((st) => (
+                                <option key={st.id} value={st.id} className="bg-[#16161a] text-white">
+                                  {st.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          {/* Subject with Backlog badge if rolled over */}
+                          <td className="p-2.5">
+                            <div className="flex flex-col gap-1">
+                              {row.isRollover && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap w-fit">
+                                  ⚠️ Backlog (Kal nahi hua tha)
+                                </span>
+                              )}
+                              <input
+                                type="text"
+                                list="dayplanner-subjects"
+                                disabled={isLocked}
+                                value={row.subject || ''}
+                                onChange={(e) => updateRow(row.id, 'subject', e.target.value)}
+                                placeholder="Select / type subject..."
+                                className="w-full font-bold text-xs bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-purple-300 outline-none disabled:opacity-75"
+                              />
+                            </div>
+                          </td>
+
+                          {/* Topic / Chapter */}
+                          <td className="p-2.5">
+                            <input
+                              type="text"
+                              disabled={isLocked}
+                              value={row.topic || ''}
+                              onChange={(e) => updateRow(row.id, 'topic', e.target.value)}
+                              placeholder="e.g. Fundamental Rights..."
+                              className={`w-full bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-xs text-white outline-none disabled:opacity-75 ${
+                                row.done ? 'line-through text-gray-500' : ''
+                              }`}
+                            />
+                          </td>
+
+                          {/* Plan */}
+                          <td className="p-2.5">
+                            <input
+                              type="text"
+                              disabled={isLocked}
+                              value={row.plan || ''}
+                              onChange={(e) => updateRow(row.id, 'plan', e.target.value)}
+                              placeholder="e.g. 25 PYQs + revision notes"
+                              className={`w-full bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-xs text-gray-300 outline-none disabled:opacity-75 ${
+                                row.done ? 'line-through text-gray-600' : ''
+                              }`}
+                            />
+                          </td>
+
+                          {/* Done Checkbox */}
+                          <td className="p-2.5 text-center">
+                            <input
+                              type="checkbox"
+                              disabled={isLocked}
+                              checked={row.done || false}
+                              onChange={(e) => updateRow(row.id, 'done', e.target.checked)}
+                              className="w-4 h-4 rounded accent-purple-500 cursor-pointer disabled:opacity-60"
+                            />
+                          </td>
+
+                          {/* Start Timer Action */}
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleStartTimer(row)}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600 hover:text-white transition-all whitespace-nowrap shadow-sm hover:shadow-purple-500/30"
+                              title="Open Stopwatch with this topic"
+                            >
+                              ▶️ Start
+                            </button>
+                          </td>
+
+                          {/* Delete */}
+                          {!isLocked && (
+                            <td className="p-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => deleteRow(row.id)}
+                                className="text-gray-500 hover:text-red-400 text-xs p-1 rounded hover:bg-red-500/10 transition-colors"
+                                title="Delete slot"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* ── Revision / Notes & Progress Rating Area ── */}
@@ -1072,6 +1186,38 @@ export default function DayPlanner({ userName }) {
           </div>
         </div>
       )}
+
+      {/* ── Floating AI Mentor Button ── */}
+      <button
+        type="button"
+        onClick={handleOpenAICoach}
+        className="fixed bottom-6 right-6 z-40 px-4 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 text-white shadow-xl shadow-purple-600/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer border border-purple-400/30 group"
+        title="Chat with your AI Study Mentor"
+      >
+        <span className="text-lg">🤖</span>
+        <span className="text-xs font-bold tracking-wide">
+          AI Mentor
+        </span>
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+      </button>
+
+      {/* ── AI Timetable Generator Modal ── */}
+      <AITimeTableModal
+        isOpen={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        userContext={userAIContext}
+        onApply={handleApplyAISlots}
+      />
+
+      {/* ── AI Coach Drawer ── */}
+      <AICoachDrawer
+        isOpen={showAICoach}
+        onClose={() => setShowAICoach(false)}
+        userContext={userAIContext}
+      />
     </div>
   )
 }
