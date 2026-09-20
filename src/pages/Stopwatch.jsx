@@ -867,9 +867,7 @@ export default function Stopwatch({ userName }) {
           </div>
 
           {/* Exam D-Day Countdown Widget */}
-          <div className="backdrop-blur-md rounded-2xl">
-            <ExamCountdown userName={userName} totalStudiedSeconds={todayStudied + totalSeconds} />
-          </div>
+          <ExamCountdown userName={userName} totalStudiedSeconds={todayStudied + totalSeconds} />
 
           {/* Daily Goal Progress Bar */}
           {goalProgress && (
