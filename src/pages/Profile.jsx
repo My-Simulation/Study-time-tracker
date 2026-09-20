@@ -32,14 +32,56 @@ export default function Profile({ userName }) {
   const navigate = useNavigate()
   const today = todayString()
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => {
+    if (!userName) return true
+    try {
+      return !localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
+    } catch {
+      return true
+    }
+  })
   const [showEditModal, setShowEditModal] = useState(false)
-  const [allSessions, setAllSessions] = useState([])
-  const [weeklyPlan, setWeeklyPlan] = useState({})
-  const [dayPlanners, setDayPlanners] = useState({})
-  const [userData, setUserData] = useState(null)
+  const [allSessions, setAllSessions] = useState(() => {
+    if (!userName) return []
+    try {
+      const raw = localStorage.getItem(`stt_user_sessions_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return []
+  })
+  const [weeklyPlan, setWeeklyPlan] = useState(() => {
+    if (!userName) return {}
+    try {
+      const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw).weeklyPlan || {}
+    } catch {}
+    return {}
+  })
+  const [dayPlanners, setDayPlanners] = useState(() => {
+    if (!userName) return {}
+    try {
+      const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw).dayPlanners || {}
+    } catch {}
+    return {}
+  })
+  const [userData, setUserData] = useState(() => {
+    if (!userName) return null
+    try {
+      const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return null
+  })
   const [copied, setCopied] = useState(false)
-  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: null })
+  const [settings, setSettings] = useState(() => {
+    if (!userName) return { sundayRestDay: false, effectiveFrom: null }
+    try {
+      const raw = localStorage.getItem(`stt_settings_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return { sundayRestDay: false, effectiveFrom: null }
+  })
   const [settingsSaved, setSettingsSaved] = useState(false)
 
   // ── Privacy & Live Activity Visibility State ──
@@ -174,7 +216,6 @@ export default function Profile({ userName }) {
     let isMounted = true
 
     async function loadProfile() {
-      setLoading(true)
       try {
         const [sessions, plan, planners, uDoc, uSettings] = await Promise.all([
           getUserSessions(userName),

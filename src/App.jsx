@@ -7,23 +7,23 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { getSession, clearSession } from './utils/auth'
 
 import Stopwatch from './pages/Stopwatch'
+import DayPlanner from './pages/DayPlanner'
+import Plan from './pages/Plan'
+import History from './pages/History'
+import Profile from './pages/Profile'
+import Analytics from './pages/Analytics'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
 import { getWallpaper, getWallpaperConfig, subscribeToUserWallpaper } from './utils/wallpaperStorage'
 
-// Route-level code splitting: loads pages on-demand instead of blocking the initial app load
+// Secondary / public route-level code splitting
 const Welcome = lazy(() => import('./pages/Welcome'))
 const SignIn = lazy(() => import('./pages/SignIn'))
 const SignUp = lazy(() => import('./pages/SignUp'))
-const History = lazy(() => import('./pages/History'))
 const HistoryDetail = lazy(() => import('./pages/HistoryDetail'))
-const Plan = lazy(() => import('./pages/Plan'))
 const Syllabus = lazy(() => import('./pages/Syllabus'))
-const DayPlanner = lazy(() => import('./pages/DayPlanner'))
 const WatchPartner = lazy(() => import('./pages/WatchPartner'))
 const PartnerHistory = lazy(() => import('./pages/PartnerHistory'))
 const WatchSearch = lazy(() => import('./pages/WatchPartner').then(m => ({ default: m.WatchSearch })))
-const Analytics = lazy(() => import('./pages/Analytics'))
-const Profile = lazy(() => import('./pages/Profile'))
 
 function PageLoader() {
   return (

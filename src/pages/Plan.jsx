@@ -81,12 +81,55 @@ function getWeekDates(weekOffset = 0) {
 
 export default function Plan({ userName }) {
   const navigate = useNavigate()
-  const [plan, setPlan] = useState(DEFAULT_PLAN)
-  const [sessions, setSessions] = useState([])
-  const [dayPlanners, setDayPlanners] = useState({})
+  const [plan, setPlan] = useState(() => {
+    if (!userName) return DEFAULT_PLAN
+    try {
+      const u = userName.toLowerCase()
+      const raw = localStorage.getItem(`stt_user_doc_${u}`)
+      if (raw) {
+        const doc = JSON.parse(raw)
+        return { ...DEFAULT_PLAN, ...(doc.weeklyPlan || {}) }
+      }
+    } catch {}
+    return DEFAULT_PLAN
+  })
+  const [sessions, setSessions] = useState(() => {
+    if (!userName) return []
+    try {
+      const u = userName.toLowerCase()
+      const raw = localStorage.getItem(`stt_user_sessions_${u}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return []
+  })
+  const [dayPlanners, setDayPlanners] = useState(() => {
+    if (!userName) return {}
+    try {
+      const u = userName.toLowerCase()
+      const raw = localStorage.getItem(`stt_user_doc_${u}`)
+      if (raw) return JSON.parse(raw).dayPlanners || {}
+    } catch {}
+    return {}
+  })
   const [weekOffset, setWeekOffset] = useState(0)
-  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: '' })
-  const [loading, setLoading] = useState(true)
+  const [settings, setSettings] = useState(() => {
+    if (!userName) return { sundayRestDay: false, effectiveFrom: '' }
+    try {
+      const u = userName.toLowerCase()
+      const raw = localStorage.getItem(`stt_settings_${u}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return { sundayRestDay: false, effectiveFrom: '' }
+  })
+  const [loading, setLoading] = useState(() => {
+    if (!userName) return true
+    try {
+      const u = userName.toLowerCase()
+      return !localStorage.getItem(`stt_user_doc_${u}`)
+    } catch {
+      return true
+    }
+  })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -96,7 +139,6 @@ export default function Plan({ userName }) {
   )
 
   const load = useCallback(async () => {
-    setLoading(true)
     try {
       const [existingPlan, userSessions, allDayPlans, userSettings] = await Promise.all([
         getWeeklyPlan(userName),

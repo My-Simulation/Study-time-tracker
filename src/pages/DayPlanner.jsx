@@ -19,7 +19,7 @@ import {
   getDayPlanner, saveDayPlanner, calculateDayNumber,
   getSyllabus, getUserSessions, finalizeAndRolloverDay,
   getWeeklyPlan, syncTargetHours,
-  getUserSettings, isRestDay as checkIsRestDay,
+  getUserSettings, isRestDay as checkIsRestDay, getUserDoc,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatTargetHoursText, parseHoursInput, toLocalDateStr, getLocalWeekdayId } from '../utils/formatTime'
 import AITimeTableModal from '../components/AITimeTableModal'
@@ -72,20 +72,40 @@ export default function DayPlanner({ userName }) {
 
   const [currentDate, setCurrentDate] = useState(paramDate || todayString())
   const [dayNumber, setDayNumber] = useState(1)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedBadge, setSavedBadge] = useState(false)
 
+  // Pre-load from local cache to render instantly on page load / refresh
+  const cachedInitial = useMemo(() => {
+    try {
+      const u = (userName || '').toLowerCase()
+      const raw = localStorage.getItem(`stt_day_plan_${u}_${currentDate}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return null
+  }, [userName, currentDate])
+
   // Sheet fields
-  const [targetHours, setTargetHours] = useState(6)
-  const [isRestDay, setIsRestDay] = useState(false)
+  const [targetHours, setTargetHours] = useState(() => {
+    if (cachedInitial?.targetHours !== undefined) return Number(cachedInitial.targetHours)
+    return 6
+  })
+  const [isRestDay, setIsRestDay] = useState(() => Boolean(cachedInitial?.isRestDay))
   const [restType, setRestType] = useState('rest') // 'rest' | 'mock' | 'revision'
   const [customInputMode, setCustomInputMode] = useState(false)
   const [customInputVal, setCustomInputVal] = useState('')
   const [actualSeconds, setActualSeconds] = useState(0)
   const [targetSynced, setTargetSynced] = useState(false)
-  const [isLocked, setIsLocked] = useState(false)
-  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: '' })
+  const [isLocked, setIsLocked] = useState(() => Boolean(cachedInitial?.isLocked || cachedInitial?.isRestDay))
+  const [settings, setSettings] = useState(() => {
+    try {
+      const u = (userName || '').toLowerCase()
+      const raw = localStorage.getItem(`stt_settings_${u}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return { sundayRestDay: false, effectiveFrom: '' }
+  })
 
   // Memoized available target options (dynamically adds current targetHours if unique)
   const availableTargetOptions = React.useMemo(() => {
@@ -97,10 +117,10 @@ export default function DayPlanner({ userName }) {
     }
     return list
   }, [targetHours])
-  const [goals, setGoals] = useState(['', '', ''])
-  const [rows, setRows] = useState([])
-  const [notes, setNotes] = useState('')
-  const [progressRating, setProgressRating] = useState('good') // 'not_good' | 'average' | 'good' | 'excellent'
+  const [goals, setGoals] = useState(() => cachedInitial?.goals || ['', '', ''])
+  const [rows, setRows] = useState(() => cachedInitial?.rows || [])
+  const [notes, setNotes] = useState(() => cachedInitial?.notes || '')
+  const [progressRating, setProgressRating] = useState(() => cachedInitial?.progressRating || 'good')
   const [availableSubjects, setAvailableSubjects] = useState([])
 
   // Rollover modal
@@ -151,16 +171,21 @@ export default function DayPlanner({ userName }) {
 
   // Load data for currentDate
   const loadDay = useCallback(async (targetDate) => {
-    setLoading(true)
+    // Only show full loading spinner if we don't already have data from local cache
+    if (!cachedInitial && rows.length === 0) {
+      setLoading(true)
+    }
     try {
-      const [savedPlan, computedDay, syllabus, sessions, weeklyPlan, userSettings] = await Promise.all([
+      const [savedPlan, syllabus, sessions, weeklyPlan, userSettings, userDoc] = await Promise.all([
         getDayPlanner(userName, targetDate),
-        calculateDayNumber(userName, targetDate),
         getSyllabus(userName),
         getUserSessions(userName),
         getWeeklyPlan(userName),
         getUserSettings(userName),
+        getUserDoc(userName),
       ])
+
+      const computedDay = await calculateDayNumber(userName, targetDate, sessions, userDoc)
 
       setSettings(userSettings || { sundayRestDay: false, effectiveFrom: '' })
       setDayNumber(computedDay || 1)

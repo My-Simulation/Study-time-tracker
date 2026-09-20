@@ -35,17 +35,51 @@ export default function Analytics({ userName }) {
 
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [selectedMonth, setSelectedMonth] = useState(currentMonthNum - 1) // 0-indexed
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => {
+    if (!userName) return true
+    try {
+      return !localStorage.getItem(`stt_user_sessions_${userName.toLowerCase()}`)
+    } catch {
+      return true
+    }
+  })
 
-  const [allSessions, setAllSessions] = useState([])
-  const [weeklyPlan, setWeeklyPlan] = useState({})
-  const [dayPlanners, setDayPlanners] = useState({})
-  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: null })
+  const [allSessions, setAllSessions] = useState(() => {
+    if (!userName) return []
+    try {
+      const raw = localStorage.getItem(`stt_user_sessions_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return []
+  })
+  const [weeklyPlan, setWeeklyPlan] = useState(() => {
+    if (!userName) return {}
+    try {
+      const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw).weeklyPlan || {}
+    } catch {}
+    return {}
+  })
+  const [dayPlanners, setDayPlanners] = useState(() => {
+    if (!userName) return {}
+    try {
+      const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw).dayPlanners || {}
+    } catch {}
+    return {}
+  })
+  const [settings, setSettings] = useState(() => {
+    if (!userName) return { sundayRestDay: false, effectiveFrom: null }
+    try {
+      const raw = localStorage.getItem(`stt_settings_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return { sundayRestDay: false, effectiveFrom: null }
+  })
 
   // Load user data
   const fetchData = useCallback(async () => {
     if (!userName) return
-    setLoading(true)
     try {
       const [sessions, plan, planners, userSettings] = await Promise.all([
         getUserSessions(userName),

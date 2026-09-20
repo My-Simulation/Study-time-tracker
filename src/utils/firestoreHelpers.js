@@ -93,13 +93,36 @@ export async function loginUser(username, password) {
 }
 
 // ─────────────────────────────────────────────
-// HIGH-PERFORMANCE IN-MEMORY CACHING (Quota Protection)
+// HIGH-PERFORMANCE MULTI-TIER CACHING & DEDUPLICATION
 // ─────────────────────────────────────────────
-const CACHE_TTL_MS = 30000 // 30 seconds
+const CACHE_TTL_MS = 60000 // 60 seconds memory cache
 
 const memoryCache = {
   userDocs: new Map(), // key: lowerUsername -> { data, ts }
   userSessions: new Map(), // key: lowerUsername -> { data, ts }
+}
+
+const inFlightUserDoc = new Map() // key: lowerUsername -> Promise
+const inFlightSessions = new Map() // key: lowerUsername -> Promise
+
+/**
+ * Timeout helper to prevent network calls from hanging indefinitely
+ */
+function withTimeout(promise, ms = 3500, fallbackVal = null) {
+  let timerId
+  const timeoutPromise = new Promise((resolve) => {
+    timerId = setTimeout(() => resolve(fallbackVal), ms)
+  })
+  return Promise.race([
+    promise.then((res) => {
+      clearTimeout(timerId)
+      return res
+    }).catch((err) => {
+      clearTimeout(timerId)
+      throw err
+    }),
+    timeoutPromise,
+  ])
 }
 
 export function invalidateUserCache(userName) {
@@ -107,27 +130,87 @@ export function invalidateUserCache(userName) {
   const u = userName.toLowerCase()
   memoryCache.userDocs.delete(u)
   memoryCache.userSessions.delete(u)
+  inFlightUserDoc.delete(u)
+  inFlightSessions.delete(u)
 }
 
 /**
- * Gets a user document by username (cached for 30s to prevent quota burnout).
+ * Gets a user document by username with instant 0ms localStorage fallback,
+ * in-flight request deduplication, and background revalidation.
  */
 export async function getUserDoc(username, force = false) {
   if (!username) return null
   const uKey = username.toLowerCase()
-  const cached = memoryCache.userDocs.get(uKey)
-  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return cached.data
+
+  // 1. In-memory cache check (0ms)
+  const memCached = memoryCache.userDocs.get(uKey)
+  if (!force && memCached && Date.now() - memCached.ts < CACHE_TTL_MS) {
+    return memCached.data
   }
-  try {
-    const snap = await getDoc(doc(db, 'users', uKey))
-    const data = snap.exists() ? snap.data() : null
-    memoryCache.userDocs.set(uKey, { data, ts: Date.now() })
-    return data
-  } catch (err) {
-    if (cached) return cached.data
-    throw err
+
+  // 2. Persistent localStorage cache check (0ms on page refresh!)
+  let localData = null
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(`stt_user_doc_${uKey}`)
+      if (raw) {
+        localData = JSON.parse(raw)
+        memoryCache.userDocs.set(uKey, { data: localData, ts: Date.now() })
+      }
+    } catch {}
   }
+
+  // Stale-While-Revalidate: return cached data immediately, revalidate in background
+  if (localData && !force) {
+    if (!inFlightUserDoc.has(uKey)) {
+      const bgPromise = (async () => {
+        try {
+          const snap = await withTimeout(getDoc(doc(db, 'users', uKey)), 3500, null)
+          if (snap && snap.exists && snap.exists()) {
+            const freshData = snap.data()
+            memoryCache.userDocs.set(uKey, { data: freshData, ts: Date.now() })
+            try {
+              localStorage.setItem(`stt_user_doc_${uKey}`, JSON.stringify(freshData))
+            } catch {}
+          }
+        } catch {} finally {
+          inFlightUserDoc.delete(uKey)
+        }
+      })()
+      inFlightUserDoc.set(uKey, bgPromise)
+    }
+    return localData
+  }
+
+  // 3. Deduplicate in-flight requests (reuse ongoing network call)
+  if (inFlightUserDoc.has(uKey)) {
+    return inFlightUserDoc.get(uKey)
+  }
+
+  // 4. Fetch from Firestore with timeout guard
+  const fetchPromise = (async () => {
+    try {
+      const snap = await withTimeout(getDoc(doc(db, 'users', uKey)), 3500, null)
+      const data = snap && snap.exists ? (snap.exists() ? snap.data() : null) : localData
+      if (data) {
+        memoryCache.userDocs.set(uKey, { data, ts: Date.now() })
+        try {
+          localStorage.setItem(`stt_user_doc_${uKey}`, JSON.stringify(data))
+        } catch {}
+      }
+      return data
+    } catch (err) {
+      if (localData) return localData
+      if (memCached) return memCached.data
+      console.warn('getUserDoc error:', err)
+      return null
+    } finally {
+      inFlightUserDoc.delete(uKey)
+    }
+  })()
+
+  inFlightUserDoc.set(uKey, fetchPromise)
+  return fetchPromise
 }
 
 /**
@@ -495,26 +578,87 @@ export async function saveSession({
 }
 
 /**
- * Gets all user sessions (cached for 30s to prevent quota burnout).
+ * Gets all user sessions with instant 0ms localStorage fallback,
+ * in-flight request deduplication, and background revalidation.
  */
 export async function getUserSessions(userName, force = false) {
   if (!userName) return []
   const uKey = userName.toLowerCase()
-  const cached = memoryCache.userSessions.get(uKey)
-  if (!force && cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return cached.data
+
+  // 1. In-memory cache check (0ms)
+  const memCached = memoryCache.userSessions.get(uKey)
+  if (!force && memCached && Date.now() - memCached.ts < CACHE_TTL_MS) {
+    return memCached.data
   }
-  try {
-    const q = query(collection(db, 'sessions'), where('userName', '==', uKey))
-    const snap = await getDocs(q)
-    const sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    const sorted = sessions.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
-    memoryCache.userSessions.set(uKey, { data: sorted, ts: Date.now() })
-    return sorted
-  } catch (err) {
-    if (cached) return cached.data
-    throw err
+
+  // 2. Persistent localStorage cache check (0ms on page refresh!)
+  let localSessions = null
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(`stt_user_sessions_${uKey}`)
+      if (raw) {
+        localSessions = JSON.parse(raw)
+        memoryCache.userSessions.set(uKey, { data: localSessions, ts: Date.now() })
+      }
+    } catch {}
   }
+
+  // Stale-While-Revalidate: return cached sessions immediately, revalidate in background
+  if (localSessions && !force) {
+    if (!inFlightSessions.has(uKey)) {
+      const bgPromise = (async () => {
+        try {
+          const q = query(collection(db, 'sessions'), where('userName', '==', uKey))
+          const snap = await withTimeout(getDocs(q), 4500, null)
+          if (snap && snap.docs) {
+            const sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+            const sorted = sessions.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
+            memoryCache.userSessions.set(uKey, { data: sorted, ts: Date.now() })
+            try {
+              localStorage.setItem(`stt_user_sessions_${uKey}`, JSON.stringify(sorted))
+            } catch {}
+          }
+        } catch {} finally {
+          inFlightSessions.delete(uKey)
+        }
+      })()
+      inFlightSessions.set(uKey, bgPromise)
+    }
+    return localSessions
+  }
+
+  // 3. Deduplicate in-flight requests
+  if (inFlightSessions.has(uKey)) {
+    return inFlightSessions.get(uKey)
+  }
+
+  // 4. Fetch from Firestore with timeout guard
+  const fetchPromise = (async () => {
+    try {
+      const q = query(collection(db, 'sessions'), where('userName', '==', uKey))
+      const snap = await withTimeout(getDocs(q), 4500, null)
+      let sorted = localSessions || []
+      if (snap && snap.docs) {
+        const sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        sorted = sessions.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
+      }
+      memoryCache.userSessions.set(uKey, { data: sorted, ts: Date.now() })
+      try {
+        localStorage.setItem(`stt_user_sessions_${uKey}`, JSON.stringify(sorted))
+      } catch {}
+      return sorted
+    } catch (err) {
+      if (localSessions) return localSessions
+      if (memCached) return memCached.data
+      console.warn('getUserSessions error:', err)
+      return []
+    } finally {
+      inFlightSessions.delete(uKey)
+    }
+  })()
+
+  inFlightSessions.set(uKey, fetchPromise)
+  return fetchPromise
 }
 
 /**

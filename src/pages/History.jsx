@@ -20,19 +20,60 @@ import { clearSession } from '../utils/auth'
 
 export default function History({ userName }) {
   const navigate = useNavigate()
-  const [dateGroups, setDateGroups] = useState([])
-  const [rawSessions, setRawSessions] = useState([])
-  const [weeklyPlan, setWeeklyPlan] = useState({})
-  const [dayPlanners, setDayPlanners] = useState({})
-  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: '' })
-  const [loading, setLoading] = useState(true)
+  const [rawSessions, setRawSessions] = useState(() => {
+    if (!userName) return []
+    try {
+      const raw = localStorage.getItem(`stt_user_sessions_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return []
+  })
+  const [dateGroups, setDateGroups] = useState(() => {
+    if (!userName) return []
+    try {
+      const raw = localStorage.getItem(`stt_user_sessions_${userName.toLowerCase()}`)
+      if (raw) return groupSessionsByDate(JSON.parse(raw))
+    } catch {}
+    return []
+  })
+  const [weeklyPlan, setWeeklyPlan] = useState(() => {
+    if (!userName) return {}
+    try {
+      const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw).weeklyPlan || {}
+    } catch {}
+    return {}
+  })
+  const [dayPlanners, setDayPlanners] = useState(() => {
+    if (!userName) return {}
+    try {
+      const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw).dayPlanners || {}
+    } catch {}
+    return {}
+  })
+  const [settings, setSettings] = useState(() => {
+    if (!userName) return { sundayRestDay: false, effectiveFrom: '' }
+    try {
+      const raw = localStorage.getItem(`stt_settings_${userName.toLowerCase()}`)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return { sundayRestDay: false, effectiveFrom: '' }
+  })
+  const [loading, setLoading] = useState(() => {
+    if (!userName) return true
+    try {
+      return !localStorage.getItem(`stt_user_sessions_${userName.toLowerCase()}`)
+    } catch {
+      return true
+    }
+  })
   const [error, setError] = useState(null)
   const [partnerInput, setPartnerInput] = useState('')
   const [showRevisionAlerts, setShowRevisionAlerts] = useState(true)
   const [showManualModal, setShowManualModal] = useState(false)
 
   const load = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
       const [sessions, plan, dPlanners, userSettings] = await Promise.all([
