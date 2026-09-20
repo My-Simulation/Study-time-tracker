@@ -126,7 +126,7 @@ export default function History({ userName }) {
     navigate('/welcome', { replace: true })
   }
 
-  const { currentStreak, longestStreak } = calculateStreaks(dateGroups, weeklyPlan, settings)
+  const { currentStreak, longestStreak } = calculateStreaks(dateGroups, settings || weeklyPlan)
   const totalSeconds = dateGroups.reduce((s, g) => s + g.totalSeconds, 0)
   const bestDaySeconds = dateGroups.length ? Math.max(...dateGroups.map((g) => g.totalSeconds)) : 0
 

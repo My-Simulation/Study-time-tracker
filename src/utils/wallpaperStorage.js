@@ -242,13 +242,23 @@ export function subscribeToUserWallpaper(userName, callback) {
         }
       }
 
+function areWallpaperConfigsEqual(a, b) {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  return a.fit === b.fit && Math.abs((Number(a.dim) || 0.45) - (Number(b.dim) || 0.45)) < 0.001 && Boolean(a.blur) === Boolean(b.blur)
+}
+
       // Sync configuration (dim, blur, fit)
       if (data.wallpaperConfig !== undefined) {
         const cloudCfg = data.wallpaperConfig;
         if (cloudCfg) {
-          const mergedStr = JSON.stringify({ ...DEFAULT_CONFIG, ...cloudCfg });
-          if (mergedStr !== currentLocalConfigRaw) {
-            localStorage.setItem(`${CONFIG_KEY_PREFIX}${uKey}`, mergedStr);
+          let localParsed = null;
+          try {
+            if (currentLocalConfigRaw) localParsed = JSON.parse(currentLocalConfigRaw);
+          } catch {}
+          const merged = { ...DEFAULT_CONFIG, ...cloudCfg };
+          if (!areWallpaperConfigsEqual(merged, localParsed)) {
+            localStorage.setItem(`${CONFIG_KEY_PREFIX}${uKey}`, JSON.stringify(merged));
             changed = true;
           }
         } else if (currentLocalConfigRaw) {

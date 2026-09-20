@@ -404,10 +404,11 @@ export async function saveUserSettings(userName, newSettings) {
  * Never checks "is it Sunday" independently.
  * Uses getLocalWeekdayId to avoid raw array indexing and timezone skews.
  */
-export function isRestDay(dateInput, settings) {
+export function isRestDay(dateInput, rawSettings) {
+  const settings = normalizeSettings(rawSettings)
   if (!settings || !settings.sundayRestDay || !settings.effectiveFrom) return false
   const dateStr = toLocalDateStr(dateInput)
-  if (dateStr < settings.effectiveFrom) return false
+  if (!dateStr || dateStr < settings.effectiveFrom) return false
   return getLocalWeekdayId(dateInput) === 'Sun'
 }
 
@@ -687,7 +688,12 @@ export function groupSessionsByDate(sessions) {
 // ─────────────────────────────────────────────
 
 function addDaysToDateStr(dateStr, days) {
-  const [y, m, d] = dateStr.split('-').map(Number)
+  if (!dateStr || typeof dateStr !== 'string') return todayString()
+  const parts = dateStr.trim().split('-').map(Number)
+  if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+    return todayString()
+  }
+  const [y, m, d] = parts
   const date = new Date(y, m - 1, d)
   date.setDate(date.getDate() + days)
   const ny = date.getFullYear()
@@ -728,19 +734,51 @@ function normalizeSettings(settingsOrPlan) {
  *
  * streak = number of consecutive streak days ending today (or yesterday, if today's normal day is still in progress).
  */
-export function calculateStreaks(dateGroups, settingsOrPlan = null, todayDateStr = null) {
-  if (!dateGroups || !dateGroups.length) return { currentStreak: 0, longestStreak: 0 }
-  const settings = normalizeSettings(settingsOrPlan)
-  const todayStr = todayDateStr || todayString()
+export function calculateStreaks(dateGroups, arg2 = null, arg3 = null, arg4 = null) {
+  if (!dateGroups || !Array.isArray(dateGroups) || dateGroups.length === 0) {
+    return { currentStreak: 0, longestStreak: 0 }
+  }
+
+  // Flexibly handle various caller signatures:
+  // - calculateStreaks(groups, settings)
+  // - calculateStreaks(groups, weeklyPlan, settings)
+  // - calculateStreaks(groups, settings, todayDateStr)
+  // - calculateStreaks(groups, weeklyPlan, settings, todayDateStr)
+  let rawSettings = null
+  let rawDateStr = null
+
+  const extraArgs = [arg2, arg3, arg4]
+  for (const arg of extraArgs) {
+    if (!arg) continue
+    if (typeof arg === 'string') {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(arg.trim())) {
+        rawDateStr = arg.trim()
+      }
+    } else if (typeof arg === 'object') {
+      if (arg.sundayRestDay !== undefined) {
+        rawSettings = arg
+      } else if (!rawSettings) {
+        rawSettings = arg
+      }
+    }
+  }
+
+  const settings = normalizeSettings(rawSettings)
+  const todayStr = rawDateStr || todayString()
 
   // 1. Build set of dates with positive study time
   const studiedDates = new Set()
   for (const g of dateGroups) {
     if (!g) continue
     const dStr = typeof g === 'string' ? g : g.date
-    const totalSec = typeof g.totalSeconds === 'number' ? g.totalSeconds : (g.sessions ? g.sessions.reduce((s, x) => s + (x.totalSeconds || 0), 0) : 1)
+    const totalSec = typeof g.totalSeconds === 'number'
+      ? g.totalSeconds
+      : (g.sessions ? g.sessions.reduce((s, x) => s + (x.totalSeconds || 0), 0) : 1)
     if (dStr && totalSec > 0) {
-      studiedDates.add(toLocalDateStr(dStr))
+      const parsed = toLocalDateStr(dStr)
+      if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+        studiedDates.add(parsed)
+      }
     }
   }
 
@@ -754,7 +792,8 @@ export function calculateStreaks(dateGroups, settingsOrPlan = null, todayDateStr
   const streakDaysSet = new Set()
 
   let curDate = minDate
-  while (curDate <= todayStr) {
+  let maxLoop1 = 3650 // Max 10 years safety break to guarantee NO infinite loop ever
+  while (curDate <= todayStr && maxLoop1-- > 0) {
     const hasStudy = studiedDates.has(curDate)
     const prevDate = addDaysToDateStr(curDate, -1)
     const prevIsStreak = streakDaysSet.has(prevDate)
@@ -764,7 +803,9 @@ export function calculateStreaks(dateGroups, settingsOrPlan = null, todayDateStr
     if (isStreak) {
       streakDaysSet.add(curDate)
     }
-    curDate = addDaysToDateStr(curDate, 1)
+    const nextDate = addDaysToDateStr(curDate, 1)
+    if (nextDate <= curDate) break
+    curDate = nextDate
   }
 
   // 3. Compute Current Streak
@@ -772,18 +813,24 @@ export function calculateStreaks(dateGroups, settingsOrPlan = null, todayDateStr
   if (streakDaysSet.has(todayStr)) {
     // Today is an active streak day (studied or rest day with Sat studied)
     let c = todayStr
-    while (streakDaysSet.has(c)) {
+    let maxStreakLoop = 3650
+    while (streakDaysSet.has(c) && maxStreakLoop-- > 0) {
       currentStreak++
-      c = addDaysToDateStr(c, -1)
+      const prevC = addDaysToDateStr(c, -1)
+      if (prevC >= c) break
+      c = prevC
     }
   } else if (!isRestDay(todayStr, settings)) {
     // Today is an ordinary study day still in progress (not ended/missed yet)
     const yesterday = addDaysToDateStr(todayStr, -1)
     if (streakDaysSet.has(yesterday)) {
       let c = yesterday
-      while (streakDaysSet.has(c)) {
+      let maxStreakLoop = 3650
+      while (streakDaysSet.has(c) && maxStreakLoop-- > 0) {
         currentStreak++
-        c = addDaysToDateStr(c, -1)
+        const prevC = addDaysToDateStr(c, -1)
+        if (prevC >= c) break
+        c = prevC
       }
     }
   }
@@ -792,14 +839,17 @@ export function calculateStreaks(dateGroups, settingsOrPlan = null, todayDateStr
   let longestStreak = 0
   let runningStreak = 0
   let walkDate = minDate
-  while (walkDate <= todayStr) {
+  let maxLoop2 = 3650
+  while (walkDate <= todayStr && maxLoop2-- > 0) {
     if (streakDaysSet.has(walkDate)) {
       runningStreak++
       if (runningStreak > longestStreak) longestStreak = runningStreak
     } else {
       runningStreak = 0
     }
-    walkDate = addDaysToDateStr(walkDate, 1)
+    const nextWalk = addDaysToDateStr(walkDate, 1)
+    if (nextWalk <= walkDate) break
+    walkDate = nextWalk
   }
   longestStreak = Math.max(longestStreak, currentStreak)
 

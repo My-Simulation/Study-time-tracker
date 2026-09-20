@@ -239,7 +239,7 @@ export default function Stopwatch({ userName }) {
 
       if (allUserSessions && allUserSessions.length > 0) {
         const groups = groupSessionsByDate(allUserSessions)
-        const st = calculateStreaks(groups, plan, userSettings)
+        const st = calculateStreaks(groups, userSettings || plan)
         setStreakCount(st.currentStreak || 0)
       }
 
@@ -290,6 +290,15 @@ export default function Stopwatch({ userName }) {
   }, [loadData])
 
   // ── Saturday midnight to Sunday Rest rollover check ──
+  const stopRef = useRef(stop)
+  stopRef.current = stop
+  const activeSubjectRef = useRef(activeSubject)
+  activeSubjectRef.current = activeSubject
+  const activeTopicRef = useRef(activeTopic)
+  activeTopicRef.current = activeTopic
+  const loadDataRef = useRef(loadData)
+  loadDataRef.current = loadData
+
   useEffect(() => {
     if (!userName) return
     const checkMidnightRollover = async () => {
@@ -311,23 +320,23 @@ export default function Stopwatch({ userName }) {
             const satElapsedMs = (saved.baseElapsed || 0) + Math.max(0, satMidnightEpoch - saved.startTimestamp)
             const satSec = Math.max(1, Math.floor(satElapsedMs / 1000))
 
-            stop()
-            reset()
+            stopRef.current()
+            resetRef.current()
 
             await saveSession({
               userName,
               totalSeconds: satSec,
               date: startDate,
-              subject: activeSubject || 'Focus Study',
-              topic: activeTopic || 'Saturday Session',
+              subject: activeSubjectRef.current || 'Focus Study',
+              topic: activeTopicRef.current || 'Saturday Session',
               notes: 'Auto-saved at midnight before Sunday Rest Day 🛋️',
             })
 
-            loadData()
+            loadDataRef.current()
           } else {
             // Started today on Rest Day -> stop and reset immediately
-            stop()
-            reset()
+            stopRef.current()
+            resetRef.current()
           }
         }
       } catch (err) {
@@ -338,7 +347,7 @@ export default function Stopwatch({ userName }) {
     checkMidnightRollover()
     const timer = setInterval(checkMidnightRollover, 60000)
     return () => clearInterval(timer)
-  }, [userName, stop, reset, activeSubject, activeTopic, loadData])
+  }, [userName])
 
   // Real-time synchronization listeners for study plan and sessions
   useEffect(() => {
