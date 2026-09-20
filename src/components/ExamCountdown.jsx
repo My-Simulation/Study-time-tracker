@@ -142,12 +142,18 @@ export default function ExamCountdown({ userName, totalStudiedSeconds = 0 }) {
 
       {/* Edit Modal / Inline Form */}
       {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="card w-full max-w-sm p-5 flex flex-col gap-4" style={{ animation: 'scaleIn 150ms ease-out' }}>
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setIsEditing(false)}
+        >
+          <div
+            className="card w-full max-w-sm p-5 flex flex-col gap-4 animate-scaleIn rounded-b-none sm:rounded-2xl max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white">🎯 Set Exam Target & Countdown</h3>
-              <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-gray-300 text-lg">
-                ×
+              <button onClick={() => setIsEditing(false)} className="modal-close-btn" aria-label="Close">
+                ✕
               </button>
             </div>
 
@@ -160,6 +166,7 @@ export default function ExamCountdown({ userName, totalStudiedSeconds = 0 }) {
                   onChange={(e) => setExamName(e.target.value)}
                   placeholder="e.g. JEE Advanced, Finals, UPSC"
                   required
+                  autoFocus
                   className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-sm outline-none focus:border-purple-500"
                 />
               </div>
@@ -180,7 +187,7 @@ export default function ExamCountdown({ userName, totalStudiedSeconds = 0 }) {
                 <input
                   type="number"
                   min="1"
-                  max="1000"
+                  max="10000"
                   value={targetHours}
                   onChange={(e) => setTargetHours(e.target.value)}
                   required
@@ -212,3 +219,4 @@ export default function ExamCountdown({ userName, totalStudiedSeconds = 0 }) {
     </div>
   )
 }
+

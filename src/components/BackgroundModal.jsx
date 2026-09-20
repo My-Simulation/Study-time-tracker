@@ -66,8 +66,14 @@ export default function BackgroundModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[#121217] border border-[#232330] rounded-3xl w-full max-w-xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden text-white">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#121217] border border-[#232330] rounded-t-3xl sm:rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-white animate-scaleIn"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#20202d] flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -78,7 +84,7 @@ export default function BackgroundModal({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#1e1e28] hover:bg-[#2c2c3d] text-gray-400 hover:text-white flex items-center justify-center transition-colors text-sm"
+            className="modal-close-btn"
             title="Close"
           >
             ✕

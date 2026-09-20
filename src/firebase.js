@@ -6,7 +6,11 @@
 // =============================================================
 
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 
 const firebaseConfig = {
@@ -20,8 +24,15 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
-/** Firestore database instance */
-export const db = getFirestore(app)
+/**
+ * Firestore with offline persistence (IndexedDB) + multi-tab sync.
+ * Falls back to memory cache if persistence is unavailable (e.g. private mode).
+ */
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+})
 
 /** Firebase Auth instance */
 export const auth = getAuth(app)

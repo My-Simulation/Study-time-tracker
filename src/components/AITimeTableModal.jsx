@@ -70,10 +70,13 @@ export default function AITimeTableModal({ isOpen, onClose, userContext, onApply
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-2xl bg-[#131316] border border-[#2a2a35] rounded-3xl p-5 sm:p-7 shadow-2xl flex flex-col gap-5 max-h-[92vh] overflow-y-auto"
-        style={{ animation: 'scaleIn 200ms ease-out' }}
+        className="w-full max-w-2xl bg-[#131316] border border-[#2a2a35] rounded-t-3xl sm:rounded-3xl p-5 sm:p-7 shadow-2xl flex flex-col gap-5 max-h-[92vh] overflow-y-auto animate-scaleIn"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-[#24242e] pb-4">
@@ -101,12 +104,14 @@ export default function AITimeTableModal({ isOpen, onClose, userContext, onApply
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-[#1e1e24] hover:bg-[#2a2a33] text-gray-400 hover:text-white flex items-center justify-center text-sm transition-colors"
+              className="modal-close-btn"
+              aria-label="Close"
             >
               ✕
             </button>
           </div>
         </div>
+
 
         {/* Step 1: Input Form */}
         {step === 1 && (
