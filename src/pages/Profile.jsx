@@ -288,8 +288,12 @@ export default function Profile({ userName }) {
 
   const handleToggleSundayRest = async (newVal) => {
     const updated = {
+      ...settings,
       sundayRestDay: newVal,
-      effectiveFrom: newVal ? todayString() : null,
+      // Preserve effectiveFrom when turning OFF — never blank it, so past window is known
+      effectiveFrom: newVal ? (settings?.effectiveFrom || todayString()) : (settings?.effectiveFrom || null),
+      // Record the moment we turned OFF so [effectiveFrom, disabledAt) Sundays stay shielded
+      disabledAt: newVal ? null : todayString(),
     }
     setSettings(updated)
     setSettingsSaved(true)

@@ -371,11 +371,17 @@ export async function saveUserSettings(userName, newSettings) {
   const uKey = userName.toLowerCase()
   invalidateUserCache(uKey)
   const isEnabled = Boolean(newSettings?.sundayRestDay)
+  const existingFrom = newSettings?.effectiveFrom || null
+
   const settings = {
     sundayRestDay: isEnabled,
-    effectiveFrom: isEnabled
-      ? (newSettings?.effectiveFrom || todayString())
-      : null,
+    // When ON: keep effectiveFrom (or set today). When OFF: clear it but set disabledAt so past Sundays stay shielded.
+    effectiveFrom: isEnabled ? (existingFrom || todayString()) : null,
+    disabledAt: isEnabled ? null : (newSettings?.disabledAt || todayString()),
+  }
+  // Preserve historicalPeriods array for multi-cycle history
+  if (Array.isArray(newSettings?.historicalPeriods)) {
+    settings.historicalPeriods = newSettings.historicalPeriods
   }
   try {
     localStorage.setItem(`stt_settings_${uKey}`, JSON.stringify(settings))
@@ -406,10 +412,26 @@ export async function saveUserSettings(userName, newSettings) {
  */
 export function isRestDay(dateInput, rawSettings) {
   const settings = normalizeSettings(rawSettings)
-  if (!settings || !settings.sundayRestDay || !settings.effectiveFrom) return false
+  if (!settings) return false
   const dateStr = toLocalDateStr(dateInput)
-  if (!dateStr || dateStr < settings.effectiveFrom) return false
-  return getLocalWeekdayId(dateInput) === 'Sun'
+  if (!dateStr) return false
+  const isSunday = getLocalWeekdayId(dateInput) === 'Sun'
+  if (!isSunday) return false
+
+  // Case 1: toggle is currently ON — date must be >= effectiveFrom (and before disabledAt, if set)
+  if (settings.sundayRestDay && settings.effectiveFrom) {
+    if (dateStr < settings.effectiveFrom) return false
+    if (settings.disabledAt && dateStr >= settings.disabledAt) return false
+    return true
+  }
+
+  // Case 2: toggle is currently OFF, but this date was inside a historical active period.
+  // Protect the past window [effectiveFrom, disabledAt) so streaks don't break retroactively.
+  if (!settings.sundayRestDay && settings.effectiveFrom && settings.disabledAt) {
+    return dateStr >= settings.effectiveFrom && dateStr < settings.disabledAt
+  }
+
+  return false
 }
 
 // ─────────────────────────────────────────────
@@ -703,26 +725,29 @@ function addDaysToDateStr(dateStr, days) {
 }
 
 function normalizeSettings(settingsOrPlan) {
-  if (!settingsOrPlan) return { sundayRestDay: false, effectiveFrom: null }
+  if (!settingsOrPlan) return { sundayRestDay: false, effectiveFrom: null, disabledAt: null }
   if (typeof settingsOrPlan.sundayRestDay === 'boolean') {
     return {
       sundayRestDay: settingsOrPlan.sundayRestDay,
       effectiveFrom: settingsOrPlan.effectiveFrom || (settingsOrPlan.sundayRestDay ? '1970-01-01' : null),
+      disabledAt: settingsOrPlan.disabledAt || null,
     }
   }
   if (settingsOrPlan.settings && typeof settingsOrPlan.settings.sundayRestDay === 'boolean') {
     return {
       sundayRestDay: settingsOrPlan.settings.sundayRestDay,
       effectiveFrom: settingsOrPlan.settings.effectiveFrom || (settingsOrPlan.settings.sundayRestDay ? '1970-01-01' : null),
+      disabledAt: settingsOrPlan.settings.disabledAt || null,
     }
   }
   if (typeof settingsOrPlan.sundayRest === 'boolean') {
     return {
       sundayRestDay: settingsOrPlan.sundayRest,
       effectiveFrom: settingsOrPlan.sundayRest ? '1970-01-01' : null,
+      disabledAt: null,
     }
   }
-  return { sundayRestDay: false, effectiveFrom: null }
+  return { sundayRestDay: false, effectiveFrom: null, disabledAt: null }
 }
 
 /**

@@ -237,7 +237,13 @@ export default function Plan({ userName }) {
     const updatedSettings = {
       ...settings,
       sundayRestDay: newVal,
-      effectiveFrom: newVal ? (settings?.effectiveFrom || todayStr) : '',
+      // Always keep effectiveFrom so we know when the period started
+      effectiveFrom: newVal
+        ? (settings?.effectiveFrom || todayStr)
+        : (settings?.effectiveFrom || null),
+      // When turning OFF, record when — so past Sundays in [effectiveFrom, disabledAt) stay shielded
+      // When turning ON, clear any old disabledAt
+      disabledAt: newVal ? null : todayStr,
     }
     const updatedPlan = {
       ...plan,
