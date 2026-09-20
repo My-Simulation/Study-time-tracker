@@ -32,7 +32,7 @@ import {
   getUserDoc,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
-import { clearSession, getSession } from '../utils/auth'
+import { clearSession, getSession, updateCurrentSession } from '../utils/auth'
 import { backgroundTimer } from '../utils/backgroundTimer'
 
 export default function Stopwatch({ userName }) {
@@ -60,6 +60,14 @@ export default function Stopwatch({ userName }) {
   const [wallpaper, setWallpaper] = useState(() => getWallpaper(userName))
   const [wallpaperConfig, setWallpaperConfig] = useState(() => getWallpaperConfig(userName))
   const [streakCount, setStreakCount] = useState(0)
+  const [userProfile, setUserProfile] = useState(() => {
+    const s = getSession()
+    return {
+      photoUrl: s?.photoUrl || '',
+      avatarColor: s?.avatarColor || '#7c3aed',
+      displayName: s?.displayName || userName,
+    }
+  })
   const pomoAlertFiredRef = useRef(false)
 
   // Sync wallpaper when userName switches or when updated locally/cloud
@@ -246,6 +254,27 @@ export default function Stopwatch({ userName }) {
       if (Array.isArray(syl) && syl.length > 0) {
         setSyllabus(syl)
       }
+
+      // Sync fresh profile attributes (photoUrl, avatarColor) from cloud
+      if (userDoc) {
+        const freshPhoto = userDoc.photoUrl || ''
+        const freshColor = userDoc.avatarColor || '#7c3aed'
+        const freshName = userDoc.displayName || userName
+        setUserProfile((prev) => {
+          if (prev.photoUrl !== freshPhoto || prev.avatarColor !== freshColor || prev.displayName !== freshName) {
+            return { photoUrl: freshPhoto, avatarColor: freshColor, displayName: freshName }
+          }
+          return prev
+        })
+        const curSession = getSession()
+        if (curSession && (curSession.photoUrl !== freshPhoto || curSession.avatarColor !== freshColor || curSession.displayName !== freshName)) {
+          updateCurrentSession({
+            photoUrl: freshPhoto,
+            avatarColor: freshColor,
+            displayName: freshName,
+          })
+        }
+      }
     } catch (err) {
       console.warn('Could not load stopwatch extra data:', err)
     }
@@ -274,8 +303,28 @@ export default function Stopwatch({ userName }) {
     if (location.state?.topic) setActiveTopic(location.state.topic)
   }, [location.state])
 
+  // Real-time listener for profile changes across tabs/modals
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      const s = getSession()
+      if (s) {
+        setUserProfile({
+          photoUrl: s.photoUrl || '',
+          avatarColor: s.avatarColor || '#7c3aed',
+          displayName: s.displayName || userName,
+        })
+      }
+    }
+    window.addEventListener('profile_updated', handleProfileUpdate)
+    window.addEventListener('storage', handleProfileUpdate)
+    return () => {
+      window.removeEventListener('profile_updated', handleProfileUpdate)
+      window.removeEventListener('storage', handleProfileUpdate)
+    }
+  }, [userName])
+
   const session = getSession()
-  const avatarColor = session?.avatarColor || '#7c3aed'
+  const avatarColor = userProfile.avatarColor || session?.avatarColor || '#7c3aed'
 
   const handleSwitchUser = () => {
     clearSession()
@@ -383,7 +432,7 @@ export default function Stopwatch({ userName }) {
       <div className="relative z-40 flex items-center justify-between px-3 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-0 max-w-7xl mx-auto w-full">
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
           {/* Profile pill */}
-          <ProfilePill userName={userName} avatarColor={avatarColor} photoUrl={session?.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
+          <ProfilePill userName={userName} avatarColor={userProfile.avatarColor || avatarColor} photoUrl={userProfile.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
           {!isStandalone && (
             <button
               onClick={handleInstallApp}
@@ -840,7 +889,7 @@ export default function Stopwatch({ userName }) {
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}
         userName={userName}
-        photoUrl={session?.photoUrl}
+        photoUrl={userProfile.photoUrl}
         todayStudiedSec={todayStudied + totalSeconds}
         dayNum={dayNum}
         streakCount={streakCount}
@@ -1016,7 +1065,12 @@ export default function Stopwatch({ userName }) {
 function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpaper }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [imgError, setImgError] = useState(false)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    setImgError(false)
+  }, [photoUrl])
 
   const shareLink = `${window.location.origin}/watch/${userName}`
   const copyLink = () => {
@@ -1035,10 +1089,15 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
           className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden"
           style={{ background: avatarColor }}
         >
-          {photoUrl ? (
-            <img src={photoUrl} alt={userName} className="w-full h-full object-cover" />
+          {photoUrl && !imgError ? (
+            <img
+              src={photoUrl}
+              alt={userName}
+              onError={() => setImgError(true)}
+              className="w-full h-full object-cover"
+            />
           ) : (
-            userName[0].toUpperCase()
+            (userName || 'U')[0].toUpperCase()
           )}
         </div>
         <span className="text-xs sm:text-sm text-gray-300 font-medium max-w-[65px] sm:max-w-[100px] truncate">@{userName}</span>
@@ -1058,10 +1117,15 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
                 className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0 overflow-hidden shadow-inner"
                 style={{ background: avatarColor }}
               >
-                {photoUrl ? (
-                  <img src={photoUrl} alt={userName} className="w-full h-full object-cover" />
+                {photoUrl && !imgError ? (
+                  <img
+                    src={photoUrl}
+                    alt={userName}
+                    onError={() => setImgError(true)}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
-                  userName[0].toUpperCase()
+                  (userName || 'U')[0].toUpperCase()
                 )}
               </div>
               <div className="min-w-0 flex-1">

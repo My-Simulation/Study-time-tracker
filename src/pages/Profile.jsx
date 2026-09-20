@@ -22,7 +22,7 @@ import {
   searchUsers,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
-import { clearSession } from '../utils/auth'
+import { clearSession, updateCurrentSession } from '../utils/auth'
 import EditProfileModal from '../components/EditProfileModal'
 
 export default function Profile({ userName }) {
@@ -182,6 +182,13 @@ export default function Profile({ userName }) {
           setWeeklyPlan(plan || {})
           setDayPlanners(planners || {})
           setUserData(uDoc || {})
+          if (uDoc) {
+            updateCurrentSession({
+              photoUrl: uDoc.photoUrl || '',
+              avatarColor: uDoc.avatarColor || '#7c3aed',
+              displayName: uDoc.displayName || userName,
+            })
+          }
         }
       } catch (err) {
         console.error('Error loading profile data:', err)

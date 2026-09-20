@@ -67,6 +67,7 @@ export function updateCurrentSession(fields) {
     }
     localStorage.setItem(SESSION_KEY, JSON.stringify(updated))
     window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new CustomEvent('profile_updated', { detail: updated }))
     return updated
   } catch {
     return null
