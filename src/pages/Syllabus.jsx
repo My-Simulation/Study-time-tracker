@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSyllabus, saveSyllabus } from '../utils/firestoreHelpers'
+import { getSyllabus, saveSyllabus, subscribeToSyllabus } from '../utils/firestoreHelpers'
 
 const STATUS_CONFIG = {
   not_started: {
@@ -43,14 +43,31 @@ export default function Syllabus({ userName }) {
   useEffect(() => {
     if (!userName) return
     setLoading(true)
-    getSyllabus(userName)
-      .then((data) => {
-        if (data && Array.isArray(data)) {
-          setSubjects(data)
-          if (data.length > 0) setActiveSubjectId(data[0].id)
-        }
-      })
-      .finally(() => setLoading(false))
+
+    // Real-time Firestore subscription across all devices
+    const unsubscribe = subscribeToSyllabus(userName, (data) => {
+      if (data && Array.isArray(data)) {
+        setSubjects(data)
+        setActiveSubjectId((prev) => {
+          if (prev && data.some((s) => s.id === prev)) return prev
+          return data.length > 0 ? data[0].id : null
+        })
+      }
+      setLoading(false)
+    })
+
+    // Local custom event listener for immediate same-device reactivity
+    const handleLocalUpdate = (e) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setSubjects(e.detail)
+      }
+    }
+    window.addEventListener('study_syllabus_updated', handleLocalUpdate)
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener('study_syllabus_updated', handleLocalUpdate)
+    }
   }, [userName])
 
   const persist = (updated) => {

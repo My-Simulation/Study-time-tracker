@@ -533,27 +533,78 @@ export async function saveSyllabus(userName, syllabus) {
     localStorage.setItem(`stt_syllabus_${uKey}`, JSON.stringify(syllabus))
   } catch {}
   try {
+    window.dispatchEvent(new CustomEvent('study_syllabus_updated', { detail: syllabus }))
+  } catch {}
+  try {
     await updateDoc(doc(db, 'users', uKey), { syllabus })
   } catch (err) {
     console.warn('Failed to save syllabus to Firestore:', err)
   }
 }
 
-export async function getSyllabus(userName) {
+export async function getSyllabus(userName, force = false) {
   if (!userName) return []
   const uKey = userName.toLowerCase()
+  // 1. Fetch fresh from Firestore / memoryCache (respects 30s TTL unless force=true)
+  try {
+    const docData = await getUserDoc(uKey, force)
+    if (docData && docData.syllabus !== undefined) {
+      const syl = Array.isArray(docData.syllabus) ? docData.syllabus : []
+      try {
+        localStorage.setItem(`stt_syllabus_${uKey}`, JSON.stringify(syl))
+      } catch {}
+      return syl
+    }
+  } catch {}
+  // 2. Fallback to localStorage if offline/network failure
   try {
     const cached = localStorage.getItem(`stt_syllabus_${uKey}`)
     if (cached) return JSON.parse(cached)
   } catch {}
+  return []
+}
+
+/**
+ * Real-time subscription to syllabus changes across all devices.
+ * Fires instantly with local cache, then live updates whenever changed on any device.
+ */
+export function subscribeToSyllabus(userName, onUpdate) {
+  if (!userName || typeof onUpdate !== 'function') return () => {}
+  const uKey = userName.toLowerCase()
+  const userRef = doc(db, 'users', uKey)
+
+  // 1. Immediate local cache emission for 0ms initial render
   try {
-    const docData = await getUserDoc(uKey)
-    if (docData?.syllabus) {
-      localStorage.setItem(`stt_syllabus_${uKey}`, JSON.stringify(docData.syllabus))
-      return docData.syllabus
+    const cached = localStorage.getItem(`stt_syllabus_${uKey}`)
+    if (cached) {
+      const parsed = JSON.parse(cached)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        onUpdate(parsed)
+      }
     }
   } catch {}
-  return []
+
+  // 2. Real-time Firestore snapshot listener
+  return onSnapshot(
+    userRef,
+    (snap) => {
+      if (snap.exists()) {
+        const data = snap.data()
+        const syl = Array.isArray(data?.syllabus) ? data.syllabus : []
+        try {
+          localStorage.setItem(`stt_syllabus_${uKey}`, JSON.stringify(syl))
+        } catch {}
+        const existing = memoryCache.userDocs.get(uKey)
+        if (existing) {
+          existing.data = { ...(existing.data || {}), syllabus: syl }
+        }
+        onUpdate(syl)
+      }
+    },
+    (err) => {
+      console.warn('Syllabus snapshot listener error:', err)
+    }
+  )
 }
 
 // ─────────────────────────────────────────────
