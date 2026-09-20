@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react'
-import { generateAITimeTable, getRemainingDailyQuota } from '../utils/aiService'
+import { generateAITimeTable, getRemainingDailyQuota, hasGeminiApiKey } from '../utils/aiService'
 
 const ROUTINE_OPTIONS = [
   { id: 'dedicated', label: 'Dedicated Aspirant / Full-Time', icon: '🎯', desc: 'Whole day available for self study' },
@@ -85,11 +85,23 @@ export default function AITimeTableModal({ isOpen, onClose, userContext, onApply
               ✨
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight flex items-center gap-2 flex-wrap">
                 AI Time Table Generator
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                  Gemini 1.5
-                </span>
+                {hasGeminiApiKey() ? (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Gemini 1.5 Live
+                  </span>
+                ) : (
+                  <a
+                    href="/profile"
+                    className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 flex items-center gap-1 transition-all"
+                    title="Click to add free Gemini API Key in Profile"
+                  >
+                    <span>Offline Presets</span>
+                    <span className="underline font-normal">Add Free Key ↗</span>
+                  </a>
+                )}
               </h2>
               <p className="text-xs text-gray-400">
                 Customized daily schedule based on your routine & exam

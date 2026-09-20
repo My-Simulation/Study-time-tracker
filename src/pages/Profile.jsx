@@ -26,6 +26,12 @@ import {
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 import { clearSession, updateCurrentSession } from '../utils/auth'
+import {
+  getGeminiApiKey,
+  setGeminiApiKey,
+  testGeminiApiKey,
+  hasGeminiApiKey,
+} from '../utils/aiService'
 import EditProfileModal from '../components/EditProfileModal'
 
 export default function Profile({ userName }) {
@@ -95,6 +101,43 @@ export default function Profile({ userName }) {
     return { sundayRestDay: false, effectiveFrom: null }
   })
   const [settingsSaved, setSettingsSaved] = useState(false)
+
+  // ── AI & Gemini API Key State ──
+  const [aiKeyInput, setAiKeyInput] = useState(() => getGeminiApiKey())
+  const [isAiKeySaved, setIsAiKeySaved] = useState(() => hasGeminiApiKey())
+  const [aiKeyStatus, setAiKeyStatus] = useState(null)
+  const [aiKeyTesting, setAiKeyTesting] = useState(false)
+  const [showAiKeyText, setShowAiKeyText] = useState(false)
+
+  const handleSaveAiKey = async (e) => {
+    e?.preventDefault()
+    const cleanKey = aiKeyInput.trim()
+    if (!cleanKey) {
+      setGeminiApiKey('')
+      setIsAiKeySaved(false)
+      setAiKeyStatus({ type: 'info', msg: 'Key removed. Reverted to offline templates.' })
+      return
+    }
+    setAiKeyTesting(true)
+    setAiKeyStatus(null)
+    try {
+      await testGeminiApiKey(cleanKey)
+      setGeminiApiKey(cleanKey)
+      setIsAiKeySaved(true)
+      setAiKeyStatus({ type: 'success', msg: '🎉 Gemini 1.5 Flash Connected! Real AI is now active.' })
+    } catch (err) {
+      setAiKeyStatus({ type: 'error', msg: `Connection failed: ${err.message}` })
+    } finally {
+      setAiKeyTesting(false)
+    }
+  }
+
+  const handleRemoveAiKey = () => {
+    setGeminiApiKey('')
+    setAiKeyInput('')
+    setIsAiKeySaved(false)
+    setAiKeyStatus({ type: 'info', msg: 'API Key removed. Switched to offline templates.' })
+  }
 
   // ── Privacy & Live Activity Visibility State ──
   const [visibility, setVisibility] = useState('public') // 'public' | 'selected' | 'private'
@@ -897,6 +940,124 @@ export default function Profile({ userName }) {
               <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
             </label>
           </div>
+        </div>
+
+        {/* ── AI Study Mentor & Gemini API Key Settings Card ── */}
+        <div className="bg-[#141414] border border-[#242424] rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#222] pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🤖</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">AI Study Mentor & Time Table</h3>
+                  {isAiKeySaved ? (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Gemini 1.5 Active
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                      Offline Template Mode
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Apne exam & syllabus ke hisaab se personalized time table aur AI mentor chat activate karein
+                </p>
+              </div>
+            </div>
+
+            <a
+              href="https://aistudio.google.com/app/apikey"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-all flex items-center gap-1 self-start sm:self-auto"
+            >
+              <span>🔑 Get Free API Key</span>
+              <span>↗</span>
+            </a>
+          </div>
+
+          <form onSubmit={handleSaveAiKey} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-gray-300 flex items-center justify-between">
+                <span>Google Gemini API Key:</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAiKeyText(!showAiKeyText)}
+                  className="text-[10px] text-purple-400 hover:underline"
+                >
+                  {showAiKeyText ? 'Hide Key' : 'Show Key'}
+                </button>
+              </label>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  type={showAiKeyText ? 'text' : 'password'}
+                  value={aiKeyInput}
+                  onChange={(e) => setAiKeyInput(e.target.value)}
+                  placeholder="Paste your key here (e.g. AIzaSy...)"
+                  className="flex-1 px-3.5 py-2 rounded-xl bg-[#1b1b22] border border-[#333] text-white text-xs font-mono outline-none focus:border-purple-500 transition-colors"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    disabled={aiKeyTesting}
+                    className="pill-btn px-4 h-9 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow transition-all whitespace-nowrap"
+                  >
+                    {aiKeyTesting ? 'Testing Key…' : '⚡ Connect Key'}
+                  </button>
+                  {isAiKeySaved && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAiKey}
+                      className="px-3 h-9 rounded-xl bg-[#222] hover:bg-[#333] text-gray-400 hover:text-red-400 text-xs transition-colors"
+                      title="Remove Key"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Feedback alert */}
+            {aiKeyStatus && (
+              <div
+                className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
+                  aiKeyStatus.type === 'success'
+                    ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                    : aiKeyStatus.type === 'error'
+                    ? 'bg-red-500/10 border border-red-500/30 text-red-300'
+                    : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'
+                }`}
+              >
+                <span>{aiKeyStatus.msg}</span>
+              </div>
+            )}
+
+            {/* How to get key box */}
+            <div className="p-3 rounded-xl bg-[#181822] border border-[#272738] flex flex-col gap-1.5 text-xs text-gray-400">
+              <span className="font-bold text-gray-300 flex items-center gap-1.5">
+                <span>💡</span>
+                <span>Free API Key Kaise Banayein (100% Free - 30 Seconds):</span>
+              </span>
+              <ol className="list-decimal list-inside space-y-0.5 text-[11px] text-gray-400">
+                <li>
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-purple-400 underline font-medium"
+                  >
+                    aistudio.google.com/app/apikey
+                  </a>{' '}
+                  par jayein aur apne Google account se sign in karein.
+                </li>
+                <li><strong>"Create API Key"</strong> button par click karein.</li>
+                <li>Key copy karke upar box me paste karein aur <strong>"Connect Key"</strong> dabayein.</li>
+              </ol>
+            </div>
+          </form>
         </div>
 
         {/* ── Weekly Study Target Card (Matches Screenshot 1) ── */}

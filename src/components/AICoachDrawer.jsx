@@ -10,6 +10,7 @@ import {
   getRemainingDailyQuota,
   getGeminiApiKey,
   setGeminiApiKey,
+  hasGeminiApiKey,
 } from '../utils/aiService'
 
 const QUICK_PROMPTS = [
@@ -122,27 +123,57 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
 
         {/* Optional Custom API Key Settings Banner */}
         {showSettings && (
-          <form onSubmit={handleSaveKey} className="p-3 bg-[#191924] border-b border-[#2d2d3d] flex flex-col gap-2">
+          <form onSubmit={handleSaveKey} className="p-3 bg-[#191924] border-b border-[#2d2d3d] flex flex-col gap-2 animate-fadeIn">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-gray-300">Custom Gemini API Key:</span>
-              <span className="text-[10px] text-gray-500">Free from aistudio.google.com</span>
+              <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
+                <span>🔑</span>
+                <span>Google Gemini API Key:</span>
+              </span>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-purple-400 hover:underline font-semibold"
+              >
+                Free aistudio.google.com ↗
+              </a>
             </div>
             <div className="flex items-center gap-1.5">
               <input
                 type="password"
                 value={customKey}
                 onChange={(e) => setCustomKey(e.target.value)}
-                placeholder="AIzaSy..."
-                className="flex-1 px-3 py-1.5 rounded-xl bg-[#121216] border border-[#333] text-white text-xs outline-none focus:border-purple-500"
+                placeholder="Paste AIzaSy... key"
+                className="flex-1 px-3 py-1.5 rounded-xl bg-[#121216] border border-[#333] text-white text-xs outline-none focus:border-purple-500 font-mono"
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow transition-colors"
+                className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow transition-colors whitespace-nowrap"
               >
-                {keySaved ? 'Saved ✓' : 'Save'}
+                {keySaved ? 'Saved ✓' : 'Save Key'}
               </button>
             </div>
+            <p className="text-[10px] text-gray-400 leading-tight">
+              100% free Google account se key banayein aur custom AI prep guidance unlock karein.
+            </p>
           </form>
+        )}
+
+        {/* Offline notice if no key */}
+        {!hasGeminiApiKey() && !showSettings && (
+          <div className="px-3.5 py-2 bg-purple-950/25 border-b border-purple-500/20 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-purple-200/90 truncate flex items-center gap-1.5">
+              <span>💡</span>
+              <span>Running in Offline Template mode.</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="text-[10px] font-bold text-purple-300 bg-purple-500/20 border border-purple-500/35 px-2.5 py-0.5 rounded-full hover:bg-purple-500/30 whitespace-nowrap"
+            >
+              Add Free Key 🔑
+            </button>
+          </div>
         )}
 
         {/* Live Account Highlights Strip */}
@@ -154,7 +185,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
             Today: <strong className="text-purple-300">{userContext?.todayStudiedHours || 0}h</strong>
           </span>
           <span className="text-gray-400">
-            Quota: <strong className="text-teal-300">{quota}/15 left</strong>
+            Status: <strong className={hasGeminiApiKey() ? 'text-emerald-400' : 'text-amber-400'}>{hasGeminiApiKey() ? 'Gemini 1.5 Live' : 'Offline Mode'}</strong>
           </span>
         </div>
 

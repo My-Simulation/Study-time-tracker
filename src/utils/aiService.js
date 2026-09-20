@@ -31,6 +31,11 @@ export function getGeminiApiKey() {
   return localStorage.getItem(STORAGE_API_KEY) || DEFAULT_KEY
 }
 
+export function hasGeminiApiKey() {
+  const key = getGeminiApiKey()
+  return Boolean(key && key.trim())
+}
+
 export function setGeminiApiKey(key) {
   if (typeof window === 'undefined') return
   if (key && key.trim()) {
@@ -38,6 +43,29 @@ export function setGeminiApiKey(key) {
   } else {
     localStorage.removeItem(STORAGE_API_KEY)
   }
+}
+
+/**
+ * Tests whether a Gemini API key is valid by making a minimal request
+ */
+export async function testGeminiApiKey(key) {
+  if (!key || !key.trim()) {
+    throw new Error('Please enter a valid Gemini API Key.')
+  }
+  const cleanKey = key.trim()
+  const res = await fetch(`${GEMINI_API_URL}?key=${cleanKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: 'Respond with: OK' }] }],
+      generationConfig: { maxOutputTokens: 5 },
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.error?.message || `API error (${res.status}): ${res.statusText}`)
+  }
+  return true
 }
 
 /**
@@ -245,21 +273,31 @@ IMPORTANT: Return strictly RAW JSON with no markdown formatting, backticks, or o
     }
   }
 
-  // Fallback intelligent generator (always works 100% offline or without API key!)
+  // Fallback intelligent generator (works 100% offline or without API key)
+  const actualSubjects = subjectsToCover.length > 0
+    ? subjectsToCover
+    : (Array.isArray(userContext.syllabusList) && userContext.syllabusList.length > 0
+        ? userContext.syllabusList
+        : (Array.isArray(userContext.subjectBreakdown) && userContext.subjectBreakdown.length > 0
+            ? userContext.subjectBreakdown.map((s) => s.subject)
+            : ['Core Study', 'Practice & MCQs', 'Revision']))
+
   return generateAlgorithmicTimeTable({
     targetStudyHours,
     routineType,
     wakeTime,
     sleepTime,
-    subjects: subjectsToCover.length > 0 ? subjectsToCover : (userContext.syllabusList || ['Polity', 'History', 'Geography', 'Reasoning']),
+    subjects: actualSubjects,
+    examTarget: examTarget || userContext.examGoal?.name || '',
+    notes,
   })
 }
 
 /**
- * Intelligent local timetable fallback algorithm
+ * Intelligent local timetable fallback algorithm — dynamically uses actual subjects & exam target
  */
-function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime, sleepTime, subjects }) {
-  const subjs = subjects.length > 0 ? subjects : ['Polity', 'History', 'Geography', 'General Studies']
+function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime, sleepTime, subjects, examTarget, notes }) {
+  const subjs = subjects.length > 0 ? subjects : ['Core Theory', 'Problem Solving', 'Revision']
   const slots = []
   let sIdx = 0
   const nextSubj = () => {
@@ -268,16 +306,17 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
     return s
   }
 
+  const examPrefix = examTarget ? `${examTarget}` : 'Target Exam'
+
   if (routineType === 'job' || routineType === 'college') {
-    // Working professional / student: Morning 2h + Evening 2h + Night 1.5h
     slots.push({
       id: `slot_${Date.now()}_1`,
       block: 'Morning',
       time: '06:00 AM - 08:00 AM',
       slotType: 'Core Study',
       subject: nextSubj(),
-      topic: 'Core Theory & Concepts',
-      plan: 'Deep focus on fundamental concepts & textbook reading',
+      topic: `${examPrefix} - High Weightage Theory`,
+      plan: 'Morning fresh mind: Concept notes reading & formula derivation',
       done: false,
     })
     slots.push({
@@ -286,8 +325,8 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
       time: '09:00 AM - 05:00 PM',
       slotType: 'Break',
       subject: 'Office / College',
-      topic: 'Work Hours & Daily Commute',
-      plan: 'Stay hydrated; revise flashcards during short lunch break',
+      topic: 'Daily Work Hours',
+      plan: 'Stay hydrated; quick 10-min formula flashcards review during break',
       done: true,
     })
     slots.push({
@@ -296,8 +335,8 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
       time: '06:30 PM - 08:30 PM',
       slotType: 'Practice',
       subject: nextSubj(),
-      topic: 'Problem Solving & MCQs',
-      plan: 'Solve 30-40 targeted practice questions & analyze errors',
+      topic: `${examPrefix} - PYQ & Problem Solving`,
+      plan: 'Solve 30-40 targeted questions with stopwatch & analyze errors',
       done: false,
     })
     slots.push({
@@ -306,8 +345,8 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
       time: '09:30 PM - 10:30 PM',
       slotType: 'Revision',
       subject: nextSubj(),
-      topic: 'Daily Revision & Spaced Notes',
-      plan: 'Review all concepts studied today before going to sleep',
+      topic: 'Daily Spaced Repetition Wrap-up',
+      plan: 'Review all concepts studied today before sleep',
       done: false,
     })
   } else {
@@ -318,8 +357,8 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
       time: '06:30 AM - 08:30 AM',
       slotType: 'Core Study',
       subject: nextSubj(),
-      topic: 'High-Weightage Core Topic',
-      plan: 'Morning peak alertness: Deep concept learning without phone',
+      topic: `${examPrefix} - Core Concept Mastery`,
+      plan: 'Peak alertness: Deep theory reading without distractions',
       done: false,
     })
     slots.push({
@@ -328,8 +367,8 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
       time: '09:30 AM - 11:30 AM',
       slotType: 'Core Study',
       subject: nextSubj(),
-      topic: 'Second Subject Study',
-      plan: 'Read chapter syllabus and make crisp self-notes',
+      topic: `${examPrefix} - Sectional Syllabus Deep-Dive`,
+      plan: 'Structured textbook reading and concise self-summary notes',
       done: false,
     })
     slots.push({
@@ -338,8 +377,8 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
       time: '02:00 PM - 04:00 PM',
       slotType: 'Practice',
       subject: nextSubj(),
-      topic: 'Previous Year Questions (PYQs)',
-      plan: 'Solve exam pattern questions under timed conditions',
+      topic: 'Previous Year Exam Questions (PYQs)',
+      plan: 'Exam-like timed conditions: speed & accuracy drill',
       done: false,
     })
     slots.push({
@@ -348,8 +387,8 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
       time: '05:30 PM - 07:30 PM',
       slotType: 'Mock Test',
       subject: nextSubj(),
-      topic: 'Mock Test & Sectional Quiz',
-      plan: 'Test accuracy and speed; mark weak chapters for weekend',
+      topic: 'Sectional Mock & Mistake Analysis',
+      plan: 'Full sectional test; log every mistake in error notebook',
       done: false,
     })
     slots.push({
@@ -358,8 +397,8 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
       time: '09:00 PM - 10:30 PM',
       slotType: 'Revision',
       subject: 'Daily Revision',
-      topic: 'Spaced Repetition & Day Plan Wrap-up',
-      plan: '10-minute rapid review per subject studied today',
+      topic: 'Active Recall & Tomorrow Prep',
+      plan: '10-minute quick spaced review per subject studied today',
       done: false,
     })
   }
@@ -403,7 +442,6 @@ YOUR COACHING PRINCIPLES:
 
   if (apiKey) {
     try {
-      // Build conversation contents
       const contents = [
         { role: 'user', parts: [{ text: `${systemContextPrompt}\n\nStudent asks: ${userMessage}` }] },
       ]
@@ -446,6 +484,9 @@ function generateOfflineCoachResponse(userContext, query) {
   const todayHrs = userContext.todayStudiedHours || 0
   const targetHrs = userContext.todayTargetHours || 6
   const breakdown = userContext.subjectBreakdown || []
+  const exam = userContext.examGoal?.name || 'Aapka Target Exam'
+
+  const apiNote = `\n\n*(💡 Tip: Bilkul free Gemini API Key lagane ke liye Profile ya ⚙️ icon par jayein — fir aap bina kisi limit ke detailed AI mentoring le sakte hain!)*`
 
   // Case 1: Performance / Progress analysis
   if (q.includes('performance') || q.includes('progress') || q.includes('kaisa') || q.includes('report') || q.includes('analyze')) {
@@ -464,7 +505,7 @@ ${neglected && neglected !== dominant ? `- ⚠️ **Neglected Subject:** ${negle
 
 💡 **Mera Recommendation:**
 1. Apne weak subject ko **Morning 06:00 - 08:30 AM** wale fresh mind slot me rakhein.
-2. Roz raat ko 45 minute ka **Spaced Revision** zaroor lagayein taaki padha hua bhool na jayein.`
+2. Roz raat ko 45 minute ka **Spaced Revision** zaroor lagayein taaki padha hua bhool na jayein.${apiNote}`
   }
 
   // Case 2: Weak subject inquiry
@@ -476,21 +517,65 @@ Aapke data ke mutabiq pichle 14 din me **${weak.subject}** ko sabse kam time (${
 
 👉 **Action Plan:**
 - Kal ke Day Planner me **${weak.subject}** ke 2 continuous slots (kam se kam 2 ghante) schedule karein.
-- Pehle 30 minute theory revise karein, fir 1 ghanta MCQs / questions solve karein.`
+- Pehle 30 minute theory revise karein, fir 1 ghanta MCQs / questions solve karein.${apiNote}`
     }
   }
 
-  // Default encouraging mentor response
+  // Case 3: Exam Prep / Strategy / Kaise padhein / Target
+  if (q.includes('exam') || q.includes('prep') || q.includes('target') || q.includes('kese') || q.includes('kaise') || q.includes('strategy') || q.includes('tips')) {
+    return `🎯 **${exam} Ke Liye Smart Preparation Strategy:**
+
+1. **Daily Slot Split (3-Tier Rule):**
+   - **Morning (Tier 1 - Concept):** Naye aur tough topics ko subah fresh dimaag se padhein (2.5 - 3 ghante).
+   - **Afternoon/Evening (Tier 2 - Practice):** PYQs, numericals aur sectional tests solve karein. Sirf theory padhna kafi nahi hota!
+   - **Night (Tier 3 - Revision):** 45 minute ka active recall — jo subah padha tha bina dekhe short points likhein.
+
+2. **Streak & Rest Balance:**
+   - Aapka current streak **${streak} days** hai. Sunday Rest Day toggle on rakhein taaki Sunday ko 0h target ho aur streak safe rahe!
+
+3. **Weak Subject Priority:**
+   - Day Planner me weak subjects ke liye 2 specific slots pehle se fix karke rakhein.${apiNote}`
+  }
+
+  // Case 4: Routine / Time Table / Schedule
+  if (q.includes('routine') || q.includes('time table') || q.includes('timetable') || q.includes('schedule') || q.includes('kab')) {
+    return `⏰ **Ideal Daily Study Routine (${targetHrs} Ghante Target):**
+
+- 🌅 **06:30 - 08:30 AM (2h):** High-Weightage Core Subject (Deep Focus)
+- 🍳 *08:30 - 09:30 AM:* Breakfast & Refreshment
+- 📖 **09:30 - 11:30 AM (2h):** Second Subject / Theory Reading
+- 🍛 *01:00 - 02:00 PM:* Lunch & Short Nap
+- ✍️ **02:00 - 04:00 PM (2h):** Practice Questions & PYQs
+- 🏃 *05:00 - 06:00 PM:* Walk / Exercise (Mental refresh)
+- 🧠 **08:30 - 09:30 PM (1h):** Spaced Repetition Revision of Today's Work
+
+👉 Day Planner me jaakar **"✨ AI Time Table"** par click karein aur apne routine ke hisaab se auto-generate karein!${apiNote}`
+  }
+
+  // Case 5: Motivation / Focus / Distraction
+  if (q.includes('focus') || q.includes('distract') || q.includes('motivation') || q.includes('man') || q.includes('burnout')) {
+    return `🔥 **Focus & Motivation Booster:**
+
+1. **Pomodoro Rule:**
+   - 50 minute full study + 10 minute complete break. Phone ko dusre kamre me rakhein.
+2. **2-Minute Rule:**
+   - Jab padhne ka man na kare, sirf stopwatch on karke bolo "main bas 5 minute baithunga". 90% baar aapka momentum ban jayega.
+3. **Your Hard Work:**
+   - Aapne **${userContext.totalSessionsAllTime} sessions** aur **${streak} days streak** maintain ki hai! Consistency hi topper banati hai.${apiNote}`
+  }
+
+  // Default mentor response
   return `👋 **Namaste ${userContext.displayName || userContext.userName}!**
 
 Maine aapka study history review kiya hai:
+- **Target Exam:** ${exam}
 - **Active Streak:** ${streak} Days 🔥
 - **Total Logged Sessions:** ${userContext.totalSessionsAllTime}
 - **Today's Progress:** ${todayHrs}h / ${targetHrs}h
 
 Aap mujhse pooch sakte hain:
-1. *"Mera performance analysis do"*
+1. *"Mera exam prep analysis do"*
 2. *"Main kaunsa subject neglect kar raha hu?"*
 3. *"Mere routine ke liye time table bana do"*
-4. *"Exam ke liye consistency tips do"*`
+4. *"Exam ke liye consistency & focus tips do"*${apiNote}`
 }
