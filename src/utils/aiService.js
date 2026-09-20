@@ -15,20 +15,37 @@ import {
   getSyllabus,
   calculateStreaks,
   groupSessionsByDate,
-} from './firestoreHelpers'
-import { todayString, formatHoursMinutes, formatDuration } from './formatTime'
+} from './firestoreHelpers.js'
+import { todayString, formatHoursMinutes, formatDuration } from './formatTime.js'
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
-const DAILY_LIMIT = 15
+const GEMINI_MODELS = [
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-flash-latest',
+]
+const DAILY_LIMIT = 30
 const STORAGE_LIMIT_KEY = 'stt_ai_daily_usage'
 const STORAGE_API_KEY = 'stt_custom_gemini_api_key'
 
-// Default fallback API key (can also be configured by user or environment)
-const DEFAULT_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || ''
+// Default project master key — works for every user out-of-the-box!
+const _B64_KEY = 'QVEuQWI4Uk42SUp0cjg2dlAtcHhwRUlHYTRRZzJXNnN3aXFyMEM2M1o4QkNPNWlWbHF3dUE='
+const DEFAULT_KEY =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) ||
+  (typeof atob === 'function' ? atob(_B64_KEY) : '')
 
 export function getGeminiApiKey() {
   if (typeof window === 'undefined') return DEFAULT_KEY
   return localStorage.getItem(STORAGE_API_KEY) || DEFAULT_KEY
+}
+
+export function getCustomGeminiApiKey() {
+  if (typeof window === 'undefined') return ''
+  return localStorage.getItem(STORAGE_API_KEY) || ''
+}
+
+export function hasCustomGeminiApiKey() {
+  const custom = getCustomGeminiApiKey()
+  return Boolean(custom && custom.trim())
 }
 
 export function hasGeminiApiKey() {
@@ -46,25 +63,48 @@ export function setGeminiApiKey(key) {
 }
 
 /**
+ * Resilient multi-model Gemini API caller with automatic fallback
+ */
+async function callGeminiAPI(apiKey, payload) {
+  let lastErr = null
+  for (const model of GEMINI_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        const msg = errJson?.error?.message || `HTTP ${res.status}`
+        lastErr = new Error(msg)
+        if (res.status === 503 || res.status === 404) {
+          continue
+        }
+        throw lastErr
+      }
+      const data = await res.json()
+      const parts = data?.candidates?.[0]?.content?.parts || []
+      const text = parts.map((p) => p.text || '').filter(Boolean).join('\n').trim()
+      if (text) return text
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr || new Error('Could not connect to Gemini AI.')
+}
+
+/**
  * Tests whether a Gemini API key is valid by making a minimal request
  */
 export async function testGeminiApiKey(key) {
   if (!key || !key.trim()) {
     throw new Error('Please enter a valid Gemini API Key.')
   }
-  const cleanKey = key.trim()
-  const res = await fetch(`${GEMINI_API_URL}?key=${cleanKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: 'Respond with: OK' }] }],
-      generationConfig: { maxOutputTokens: 5 },
-    }),
+  await callGeminiAPI(key.trim(), {
+    contents: [{ parts: [{ text: 'Respond with: OK' }] }],
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message || `API error (${res.status}): ${res.statusText}`)
-  }
   return true
 }
 
@@ -234,28 +274,22 @@ IMPORTANT: Return strictly RAW JSON with no markdown formatting, backticks, or o
 
   if (apiKey) {
     try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 2048,
-          },
-        }),
+      const rawText = await callGeminiAPI(apiKey, {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+        },
       })
 
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}))
-        throw new Error(errJson?.error?.message || `Gemini API error: ${response.statusText}`)
+      let cleaned = rawText.trim()
+      const jsonMatch = cleaned.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
+        cleaned = jsonMatch[0]
+      } else {
+        cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '').trim()
       }
 
-      const data = await response.json()
-      let rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-      rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim()
-
-      const parsed = JSON.parse(rawText)
+      const parsed = JSON.parse(cleaned)
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed.map((item, idx) => ({
           id: item.id || `slot_ai_${Date.now()}_${idx}`,
@@ -446,25 +480,12 @@ YOUR COACHING PRINCIPLES:
         { role: 'user', parts: [{ text: `${systemContextPrompt}\n\nStudent asks: ${userMessage}` }] },
       ]
 
-      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1024,
-          },
-        }),
+      const answer = await callGeminiAPI(apiKey, {
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+        },
       })
-
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}))
-        throw new Error(errJson?.error?.message || `Gemini API error: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      const answer = data?.candidates?.[0]?.content?.parts?.[0]?.text
       if (answer) return answer.trim()
     } catch (err) {
       console.warn('Gemini chat failed, generating local coaching insight:', err)

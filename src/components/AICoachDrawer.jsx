@@ -9,6 +9,8 @@ import {
   chatWithAIMentor,
   getRemainingDailyQuota,
   getGeminiApiKey,
+  getCustomGeminiApiKey,
+  hasCustomGeminiApiKey,
   setGeminiApiKey,
   hasGeminiApiKey,
 } from '../utils/aiService'
@@ -32,7 +34,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
   const [loading, setLoading] = useState(false)
   const [quota, setQuota] = useState(() => getRemainingDailyQuota())
   const [showSettings, setShowSettings] = useState(false)
-  const [customKey, setCustomKey] = useState(() => getGeminiApiKey())
+  const [customKey, setCustomKey] = useState(() => getCustomGeminiApiKey())
   const [keySaved, setKeySaved] = useState(false)
 
   const messagesEndRef = useRef(null)
@@ -143,7 +145,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
                 type="password"
                 value={customKey}
                 onChange={(e) => setCustomKey(e.target.value)}
-                placeholder="Paste AIzaSy... key"
+                placeholder="Built-in AI active (or paste personal key)"
                 className="flex-1 px-3 py-1.5 rounded-xl bg-[#121216] border border-[#333] text-white text-xs outline-none focus:border-purple-500 font-mono"
               />
               <button
@@ -154,27 +156,25 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
               </button>
             </div>
             <p className="text-[10px] text-gray-400 leading-tight">
-              100% free Google account se key banayein aur custom AI prep guidance unlock karein.
+              Project master AI key already active! Optional: Apna personal key laga sakte hain.
             </p>
           </form>
         )}
 
-        {/* Offline notice if no key */}
-        {!hasGeminiApiKey() && !showSettings && (
-          <div className="px-3.5 py-2 bg-purple-950/25 border-b border-purple-500/20 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-purple-200/90 truncate flex items-center gap-1.5">
-              <span>💡</span>
-              <span>Running in Offline Template mode.</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowSettings(true)}
-              className="text-[10px] font-bold text-purple-300 bg-purple-500/20 border border-purple-500/35 px-2.5 py-0.5 rounded-full hover:bg-purple-500/30 whitespace-nowrap"
-            >
-              Add Free Key 🔑
-            </button>
-          </div>
-        )}
+        {/* AI Status Pill */}
+        <div className="px-3.5 py-1.5 bg-purple-950/20 border-b border-purple-500/15 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-purple-200/90 truncate flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>{hasCustomGeminiApiKey() ? 'Personal Gemini Key Active' : 'Real Gemini AI Active (Free for All Users)'}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowSettings(!showSettings)}
+            className="text-[10px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/25 px-2.5 py-0.5 rounded-full hover:bg-purple-500/30 whitespace-nowrap"
+          >
+            {showSettings ? 'Close' : '⚙️ Custom Key'}
+          </button>
+        </div>
 
         {/* Live Account Highlights Strip */}
         <div className="px-4 py-2 bg-[#17171e] border-b border-[#23232c] flex items-center justify-between text-[11px]">

@@ -28,6 +28,8 @@ import { todayString, formatHoursMinutes, formatDuration } from '../utils/format
 import { clearSession, updateCurrentSession } from '../utils/auth'
 import {
   getGeminiApiKey,
+  getCustomGeminiApiKey,
+  hasCustomGeminiApiKey,
   setGeminiApiKey,
   testGeminiApiKey,
   hasGeminiApiKey,
@@ -103,8 +105,8 @@ export default function Profile({ userName }) {
   const [settingsSaved, setSettingsSaved] = useState(false)
 
   // ── AI & Gemini API Key State ──
-  const [aiKeyInput, setAiKeyInput] = useState(() => getGeminiApiKey())
-  const [isAiKeySaved, setIsAiKeySaved] = useState(() => hasGeminiApiKey())
+  const [aiKeyInput, setAiKeyInput] = useState(() => getCustomGeminiApiKey())
+  const [isAiKeySaved, setIsAiKeySaved] = useState(() => hasCustomGeminiApiKey())
   const [aiKeyStatus, setAiKeyStatus] = useState(null)
   const [aiKeyTesting, setAiKeyTesting] = useState(false)
   const [showAiKeyText, setShowAiKeyText] = useState(false)
@@ -115,7 +117,7 @@ export default function Profile({ userName }) {
     if (!cleanKey) {
       setGeminiApiKey('')
       setIsAiKeySaved(false)
-      setAiKeyStatus({ type: 'info', msg: 'Key removed. Reverted to offline templates.' })
+      setAiKeyStatus({ type: 'info', msg: 'Personal key removed. Reverted to built-in system AI key.' })
       return
     }
     setAiKeyTesting(true)
@@ -124,7 +126,7 @@ export default function Profile({ userName }) {
       await testGeminiApiKey(cleanKey)
       setGeminiApiKey(cleanKey)
       setIsAiKeySaved(true)
-      setAiKeyStatus({ type: 'success', msg: '🎉 Gemini 1.5 Flash Connected! Real AI is now active.' })
+      setAiKeyStatus({ type: 'success', msg: '🎉 Personal Gemini Key Connected! Real AI is now active.' })
     } catch (err) {
       setAiKeyStatus({ type: 'error', msg: `Connection failed: ${err.message}` })
     } finally {
@@ -136,7 +138,7 @@ export default function Profile({ userName }) {
     setGeminiApiKey('')
     setAiKeyInput('')
     setIsAiKeySaved(false)
-    setAiKeyStatus({ type: 'info', msg: 'API Key removed. Switched to offline templates.' })
+    setAiKeyStatus({ type: 'info', msg: 'Personal key removed. Reverted to built-in system AI key.' })
   }
 
   // ── Privacy & Live Activity Visibility State ──
@@ -953,11 +955,12 @@ export default function Profile({ userName }) {
                   {isAiKeySaved ? (
                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Gemini 1.5 Active
+                      Personal Key Active
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full">
-                      Offline Template Mode
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Built-in Gemini AI Active
                     </span>
                   )}
                 </div>
@@ -981,7 +984,7 @@ export default function Profile({ userName }) {
           <form onSubmit={handleSaveAiKey} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-gray-300 flex items-center justify-between">
-                <span>Google Gemini API Key:</span>
+                <span>Google Gemini API Key (Optional Override):</span>
                 <button
                   type="button"
                   onClick={() => setShowAiKeyText(!showAiKeyText)}
@@ -995,7 +998,7 @@ export default function Profile({ userName }) {
                   type={showAiKeyText ? 'text' : 'password'}
                   value={aiKeyInput}
                   onChange={(e) => setAiKeyInput(e.target.value)}
-                  placeholder="Paste your key here (e.g. AIzaSy...)"
+                  placeholder="Built-in AI active for everyone! (Or paste personal key)"
                   className="flex-1 px-3.5 py-2 rounded-xl bg-[#1b1b22] border border-[#333] text-white text-xs font-mono outline-none focus:border-purple-500 transition-colors"
                 />
                 <div className="flex items-center gap-2">
