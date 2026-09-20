@@ -668,7 +668,7 @@ export default function DayPlanner({ userName }) {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col px-3 pb-16 max-w-4xl mx-auto w-full gap-4">
+      <div className="flex-1 flex flex-col px-3 pb-24 sm:pb-16 max-w-4xl mx-auto w-full gap-4">
         {/* ── Main Planner Sheet Container ── */}
         <div
           className="rounded-3xl p-4 sm:p-7 border border-[#2a2a2a] flex flex-col gap-5 relative shadow-2xl overflow-hidden"
@@ -706,9 +706,9 @@ export default function DayPlanner({ userName }) {
           {/* ── Day Badge, Date & Quote Bar ── */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#18181b] p-3 sm:p-4 rounded-2xl border border-[#2b2b30]">
             {/* Day Badge & Nav */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <div
-                className="px-4 py-1.5 rounded-full font-black text-white text-sm sm:text-base flex items-center gap-1.5 shadow-md"
+                className="px-3.5 py-1.5 rounded-full font-black text-white text-xs sm:text-sm flex items-center gap-1.5 shadow-md whitespace-nowrap flex-shrink-0 select-none"
                 style={{
                   background:
                     dayNumber % 2 === 1
@@ -716,22 +716,24 @@ export default function DayPlanner({ userName }) {
                       : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
                 }}
               >
-                <span>DAY {dayNumber}</span>
+                <span className="whitespace-nowrap">DAY {dayNumber}</span>
                 <span>🌸</span>
               </div>
 
               {/* Prev / Next day buttons */}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <button
+                  type="button"
                   onClick={() => changeDateBy(-1)}
-                  className="w-7 h-7 rounded-lg bg-[#222] hover:bg-[#333] text-gray-300 flex items-center justify-center text-xs transition-colors"
+                  className="w-7 h-7 rounded-lg bg-[#222] hover:bg-[#333] text-gray-300 flex items-center justify-center text-xs transition-colors cursor-pointer"
                   title="Previous Day"
                 >
                   ◀
                 </button>
                 <button
+                  type="button"
                   onClick={() => changeDateBy(1)}
-                  className="w-7 h-7 rounded-lg bg-[#222] hover:bg-[#333] text-gray-300 flex items-center justify-center text-xs transition-colors"
+                  className="w-7 h-7 rounded-lg bg-[#222] hover:bg-[#333] text-gray-300 flex items-center justify-center text-xs transition-colors cursor-pointer"
                   title="Next Day"
                 >
                   ▶
@@ -740,7 +742,7 @@ export default function DayPlanner({ userName }) {
             </div>
 
             {/* Date Picker */}
-            <div className="flex items-center gap-2 text-xs text-gray-300">
+            <div className="flex items-center gap-2 text-xs text-gray-300 flex-shrink-0">
               <span className="text-gray-400 font-medium">Date:</span>
               <input
                 type="date"
@@ -751,7 +753,7 @@ export default function DayPlanner({ userName }) {
             </div>
 
             {/* Daily Quote */}
-            <div className="text-xs text-pink-300 italic font-medium text-center sm:text-right">
+            <div className="text-xs text-pink-300 italic font-medium text-center sm:text-right flex-1 min-w-0 truncate">
               "{quote}"
             </div>
           </div>
@@ -1097,7 +1099,7 @@ export default function DayPlanner({ userName }) {
               </div>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-[#2b2b30] bg-[#121214] shadow-inner">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full min-w-[860px] text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-[#2b2b30] text-gray-400 font-bold uppercase tracking-wider bg-[#17171b]">
                       <th className="p-3 w-40 whitespace-nowrap">BLOCK & TIME ⏰</th>

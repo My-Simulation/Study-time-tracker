@@ -517,20 +517,20 @@ export default function Stopwatch({ userName }) {
             <button
               onClick={handleInstallApp}
               title="Install as Mobile App"
-              className="text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 transition-all flex items-center gap-1 font-semibold flex-shrink-0"
+              className="hidden sm:flex text-[11px] px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 transition-all items-center gap-1 font-semibold flex-shrink-0"
             >
               <span>📲</span>
-              <span className="hidden sm:inline">Install</span>
+              <span>Install</span>
             </button>
           )}
           {notifPermission === 'default' && (
             <button
               onClick={handleEnableNotification}
               title="Turn on Lock Screen Timer"
-              className="text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all flex items-center gap-1 font-semibold flex-shrink-0"
+              className="hidden sm:flex text-[11px] px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all items-center gap-1 font-semibold flex-shrink-0"
             >
               <span>🔔</span>
-              <span className="hidden sm:inline">Timer</span>
+              <span>Timer</span>
             </button>
           )}
         </div>
