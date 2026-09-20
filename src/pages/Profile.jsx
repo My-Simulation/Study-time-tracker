@@ -20,6 +20,9 @@ import {
   getUserDoc,
   updatePrivacySettings,
   searchUsers,
+  getUserSettings,
+  saveUserSettings,
+  isRestDay,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 import { clearSession, updateCurrentSession } from '../utils/auth'
@@ -36,6 +39,8 @@ export default function Profile({ userName }) {
   const [dayPlanners, setDayPlanners] = useState({})
   const [userData, setUserData] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: null })
+  const [settingsSaved, setSettingsSaved] = useState(false)
 
   // ── Privacy & Live Activity Visibility State ──
   const [visibility, setVisibility] = useState('public') // 'public' | 'selected' | 'private'
@@ -171,17 +176,19 @@ export default function Profile({ userName }) {
     async function loadProfile() {
       setLoading(true)
       try {
-        const [sessions, plan, planners, uDoc] = await Promise.all([
+        const [sessions, plan, planners, uDoc, uSettings] = await Promise.all([
           getUserSessions(userName),
           getWeeklyPlan(userName),
           getAllDayPlanners(userName),
           getUserDoc(userName),
+          getUserSettings(userName),
         ])
         if (isMounted) {
           setAllSessions(sessions || [])
           setWeeklyPlan(plan || {})
           setDayPlanners(planners || {})
           setUserData(uDoc || {})
+          setSettings(uSettings || { sundayRestDay: false, effectiveFrom: null })
           if (uDoc) {
             updateCurrentSession({
               photoUrl: uDoc.photoUrl || '',
@@ -201,9 +208,49 @@ export default function Profile({ userName }) {
     return () => { isMounted = false }
   }, [userName])
 
+  // Sync settings and plan across tabs/components
+  useEffect(() => {
+    const handleUpdate = async () => {
+      if (!userName) return
+      try {
+        const [uSettings, plan, sessions] = await Promise.all([
+          getUserSettings(userName),
+          getWeeklyPlan(userName),
+          getUserSessions(userName),
+        ])
+        setSettings(uSettings || { sundayRestDay: false, effectiveFrom: null })
+        setWeeklyPlan(plan || {})
+        setAllSessions(sessions || [])
+      } catch {}
+    }
+    window.addEventListener('study_settings_updated', handleUpdate)
+    window.addEventListener('study_plan_updated', handleUpdate)
+    window.addEventListener('study_sessions_updated', handleUpdate)
+    return () => {
+      window.removeEventListener('study_settings_updated', handleUpdate)
+      window.removeEventListener('study_plan_updated', handleUpdate)
+      window.removeEventListener('study_sessions_updated', handleUpdate)
+    }
+  }, [userName])
+
+  const handleToggleSundayRest = async (newVal) => {
+    const updated = {
+      sundayRestDay: newVal,
+      effectiveFrom: newVal ? todayString() : null,
+    }
+    setSettings(updated)
+    setSettingsSaved(true)
+    setTimeout(() => setSettingsSaved(false), 2500)
+    try {
+      await saveUserSettings(userName, updated)
+    } catch (err) {
+      console.error('Failed to save rest day setting in profile:', err)
+    }
+  }
+
   // All time groups & streaks
   const dateGroups = useMemo(() => groupSessionsByDate(allSessions), [allSessions])
-  const streaks = useMemo(() => calculateStreaks(dateGroups), [dateGroups])
+  const streaks = useMemo(() => calculateStreaks(dateGroups, settings), [dateGroups, settings])
 
   // Total Lifetime Studied Time
   const lifetimeSeconds = useMemo(() => {
@@ -277,11 +324,14 @@ export default function Profile({ userName }) {
     let totalActualSeconds = 0
 
     const dayBreakdown = weekDates.map(({ day, dateStr }) => {
-      const target = getTargetForDate(dateStr, weeklyPlan, dayPlanners)
+      const isRest = isRestDay(dateStr, settings)
+      const target = getTargetForDate(dateStr, weeklyPlan, dayPlanners, settings)
       const actualSec = sessionDateMap[dateStr] || 0
-      const targetMin = target?.targetMinutes || 0
+      const targetMin = isRest ? 0 : (target?.targetMinutes || 0)
 
-      totalTargetMinutes += targetMin
+      if (!isRest) {
+        totalTargetMinutes += targetMin
+      }
       totalActualSeconds += actualSec
 
       return {
@@ -289,9 +339,10 @@ export default function Profile({ userName }) {
         dateStr,
         actualSec,
         targetMin,
+        isRest,
         isToday: dateStr === today,
         isPast: dateStr < today,
-        met: targetMin > 0 ? actualSec >= targetMin * 60 : actualSec > 0,
+        met: isRest ? true : (targetMin > 0 ? actualSec >= targetMin * 60 : actualSec > 0),
       }
     })
 
@@ -306,7 +357,7 @@ export default function Profile({ userName }) {
       pct,
       dayBreakdown,
     }
-  }, [allSessions, weeklyPlan, dayPlanners, today])
+  }, [allSessions, weeklyPlan, dayPlanners, today, settings])
 
   const shareLink = `${window.location.origin}/watch/${userName}`
   const copyShareLink = () => {
@@ -722,6 +773,75 @@ export default function Profile({ userName }) {
           )}
         </div>
 
+        {/* ── Study Preferences & Rest Day Settings Card ── */}
+        <div className="bg-[#141414] border border-[#242424] rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#222] pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🛋️</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">Sunday Rest Day (Buffer)</h3>
+                  {settingsSaved && (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full animate-fadeIn">
+                      Saved ✓
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Take Sundays off guilt-free. Your study streak safely carries from Saturday to Monday.
+                </p>
+              </div>
+            </div>
+
+            {/* Status Pill */}
+            <div className="self-start sm:self-auto">
+              {settings.sundayRestDay ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-400 bg-purple-500/10 border border-purple-500/30 px-2.5 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                  Rest Day Active 🛡️
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 bg-gray-800/40 border border-gray-700/50 px-2.5 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-gray-500" />
+                  Disabled (Normal Day)
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Toggle Banner */}
+          <div className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+            settings.sundayRestDay
+              ? 'bg-purple-950/20 border-purple-500/40 shadow-sm'
+              : 'bg-[#181818] border-[#282828]'
+          }`}>
+            <div className="flex items-start gap-3">
+              <span className="text-2xl mt-0.5">🛌</span>
+              <div>
+                <p className={`text-xs font-bold ${settings.sundayRestDay ? 'text-purple-300' : 'text-white'}`}>
+                  {settings.sundayRestDay ? 'Sunday Rest Mode is ON' : 'Enable Sunday Rest Day'}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5 max-w-lg leading-relaxed">
+                  {settings.sundayRestDay
+                    ? `Sunday is marked as 0h rest. Your streak will never break over Sunday as long as Saturday's goal was met. (Active since ${settings.effectiveFrom || 'today'})`
+                    : 'When enabled, Sundays will automatically have a 0h study target and won\'t break your active streak. Toggle this on whenever you need a scheduled weekly buffer.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Switch Toggle */}
+            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 self-end sm:self-center">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.sundayRestDay)}
+                onChange={(e) => handleToggleSundayRest(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+            </label>
+          </div>
+        </div>
+
         {/* ── Weekly Study Target Card (Matches Screenshot 1) ── */}
         <div className="bg-[#141414] border border-[#242424] rounded-2xl p-5 shadow-xl">
           <div className="flex items-center justify-between mb-2">
@@ -770,21 +890,23 @@ export default function Profile({ userName }) {
                 key={item.dateStr}
                 onClick={() => navigate(`/history/${item.dateStr}`)}
                 className={`flex flex-col items-center p-2 rounded-xl border text-center cursor-pointer transition-all ${
-                  item.isToday
+                  item.isRest
+                    ? 'border-purple-500/40 bg-purple-500/10'
+                    : item.isToday
                     ? 'border-purple-500 bg-purple-500/10'
                     : item.met
                     ? 'border-green-500/30 bg-green-500/5'
                     : 'border-[#262626] bg-[#181818]'
                 }`}
               >
-                <span className={`text-[10px] font-black ${item.isToday ? 'text-purple-300 font-bold' : 'text-gray-400'}`}>
+                <span className={`text-[10px] font-black ${item.isRest ? 'text-purple-300' : item.isToday ? 'text-purple-300 font-bold' : 'text-gray-400'}`}>
                   {item.day}
                 </span>
-                <span className="text-xs font-mono font-bold text-white mt-1">
-                  {item.actualSec > 0 ? `${Math.round(item.actualSec / 3600 * 10) / 10}h` : '0h'}
+                <span className={`text-xs font-mono font-bold mt-1 ${item.isRest ? 'text-purple-300 text-[11px]' : 'text-white'}`}>
+                  {item.isRest ? 'Rest' : (item.actualSec > 0 ? `${Math.round(item.actualSec / 3600 * 10) / 10}h` : '0h')}
                 </span>
                 <span className="text-[10px] mt-0.5">
-                  {item.met ? '✓' : item.isToday ? '⏳' : item.isPast ? '·' : '·'}
+                  {item.isRest ? '🛋️' : item.met ? '✓' : item.isToday ? '⏳' : item.isPast ? '·' : '·'}
                 </span>
               </div>
             ))}

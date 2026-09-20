@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react'
-import { captureAndUploadScreenshot, saveSession, getSyllabus } from '../utils/firestoreHelpers'
+import { captureAndUploadScreenshot, saveSession, getSyllabus, getUserSettings, isRestDay } from '../utils/firestoreHelpers'
 import { todayString } from '../utils/formatTime'
 
 const REFLECTION_TAGS = [
@@ -52,6 +52,9 @@ export default function SaveModal({
   const [topic, setTopic] = useState(initialTopic)
   const [syllabus, setSyllabus] = useState([])
   const [showMoreDetails, setShowMoreDetails] = useState(false)
+  const [settings, setSettings] = useState(null)
+
+  const isSelectedDateRest = isRestDay(selectedDate, settings)
 
   // Reset state when modal opens
   useEffect(() => {
@@ -68,6 +71,7 @@ export default function SaveModal({
       setTopic(initialTopic || '')
 
       if (userName) {
+        getUserSettings(userName).then((st) => setSettings(st))
         getSyllabus(userName).then((data) => {
           if (Array.isArray(data)) setSyllabus(data)
         })
@@ -84,6 +88,10 @@ export default function SaveModal({
 
   const handleSave = async (shouldReset) => {
     if (isSaving) return
+    if (isSelectedDateRest) {
+      setError('This date is marked as a Rest Day. Sessions cannot be logged on rest days.')
+      return
+    }
     setIsSaving(true)
     setError(null)
     setSavingStep('screenshot')
@@ -188,6 +196,12 @@ export default function SaveModal({
             disabled={isSaving}
             className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-xs outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
           />
+          {isSelectedDateRest && (
+            <p className="text-[11px] font-semibold text-rose-400 mt-1 flex items-center gap-1">
+              <span>⚠️</span>
+              <span>This date is marked as a Rest Day. Sessions cannot be logged on rest days.</span>
+            </p>
+          )}
         </div>
 
         {/* Focus Quality Rating (1-5 Stars) */}
@@ -355,12 +369,12 @@ export default function SaveModal({
         <div className="flex flex-col gap-2 pt-2">
           <button
             onClick={() => handleSave(true)}
-            disabled={isSaving || !selectedDate}
+            disabled={isSaving || !selectedDate || isSelectedDateRest}
             className="pill-btn w-full h-11 text-sm font-semibold flex items-center justify-center gap-2 shadow-lg"
             style={{
               background: '#8b5cf6',
               color: 'white',
-              opacity: isSaving || !selectedDate ? 0.6 : 1,
+              opacity: isSaving || !selectedDate || isSelectedDateRest ? 0.6 : 1,
             }}
           >
             {isSaving ? (

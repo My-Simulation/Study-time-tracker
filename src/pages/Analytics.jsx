@@ -18,6 +18,8 @@ import {
   calculateStreaks,
   groupSessionsByDate,
   getTargetForDate,
+  getUserSettings,
+  isRestDay,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 
@@ -38,20 +40,23 @@ export default function Analytics({ userName }) {
   const [allSessions, setAllSessions] = useState([])
   const [weeklyPlan, setWeeklyPlan] = useState({})
   const [dayPlanners, setDayPlanners] = useState({})
+  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: null })
 
   // Load user data
   const fetchData = useCallback(async () => {
     if (!userName) return
     setLoading(true)
     try {
-      const [sessions, plan, planners] = await Promise.all([
+      const [sessions, plan, planners, userSettings] = await Promise.all([
         getUserSessions(userName),
         getWeeklyPlan(userName),
         getAllDayPlanners(userName),
+        getUserSettings(userName),
       ])
       setAllSessions(sessions || [])
       setWeeklyPlan(plan || {})
       setDayPlanners(planners || {})
+      setSettings(userSettings || { sundayRestDay: false, effectiveFrom: null })
     } catch (err) {
       console.error('Error fetching analytics data:', err)
     } finally {
@@ -70,9 +75,11 @@ export default function Analytics({ userName }) {
     }
     window.addEventListener('study_plan_updated', handleUpdate)
     window.addEventListener('study_sessions_updated', handleUpdate)
+    window.addEventListener('study_settings_updated', handleUpdate)
     return () => {
       window.removeEventListener('study_plan_updated', handleUpdate)
       window.removeEventListener('study_sessions_updated', handleUpdate)
+      window.removeEventListener('study_settings_updated', handleUpdate)
     }
   }, [fetchData])
 
@@ -88,8 +95,8 @@ export default function Analytics({ userName }) {
   }, [allSessions])
 
   const streaks = useMemo(() => {
-    return calculateStreaks(allDateGroups)
-  }, [allDateGroups])
+    return calculateStreaks(allDateGroups, settings)
+  }, [allDateGroups, settings])
 
   // Today's stats
   const todaySessions = useMemo(() => {
@@ -115,14 +122,18 @@ export default function Analytics({ userName }) {
     return sec
   }, [todaySessions, userName])
 
+  const isTodayRest = useMemo(() => {
+    return isRestDay(today, settings)
+  }, [today, settings])
+
   const todayTarget = useMemo(() => {
-    return getTargetForDate(today, weeklyPlan, dayPlanners)
-  }, [today, weeklyPlan, dayPlanners])
+    return getTargetForDate(today, weeklyPlan, dayPlanners, settings)
+  }, [today, weeklyPlan, dayPlanners, settings])
 
   const todayTargetSec = (todayTarget?.targetMinutes || 0) * 60
-  const todayPct = todayTargetSec > 0
-    ? Math.min(100, Math.round((todayStudiedSec / todayTargetSec) * 100))
-    : 0
+  const todayPct = isTodayRest
+    ? 100
+    : (todayTargetSec > 0 ? Math.min(100, Math.round((todayStudiedSec / todayTargetSec) * 100)) : 0)
 
   // Selected Month calculations
   const totalMonthSec = useMemo(() => {
@@ -145,9 +156,10 @@ export default function Analytics({ userName }) {
     return groupSessionsByDate(filteredSessions)
   }, [filteredSessions])
 
-  // Count days where target was achieved in selected month
-  const { completedDaysCount } = useMemo(() => {
+  // Count days where target was achieved in selected month (excluding rest days from denominator)
+  const { completedDaysCount, activePlannedDaysInMonth } = useMemo(() => {
     let completed = 0
+    let activePlannedDays = 0
 
     // Group studied sec by date
     const dateMap = {}
@@ -158,7 +170,13 @@ export default function Analytics({ userName }) {
     // Check every day of the month
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      const target = getTargetForDate(dateStr, weeklyPlan, dayPlanners)
+      const isRest = isRestDay(dateStr, settings)
+      if (isRest) {
+        continue // Rest day is not a required study day
+      }
+
+      activePlannedDays++
+      const target = getTargetForDate(dateStr, weeklyPlan, dayPlanners, settings)
       if (target && target.targetMinutes > 0) {
         const studied = dateMap[dateStr] || 0
         if (studied >= target.targetMinutes * 60) {
@@ -169,21 +187,39 @@ export default function Analytics({ userName }) {
       }
     }
 
-    return { completedDaysCount: completed }
-  }, [filteredSessions, daysInMonth, selectedYear, selectedMonth, weeklyPlan, dayPlanners])
+    return { completedDaysCount: completed, activePlannedDaysInMonth: activePlannedDays }
+  }, [filteredSessions, daysInMonth, selectedYear, selectedMonth, weeklyPlan, dayPlanners, settings])
 
   // Goal achievement percentage
-  const goalAchievementRate = daysInMonth > 0
-    ? Math.min(100, Math.round((completedDaysCount / daysInMonth) * 100))
+  const goalAchievementRate = activePlannedDaysInMonth > 0
+    ? Math.min(100, Math.round((completedDaysCount / activePlannedDaysInMonth) * 100))
     : 0
 
-  // Daily average for this month
+  // Daily average for this month (excluding scheduled rest days)
   const isCurrentMonth = selectedYear === currentYear && selectedMonth === (currentMonthNum - 1)
-  const passedDaysInMonth = isCurrentMonth ? Math.max(1, Math.min(daysInMonth, new Date().getDate())) : Math.max(1, daysInMonth)
+  const passedDaysInMonth = useMemo(() => {
+    const maxDay = isCurrentMonth ? Math.max(1, Math.min(daysInMonth, new Date().getDate())) : Math.max(1, daysInMonth)
+    let count = 0
+    for (let d = 1; d <= maxDay; d++) {
+      const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      if (!isRestDay(dateStr, settings)) {
+        count++
+      }
+    }
+    return Math.max(1, count)
+  }, [isCurrentMonth, daysInMonth, selectedYear, selectedMonth, settings])
+
   const dailyAverageSec = passedDaysInMonth > 0 ? Math.round(totalMonthSec / passedDaysInMonth) : 0
 
   // Expected daily goal
-  const defaultDailyTargetSec = (todayTarget?.targetMinutes || 120) * 60
+  const defaultDailyTargetSec = useMemo(() => {
+    if (todayTarget?.targetMinutes && !isTodayRest) {
+      return todayTarget.targetMinutes * 60
+    }
+    const monHours = weeklyPlan?.days?.[1]?.targetHours
+    return (monHours ? Number(monHours) * 60 : 120) * 60
+  }, [todayTarget, isTodayRest, weeklyPlan])
+
   const dailyAvgPct = defaultDailyTargetSec > 0
     ? Math.min(100, Math.round((dailyAverageSec / defaultDailyTargetSec) * 100))
     : 0
@@ -284,37 +320,63 @@ export default function Analytics({ userName }) {
         <div
           className="rounded-2xl p-4 border transition-all relative overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)',
-            borderColor: todayPct >= 100 ? 'rgba(34, 197, 94, 0.4)' : 'rgba(45, 212, 191, 0.25)',
+            background: isTodayRest
+              ? 'linear-gradient(135deg, rgba(147, 51, 234, 0.12) 0%, rgba(15, 23, 42, 0.6) 100%)'
+              : 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)',
+            borderColor: isTodayRest
+              ? 'rgba(168, 85, 247, 0.4)'
+              : todayPct >= 100
+              ? 'rgba(34, 197, 94, 0.4)'
+              : 'rgba(45, 212, 191, 0.25)',
           }}
         >
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-lg">
-                🎯
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${
+                isTodayRest ? 'bg-purple-500/15 border border-purple-500/30' : 'bg-teal-500/10 border border-teal-500/30'
+              }`}>
+                {isTodayRest ? '🛋️' : '🎯'}
               </div>
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  Today's Goal Progress
-                  {todayPct >= 100 && <span className="text-xs">🎉</span>}
+                  {isTodayRest ? 'Sunday Rest Day Active' : "Today's Goal Progress"}
+                  {isTodayRest ? (
+                    <span className="text-[10px] font-bold text-purple-300 bg-purple-500/20 border border-purple-500/35 px-2 py-0.5 rounded-full">
+                      Protected 🛡️
+                    </span>
+                  ) : todayPct >= 100 ? (
+                    <span className="text-xs">🎉</span>
+                  ) : null}
                 </h2>
                 <p className="text-[11px] text-gray-400">
-                  {todayPct >= 100 ? 'Daily goal accomplished! Superb consistency!' : 'Keep the momentum going!'}
+                  {isTodayRest
+                    ? 'Take rest, recharge, and recover for the week ahead! Streak safely continues.'
+                    : todayPct >= 100
+                    ? 'Daily goal accomplished! Superb consistency!'
+                    : 'Keep the momentum going!'}
                 </p>
               </div>
             </div>
 
             <div className="text-right">
               <div className="text-sm font-black font-mono">
-                <span className={todayPct >= 100 ? 'text-green-400' : 'text-teal-300'}>
-                  {formatDuration(todayStudiedSec)}
-                </span>
-                <span className="text-gray-500 text-xs font-normal"> / </span>
-                <span className="text-gray-300 text-xs">
-                  {todayTargetSec > 0 ? formatHoursMinutes(todayTargetSec) : 'No Goal'}
-                </span>
+                {isTodayRest ? (
+                  <span className="text-purple-300">Rest Day</span>
+                ) : (
+                  <>
+                    <span className={todayPct >= 100 ? 'text-green-400' : 'text-teal-300'}>
+                      {formatDuration(todayStudiedSec)}
+                    </span>
+                    <span className="text-gray-500 text-xs font-normal"> / </span>
+                    <span className="text-gray-300 text-xs">
+                      {todayTargetSec > 0 ? formatHoursMinutes(todayTargetSec) : 'No Goal'}
+                    </span>
+                  </>
+                )}
               </div>
-              <span className="text-[10px] text-gray-400 font-medium">Studied Today</span>
+              <span className="text-[10px] text-gray-400 font-medium">
+                {isTodayRest ? '0h Target' : 'Studied Today'}
+              </span>
             </div>
           </div>
 
@@ -324,10 +386,14 @@ export default function Analytics({ userName }) {
               className="h-full rounded-full transition-all duration-700"
               style={{
                 width: `${todayPct}%`,
-                background: todayPct >= 100
+                background: isTodayRest
+                  ? 'linear-gradient(90deg, #9333ea, #a855f7)'
+                  : todayPct >= 100
                   ? 'linear-gradient(90deg, #10b981, #22c55e)'
                   : 'linear-gradient(90deg, #06b6d4, #3b82f6)',
-                boxShadow: todayPct >= 100
+                boxShadow: isTodayRest
+                  ? '0 0 12px rgba(168, 85, 247, 0.4)'
+                  : todayPct >= 100
                   ? '0 0 12px rgba(34, 197, 94, 0.5)'
                   : '0 0 12px rgba(6, 182, 212, 0.4)',
               }}
@@ -336,13 +402,13 @@ export default function Analytics({ userName }) {
 
           <div className="mt-2 flex items-center justify-between text-[11px]">
             <span className="text-gray-400 flex items-center gap-1">
-              ⚡ {todayPct >= 100 ? 'Goal completed!' : `${todayPct}% reached`}
+              {isTodayRest ? '🛋️ Rest day active — Your streak is preserved!' : (todayPct >= 100 ? '⚡ Goal completed!' : `⚡ ${todayPct}% reached`)}
             </span>
             <button
               onClick={() => navigate('/planner')}
               className="text-teal-400 hover:text-teal-300 text-[10px] font-bold underline"
             >
-              Adjust Goal →
+              {isTodayRest ? 'View Day Planner →' : 'Adjust Goal →'}
             </button>
           </div>
         </div>
@@ -462,7 +528,7 @@ export default function Analytics({ userName }) {
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Goal Achievement</p>
               <p className="text-xl font-black text-indigo-400 mt-1 font-mono">{goalAchievementRate}%</p>
               <p className="text-[11px] text-gray-500 mt-0.5">
-                {completedDaysCount}/{daysInMonth} days active
+                {completedDaysCount}/{activePlannedDaysInMonth} days active
               </p>
             </div>
 
@@ -571,7 +637,8 @@ export default function Analytics({ userName }) {
           ) : (
             <div className="flex flex-col divide-y divide-[#202020]">
               {monthDateGroups.map((group) => {
-                const target = getTargetForDate(group.date, weeklyPlan, dayPlanners)
+                const target = getTargetForDate(group.date, weeklyPlan, dayPlanners, settings)
+                const isRest = isRestDay(group.date, settings)
                 const isMet = target?.targetMinutes ? group.totalSeconds >= target.targetMinutes * 60 : true
                 return (
                   <div
@@ -580,14 +647,23 @@ export default function Analytics({ userName }) {
                     className="py-2.5 flex items-center justify-between hover:bg-[#1a1a1a] px-2 rounded-lg cursor-pointer transition-colors"
                   >
                     <div>
-                      <p className="text-xs font-semibold text-white font-mono">{group.date}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-semibold text-white font-mono">{group.date}</p>
+                        {isRest && (
+                          <span className="text-[9px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded-full">
+                            Rest Day 🛋️
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-gray-500">{group.sessions.length} session(s)</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs font-bold text-gray-200 font-mono">
                         {formatDuration(group.totalSeconds)}
                       </p>
-                      {target?.targetMinutes ? (
+                      {isRest ? (
+                        <span className="text-[10px] text-purple-400 font-medium">Rest Day</span>
+                      ) : target?.targetMinutes ? (
                         <span className={`text-[10px] font-medium ${isMet ? 'text-green-400' : 'text-amber-400'}`}>
                           {isMet ? '✓ Target Met' : 'Missed Target'}
                         </span>

@@ -29,9 +29,9 @@ import {
 import {
   getWeeklyPlan, getTargetForDate, getSessionsByDate, getSyllabus,
   getDayPlanner, calculateDayNumber, getUserSessions, groupSessionsByDate, calculateStreaks,
-  getUserDoc,
+  getUserDoc, getUserSettings, isRestDay, saveSession,
 } from '../utils/firestoreHelpers'
-import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
+import { todayString, formatHoursMinutes, formatDuration, toLocalDateStr } from '../utils/formatTime'
 import { clearSession, getSession, updateCurrentSession } from '../utils/auth'
 import { backgroundTimer } from '../utils/backgroundTimer'
 
@@ -60,6 +60,8 @@ export default function Stopwatch({ userName }) {
   const [wallpaper, setWallpaper] = useState(() => getWallpaper(userName))
   const [wallpaperConfig, setWallpaperConfig] = useState(() => getWallpaperConfig(userName))
   const [streakCount, setStreakCount] = useState(0)
+  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: '' })
+  const isTodayRest = isRestDay(todayString(), settings)
   const [userProfile, setUserProfile] = useState(() => {
     const s = getSession()
     return {
@@ -141,6 +143,7 @@ export default function Stopwatch({ userName }) {
 
       if (e.code === 'Space') {
         e.preventDefault()
+        if (isTodayRest) return
         if (isRunning) stop()
         else start()
       } else if (e.code === 'KeyF') {
@@ -216,9 +219,10 @@ export default function Stopwatch({ userName }) {
   const loadData = useCallback(async () => {
     if (!userName) return
     try {
-      const [allUserSessions, userDoc] = await Promise.all([
+      const [allUserSessions, userDoc, userSettings] = await Promise.all([
         getUserSessions(userName),
         getUserDoc(userName),
+        getUserSettings(userName),
       ])
 
       const plan = userDoc?.weeklyPlan || {}
@@ -227,14 +231,15 @@ export default function Stopwatch({ userName }) {
       const dNum = await calculateDayNumber(userName, todayString(), allUserSessions, userDoc)
       const todaySessions = (allUserSessions || []).filter((s) => s.date === todayString())
 
-      const goal = getTargetForDate(todayString(), plan, dPlan ? { [todayString()]: dPlan } : null)
+      const goal = getTargetForDate(todayString(), plan, dPlan ? { [todayString()]: dPlan } : null, userSettings)
       setDailyGoal(goal)
       setDayPlan(dPlan)
       setDayNum(dNum || 1)
+      setSettings(userSettings || { sundayRestDay: false, effectiveFrom: '' })
 
       if (allUserSessions && allUserSessions.length > 0) {
         const groups = groupSessionsByDate(allUserSessions)
-        const st = calculateStreaks(groups, plan)
+        const st = calculateStreaks(groups, plan, userSettings)
         setStreakCount(st.currentStreak || 0)
       }
 
@@ -284,6 +289,56 @@ export default function Stopwatch({ userName }) {
     loadData()
   }, [loadData])
 
+  // ── Saturday midnight to Sunday Rest rollover check ──
+  useEffect(() => {
+    if (!userName) return
+    const checkMidnightRollover = async () => {
+      try {
+        const uSettings = await getUserSettings(userName)
+        const today = todayString()
+        if (!isRestDay(today, uSettings)) return
+
+        const storageKey = `stt_stopwatch_state_${userName.toLowerCase()}`
+        const raw = localStorage.getItem(storageKey)
+        if (!raw) return
+
+        const saved = JSON.parse(raw)
+        if (saved.isRunning && saved.startTimestamp) {
+          const startDate = toLocalDateStr(new Date(saved.startTimestamp))
+          if (startDate < today) {
+            // Started on previous day (e.g. Saturday)
+            const satMidnightEpoch = new Date(startDate + 'T23:59:59.999').getTime()
+            const satElapsedMs = (saved.baseElapsed || 0) + Math.max(0, satMidnightEpoch - saved.startTimestamp)
+            const satSec = Math.max(1, Math.floor(satElapsedMs / 1000))
+
+            stop()
+            reset()
+
+            await saveSession(userName, {
+              totalSeconds: satSec,
+              date: startDate,
+              subject: activeSubject || 'Focus Study',
+              topic: activeTopic || 'Saturday Session',
+              notes: 'Auto-saved at midnight before Sunday Rest Day 🛋️',
+            })
+
+            loadData()
+          } else {
+            // Started today on Rest Day -> stop and reset immediately
+            stop()
+            reset()
+          }
+        }
+      } catch (err) {
+        console.warn('Midnight rollover check error:', err)
+      }
+    }
+
+    checkMidnightRollover()
+    const timer = setInterval(checkMidnightRollover, 60000)
+    return () => clearInterval(timer)
+  }, [userName, stop, reset, activeSubject, activeTopic, loadData])
+
   // Real-time synchronization listeners for study plan and sessions
   useEffect(() => {
     const handleUpdate = () => {
@@ -291,9 +346,11 @@ export default function Stopwatch({ userName }) {
     }
     window.addEventListener('study_plan_updated', handleUpdate)
     window.addEventListener('study_sessions_updated', handleUpdate)
+    window.addEventListener('study_settings_updated', handleUpdate)
     return () => {
       window.removeEventListener('study_plan_updated', handleUpdate)
       window.removeEventListener('study_sessions_updated', handleUpdate)
+      window.removeEventListener('study_settings_updated', handleUpdate)
     }
   }, [loadData])
 
@@ -393,7 +450,7 @@ export default function Stopwatch({ userName }) {
 
     const studiedSec = todayStudied + Math.floor(elapsed / 1000)
 
-    if (dailyGoal?.isRestDay && (!dayPlan?.targetHours || Number(dayPlan.targetHours) === 0)) {
+    if (isTodayRest || (dailyGoal?.isRestDay && (!dayPlan?.targetHours || Number(dayPlan.targetHours) === 0))) {
       return {
         hasTarget: false,
         isRestDay: true,
@@ -401,8 +458,8 @@ export default function Stopwatch({ userName }) {
         targetSec: 0,
         studiedSec,
         studiedLabel: formatHoursMinutes(studiedSec),
-        label: dailyGoal.subjects || 'Sunday Rest & Recovery',
-        source: 'Rest & Buffer Day',
+        label: 'Rest Day (0h Goal)',
+        source: 'Streak Shield Active',
       }
     }
 
@@ -647,8 +704,26 @@ export default function Stopwatch({ userName }) {
 
             {/* Buttons */}
             <div className="flex flex-col gap-2.5 p-4 pt-3">
+              {isTodayRest && (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/50 via-[#181428] to-indigo-950/40 border border-purple-500/30 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">🛋️</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Today is your Rest Day</h4>
+                      <p className="text-[11px] text-purple-300">Take a break and recharge! Streak Shield is active 🛡️.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate('/plan')}
+                    className="text-[11px] px-2.5 py-1 rounded-xl bg-purple-600/25 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 font-semibold transition-all whitespace-nowrap"
+                  >
+                    Weekly Plan →
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2 w-full">
-                {hasTime && (
+                {hasTime && !isTodayRest && (
                   <button
                     onClick={() => {
                       if (isRunning) stop()
@@ -663,11 +738,11 @@ export default function Stopwatch({ userName }) {
                 <button
                   onClick={() => setShowShareModal(true)}
                   title="Generate shareable study card for WhatsApp & Instagram"
-                  className={`pill-btn flex items-center justify-center gap-1.5 ${hasTime ? 'w-auto px-4' : 'w-full'}`}
+                  className={`pill-btn flex items-center justify-center gap-1.5 ${hasTime && !isTodayRest ? 'w-auto px-4' : 'w-full'}`}
                   style={{ background: '#1c1b29', border: '1px solid #373554', color: '#c4b5fd' }}
                 >
                   <span>✨</span>
-                  <span className="text-xs font-semibold">{hasTime ? 'Share' : 'Share Focus Card'}</span>
+                  <span className="text-xs font-semibold">{hasTime && !isTodayRest ? 'Share' : 'Share Focus Card'}</span>
                 </button>
               </div>
               {isRunning && (
@@ -678,19 +753,29 @@ export default function Stopwatch({ userName }) {
               <div className="flex gap-3">
                 <button
                   onClick={reset}
-                  disabled={isRunning || elapsed === 0}
+                  disabled={isTodayRest || isRunning || elapsed === 0}
                   className="pill-btn flex-1"
-                  style={{ background: '#2a2a2a', color: isRunning || elapsed === 0 ? '#555' : 'white', cursor: isRunning || elapsed === 0 ? 'not-allowed' : 'pointer' }}
+                  style={{ background: '#2a2a2a', color: (isTodayRest || isRunning || elapsed === 0) ? '#555' : 'white', cursor: (isTodayRest || isRunning || elapsed === 0) ? 'not-allowed' : 'pointer' }}
                 >
                   Reset
                 </button>
-                <button
-                  onClick={isRunning ? stop : start}
-                  className="pill-btn flex-1"
-                  style={{ background: isRunning ? '#ef4444' : '#22c55e', color: isRunning ? 'white' : 'black' }}
-                >
-                  {isRunning ? 'Stop' : 'Start'}
-                </button>
+                {isTodayRest ? (
+                  <button
+                    disabled={true}
+                    className="pill-btn flex-1 cursor-not-allowed opacity-90 shadow-md font-semibold"
+                    style={{ background: '#2b1f47', color: '#c4b5fd', border: '1px solid rgba(168, 85, 247, 0.4)' }}
+                  >
+                    🛋️ Rest Day Active
+                  </button>
+                ) : (
+                  <button
+                    onClick={isRunning ? stop : start}
+                    className="pill-btn flex-1"
+                    style={{ background: isRunning ? '#ef4444' : '#22c55e', color: isRunning ? 'white' : 'black' }}
+                  >
+                    {isRunning ? 'Stop' : 'Start'}
+                  </button>
+                )}
               </div>
 
               {/* Lock Screen & Background Controller active banner */}

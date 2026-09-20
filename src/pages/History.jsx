@@ -13,8 +13,9 @@ import {
   getUserSessions, groupSessionsByDate,
   calculateStreaks, getWeeklyPlan, getTargetForDate,
   getSpacedRepetitionDue, getAllDayPlanners, saveSession,
+  getUserSettings, isRestDay,
 } from '../utils/firestoreHelpers'
-import { formatDateDisplay, formatHoursMinutes, todayString } from '../utils/formatTime'
+import { formatDateDisplay, formatHoursMinutes, todayString, getLocalWeekdayId } from '../utils/formatTime'
 import { clearSession } from '../utils/auth'
 
 export default function History({ userName }) {
@@ -23,6 +24,7 @@ export default function History({ userName }) {
   const [rawSessions, setRawSessions] = useState([])
   const [weeklyPlan, setWeeklyPlan] = useState({})
   const [dayPlanners, setDayPlanners] = useState({})
+  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: '' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [partnerInput, setPartnerInput] = useState('')
@@ -33,15 +35,17 @@ export default function History({ userName }) {
     setLoading(true)
     setError(null)
     try {
-      const [sessions, plan, dPlanners] = await Promise.all([
+      const [sessions, plan, dPlanners, userSettings] = await Promise.all([
         getUserSessions(userName),
         getWeeklyPlan(userName),
         getAllDayPlanners(userName),
+        getUserSettings(userName),
       ])
       setRawSessions(sessions || [])
       setDateGroups(groupSessionsByDate(sessions))
       setWeeklyPlan(plan || {})
       setDayPlanners(dPlanners || {})
+      setSettings(userSettings || { sundayRestDay: false, effectiveFrom: '' })
     } catch (err) {
       console.error('History load error:', err)
       setError(`Failed to load: ${err?.message || 'Unknown error'}`)
@@ -59,9 +63,11 @@ export default function History({ userName }) {
     }
     window.addEventListener('study_plan_updated', handleUpdate)
     window.addEventListener('study_sessions_updated', handleUpdate)
+    window.addEventListener('study_settings_updated', handleUpdate)
     return () => {
       window.removeEventListener('study_plan_updated', handleUpdate)
       window.removeEventListener('study_sessions_updated', handleUpdate)
+      window.removeEventListener('study_settings_updated', handleUpdate)
     }
   }, [load, userName])
 
@@ -70,12 +76,28 @@ export default function History({ userName }) {
     navigate('/welcome', { replace: true })
   }
 
-  const { currentStreak, longestStreak } = calculateStreaks(dateGroups, weeklyPlan)
+  const { currentStreak, longestStreak } = calculateStreaks(dateGroups, weeklyPlan, settings)
   const totalSeconds = dateGroups.reduce((s, g) => s + g.totalSeconds, 0)
   const bestDaySeconds = dateGroups.length ? Math.max(...dateGroups.map((g) => g.totalSeconds)) : 0
 
   // Last 7 days for chart
   const last7 = getLast7DaysData(dateGroups)
+
+  const displayDateGroups = React.useMemo(() => {
+    const map = new Map()
+    dateGroups.forEach((g) => map.set(g.date, { ...g }))
+    Object.keys(dayPlanners).forEach((dStr) => {
+      if (isRestDay(dStr, settings) && !map.has(dStr)) {
+        map.set(dStr, {
+          date: dStr,
+          totalSeconds: 0,
+          sessions: [],
+          isRestDayOnly: true,
+        })
+      }
+    })
+    return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date))
+  }, [dateGroups, dayPlanners, settings])
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'transparent' }}>
@@ -239,16 +261,17 @@ export default function History({ userName }) {
 
             {/* Date cards with goal status & outcome tags */}
             <div className="flex flex-col gap-3">
-              {dateGroups.map((group) => {
+              {displayDateGroups.map((group) => {
                 const screenshot = [...group.sessions].reverse().find((s) => s.screenshotUrl)?.screenshotUrl
-                const goal = getTargetForDate(group.date, weeklyPlan, dayPlanners)
-                const goalPct = goal?.targetMinutes
+                const isRest = isRestDay(group.date, settings)
+                const goal = getTargetForDate(group.date, weeklyPlan, dayPlanners, settings)
+                const goalPct = (!isRest && goal?.targetMinutes)
                   ? Math.min(100, Math.round((group.totalSeconds / (goal.targetMinutes * 60)) * 100))
                   : null
                 const isToday = group.date === todayString()
                 const isPast = group.date < todayString()
-                const goalMet = goalPct !== null && goalPct >= 100
-                const goalMissed = goalPct !== null && goalPct < 100 && isPast && !isToday
+                const goalMet = !isRest && goalPct !== null && goalPct >= 100
+                const goalMissed = !isRest && goalPct !== null && goalPct < 100 && isPast && !isToday
 
                 // Gather day's focus, output count, subjects and reflection tags
                 const focusScores = group.sessions.map((s) => s.focusScore).filter(Boolean)
@@ -270,9 +293,19 @@ export default function History({ userName }) {
                     key={group.date}
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate(`/history/${group.date}`)}
-                    onKeyDown={(e) => e.key === 'Enter' && navigate(`/history/${group.date}`)}
-                    className="card p-4 flex flex-col gap-3 hover:border-[#3a3a3a] transition-all btn-press cursor-pointer"
+                    onClick={() => {
+                      if (group.isRestDayOnly) navigate('/planner')
+                      else navigate(`/history/${group.date}`)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (group.isRestDayOnly) navigate('/planner')
+                        else navigate(`/history/${group.date}`)
+                      }
+                    }}
+                    className={`card p-4 flex flex-col gap-3 hover:border-[#3a3a3a] transition-all btn-press cursor-pointer ${
+                      isRest ? 'bg-[#151322]/80 border-purple-500/20' : ''
+                    }`}
                   >
                     {/* Top row */}
                     <div className="flex items-center gap-3">
@@ -291,12 +324,19 @@ export default function History({ userName }) {
                           </span>
                           {goalMet && <GoalBadge type="met" />}
                           {goalMissed && <GoalBadge type="missed" />}
-                          {goal?.isRestDay && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 flex items-center gap-1">
-                              <span>🛡️</span> Sunday Buffer
+                          {isRest && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap text-purple-300 bg-purple-500/15 border border-purple-500/30 flex items-center gap-1">
+                              <span>🛋️</span> Rest Day (Streak Safe 🛡️)
                             </span>
                           )}
                         </div>
+
+                        {/* Rest Day Notes if available */}
+                        {isRest && dayPlanners[group.date]?.notes && (
+                          <div className="text-[11px] text-purple-300/90 italic bg-purple-950/20 border border-purple-500/20 px-2.5 py-1 rounded-lg mt-1.5">
+                            "{dayPlanners[group.date].notes}"
+                          </div>
+                        )}
 
                         {/* Outcomes & tags row */}
                         {(avgFocus || totalOutput > 0 || reflectionTags.length > 0 || subjects.length > 0) && (
@@ -388,6 +428,7 @@ export default function History({ userName }) {
         onClose={() => setShowManualModal(false)}
         onSaved={load}
         userName={userName}
+        settings={settings}
       />
     </div>
   )
@@ -495,7 +536,6 @@ function getLast7DaysData(dateGroups) {
   for (const g of dateGroups) map[g.date] = g.totalSeconds
 
   const result = []
-  const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
   const today = new Date()
 
   for (let i = 6; i >= 0; i--) {
@@ -507,7 +547,7 @@ function getLast7DaysData(dateGroups) {
     const dateStr = `${y}-${mo}-${dy}`
     result.push({
       date: dateStr,
-      dayLabel: dayLabels[d.getDay()],
+      dayLabel: getLocalWeekdayId(d).slice(0, 2),
       seconds: map[dateStr] || 0,
       isToday: i === 0,
     })
@@ -515,7 +555,7 @@ function getLast7DaysData(dateGroups) {
   return result
 }
 
-function ManualLogModal({ isOpen, onClose, onSaved, userName }) {
+function ManualLogModal({ isOpen, onClose, onSaved, userName, settings }) {
   const [date, setDate] = useState(todayString())
   const [hours, setHours] = useState('1')
   const [minutes, setMinutes] = useState('0')
@@ -527,8 +567,14 @@ function ManualLogModal({ isOpen, onClose, onSaved, userName }) {
 
   if (!isOpen) return null
 
+  const isRest = isRestDay(date, settings)
+
   const handleSave = async (e) => {
     e.preventDefault()
+    if (isRest) {
+      setError('This date is marked as a Rest Day. Sessions cannot be logged on rest days.')
+      return
+    }
     const h = parseInt(hours, 10) || 0
     const m = parseInt(minutes, 10) || 0
     const totalSec = h * 3600 + m * 60
@@ -560,7 +606,7 @@ function ManualLogModal({ isOpen, onClose, onSaved, userName }) {
       onClose()
     } catch (err) {
       console.error(err)
-      setError('Failed to save session. Check your connection.')
+      setError(err?.message || 'Failed to save session. Check your connection.')
     } finally {
       setSaving(false)
     }
@@ -600,6 +646,12 @@ function ManualLogModal({ isOpen, onClose, onSaved, userName }) {
               className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-xs outline-none focus:border-purple-500"
               required
             />
+            {isRest && (
+              <p className="text-[11px] font-semibold text-rose-400 mt-1 flex items-center gap-1">
+                <span>⚠️</span>
+                <span>This date is marked as a Rest Day. Sessions cannot be logged on rest days.</span>
+              </p>
+            )}
           </div>
 
           {/* Time: Hours & Minutes */}
@@ -680,9 +732,9 @@ function ManualLogModal({ isOpen, onClose, onSaved, userName }) {
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || isRest}
               className="flex-1 pill-btn h-9 text-xs"
-              style={{ background: '#8b5cf6', color: 'white', opacity: saving ? 0.7 : 1 }}
+              style={{ background: '#8b5cf6', color: 'white', opacity: (saving || isRest) ? 0.6 : 1 }}
             >
               {saving ? 'Saving…' : 'Save Session'}
             </button>

@@ -17,8 +17,9 @@ import {
   getUserSessions, getAllDayPlanners,
   saveDayPlanner, getDayPlanner,
   syncTargetHours,
+  getUserSettings, saveUserSettings, isRestDay,
 } from '../utils/firestoreHelpers'
-import { formatHoursMinutes, todayString } from '../utils/formatTime'
+import { formatHoursMinutes, todayString, getLocalWeekdayId, toLocalDateStr } from '../utils/formatTime'
 
 const DAYS = [
   { key: 'Mon', label: 'Monday' },
@@ -30,7 +31,7 @@ const DAYS = [
   { key: 'Sun', label: 'Sunday' },
 ]
 
-const TODAY_KEY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()]
+const TODAY_KEY = getLocalWeekdayId(new Date())
 
 const DEFAULT_PLAN = Object.fromEntries(
   DAYS.map(({ key }) => [key, { targetMinutes: 0, subjects: '' }])
@@ -84,6 +85,7 @@ export default function Plan({ userName }) {
   const [sessions, setSessions] = useState([])
   const [dayPlanners, setDayPlanners] = useState({})
   const [weekOffset, setWeekOffset] = useState(0)
+  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -96,10 +98,11 @@ export default function Plan({ userName }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [existingPlan, userSessions, allDayPlans] = await Promise.all([
+      const [existingPlan, userSessions, allDayPlans, userSettings] = await Promise.all([
         getWeeklyPlan(userName),
         getUserSessions(userName),
         getAllDayPlanners(userName),
+        getUserSettings(userName),
       ])
 
       const merged = { ...DEFAULT_PLAN, ...(existingPlan || {}) }
@@ -120,6 +123,7 @@ export default function Plan({ userName }) {
       setPlan(merged)
       setSessions(userSessions || [])
       setDayPlanners(allDayPlans || {})
+      setSettings(userSettings || { sundayRestDay: false, effectiveFrom: '' })
     } catch (err) {
       console.error('Plan load error:', err)
     } finally {
@@ -138,9 +142,11 @@ export default function Plan({ userName }) {
     }
     window.addEventListener('study_plan_updated', handleUpdate)
     window.addEventListener('study_sessions_updated', handleUpdate)
+    window.addEventListener('study_settings_updated', handleUpdate)
     return () => {
       window.removeEventListener('study_plan_updated', handleUpdate)
       window.removeEventListener('study_sessions_updated', handleUpdate)
+      window.removeEventListener('study_settings_updated', handleUpdate)
     }
   }, [load])
 
@@ -173,17 +179,25 @@ export default function Plan({ userName }) {
     setSaved(false)
   }
 
-  const isSundayRest = plan.sundayRest !== false
+  const isSundayRest = Boolean(settings?.sundayRestDay)
 
   const handleToggleSundayRest = async () => {
     const newVal = !isSundayRest
+    const todayStr = toLocalDateStr(new Date())
+    const updatedSettings = {
+      ...settings,
+      sundayRestDay: newVal,
+      effectiveFrom: newVal ? (settings?.effectiveFrom || todayStr) : '',
+    }
     const updatedPlan = {
       ...plan,
       sundayRest: newVal,
     }
+    setSettings(updatedSettings)
     setPlan(updatedPlan)
     setSaved(false)
     try {
+      await saveUserSettings(userName, updatedSettings)
       await saveWeeklyPlan(userName, updatedPlan)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
@@ -192,31 +206,6 @@ export default function Plan({ userName }) {
       }
     } catch (e) {
       console.warn('Auto-save sundayRest toggle failed:', e)
-    }
-  }
-
-  const handleSundayPreset = async (minutes, defaultSubjects) => {
-    const currentSubjects = plan.Sun?.subjects
-    const subjects = currentSubjects && currentSubjects.trim().length > 0 ? currentSubjects : defaultSubjects
-    const updatedPlan = {
-      ...plan,
-      Sun: {
-        ...(plan.Sun || {}),
-        targetMinutes: minutes,
-        subjects,
-      },
-    }
-    setPlan(updatedPlan)
-    setSaved(false)
-
-    const dStr = weekDates['Sun']?.dateStr
-    const targetHours = Number((minutes / 60).toFixed(2))
-    if (dStr && userName) {
-      try {
-        await syncTargetHours(userName, dStr, targetHours)
-      } catch (e) {
-        console.warn('Auto-sync Sunday preset target failed:', e)
-      }
     }
   }
 
@@ -229,14 +218,15 @@ export default function Plan({ userName }) {
       // 2. Synchronize target hours into Day Planner sheets for the entire active week
       const syncPromises = DAYS.map(async ({ key }) => {
         const dStr = weekDates[key]?.dateStr
-        const targetMin = plan[key]?.targetMinutes || 0
+        const isRest = isRestDay(dStr, settings) || (key === 'Sun' && isSundayRest)
+        const targetMin = isRest ? 0 : (plan[key]?.targetMinutes || 0)
         const targetHours = Number((targetMin / 60).toFixed(2))
         if (dStr) {
           try {
             const existingDayPlan = await getDayPlanner(userName, dStr)
             const updated = existingDayPlan
-              ? { ...existingDayPlan, targetHours }
-              : { date: dStr, targetHours, goals: ['', '', ''], rows: [] }
+              ? { ...existingDayPlan, targetHours, ...(isRest ? { isRestDay: true } : {}) }
+              : { date: dStr, targetHours, goals: ['', '', ''], rows: [], ...(isRest ? { isRestDay: true } : {}) }
             await saveDayPlanner(userName, dStr, updated)
           } catch (e) {
             console.warn(`Could not sync to day planner for ${dStr}:`, e)
@@ -268,25 +258,22 @@ export default function Plan({ userName }) {
     let totalStudiedSeconds = 0
     let daysGoalMet = 0
     let daysWithTarget = 0
-    const isSunRest = plan.sundayRest !== false
 
     DAYS.forEach(({ key }) => {
+      const dayDate = weekDates[key]
+      const dateStr = dayDate?.dateStr
+      const isRest = isRestDay(dateStr, settings) || (key === 'Sun' && isSundayRest)
       const d = plan[key] || { targetMinutes: 0 }
-      const targetMin = d.targetMinutes || 0
-      const dateStr = weekDates[key]?.dateStr
+      const targetMin = isRest ? 0 : (d.targetMinutes || 0)
+
       const daySec = sessions
         .filter((s) => s.date === dateStr)
         .reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
 
       totalStudiedSeconds += daySec
 
-      // If Sunday rest mode is active, do not demand target on Sunday unless explicitly set
-      if (key === 'Sun' && isSunRest) {
-        if (targetMin > 0) {
-          totalTargetMinutes += targetMin
-          daysWithTarget++
-          if (daySec >= targetMin * 60) daysGoalMet++
-        }
+      // If Sunday rest mode is active, do not count Sunday in weekly target denominator
+      if (isRest) {
         return
       }
 
@@ -311,7 +298,7 @@ export default function Plan({ userName }) {
       daysWithTarget,
       overallPct,
     }
-  }, [plan, sessions, weekDates])
+  }, [plan, sessions, weekDates, settings, isSundayRest])
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'transparent' }}>
@@ -474,9 +461,9 @@ export default function Plan({ userName }) {
                   .filter((s) => s.date === dayDate.dateStr)
                   .reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
 
-                const isSunRest = key === 'Sun' && isSundayRest
-                const isMet = targetSec > 0 && daySec >= targetSec
-                const isMissed = !isSunRest && targetSec > 0 && daySec < targetSec && dayDate.isPast
+                const isRest = isRestDay(dayDate.dateStr, settings) || (key === 'Sun' && isSundayRest)
+                const isMet = !isRest && targetSec > 0 && daySec >= targetSec
+                const isMissed = !isRest && targetSec > 0 && daySec < targetSec && dayDate.isPast
                 const isToday = dayDate.isToday
 
                 let dotColor = 'bg-[#222] text-gray-500'
@@ -485,12 +472,12 @@ export default function Plan({ userName }) {
                 if (isMet) {
                   dotColor = 'bg-green-500/20 text-green-400 border border-green-500/40'
                   content = '✓'
-                } else if (isSunRest && targetSec === 0) {
+                } else if (isRest) {
                   if (daySec > 0) {
                     dotColor = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                     content = '✓'
                   } else {
-                    dotColor = 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                    dotColor = 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
                     content = '🛋️'
                   }
                 } else if (isMissed) {
@@ -521,23 +508,24 @@ export default function Plan({ userName }) {
             const isToday = dayDate.isToday
             const isPast = dayDate.isPast
             const isSunday = key === 'Sun'
-            const isSundayBuffer = isSunday && isSundayRest
+            const isRest = isRestDay(dayDate.dateStr, settings) || (isSunday && isSundayRest)
 
             const hours = Math.floor(d.targetMinutes / 60)
             const mins = d.targetMinutes % 60
             const displayH = hours > 0 ? `${hours}h` : ''
             const displayM = mins > 0 ? `${mins}m` : ''
-            const targetDisplayTime = displayH + (displayH && displayM ? ' ' : '') + displayM || '0h'
+            const normalTargetDisplay = displayH + (displayH && displayM ? ' ' : '') + displayM || '0h'
+            const targetDisplayTime = isRest ? '0h · Rest Day' : normalTargetDisplay
 
             // Actual study time from saved sessions on this date
             const dayActualSec = sessions
               .filter((s) => s.date === dayDate.dateStr)
               .reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
 
-            const targetSec = d.targetMinutes * 60
+            const targetSec = isRest ? 0 : (d.targetMinutes * 60)
             const pct = targetSec > 0 ? Math.min(100, Math.round((dayActualSec / targetSec) * 100)) : 0
-            const isGoalMet = targetSec > 0 && dayActualSec >= targetSec
-            const isGoalMissed = !isSundayBuffer && targetSec > 0 && dayActualSec < targetSec && isPast
+            const isGoalMet = !isRest && targetSec > 0 && dayActualSec >= targetSec
+            const isGoalMissed = !isRest && targetSec > 0 && dayActualSec < targetSec && isPast
 
             const daySheet = dayPlanners[dayDate.dateStr]
 
@@ -545,13 +533,15 @@ export default function Plan({ userName }) {
               <div
                 key={key}
                 className={`card p-4 flex flex-col gap-3 transition-all relative overflow-hidden ${
-                  isToday ? 'ring-1 ring-purple-500/50 bg-[#16112a]' : ''
+                  isToday ? 'ring-1 ring-purple-500/50 bg-[#16112a]' : isRest ? 'bg-[#131122]/60 border-purple-500/20' : ''
                 }`}
                 style={
                   isToday
                     ? { borderColor: 'rgba(139, 92, 246, 0.4)' }
                     : isGoalMet
                     ? { borderColor: 'rgba(34, 197, 94, 0.25)' }
+                    : isRest
+                    ? { borderColor: 'rgba(147, 51, 234, 0.2)' }
                     : {}
                 }
               >
@@ -572,7 +562,11 @@ export default function Plan({ userName }) {
                   </div>
 
                   {/* Goal Status Badge */}
-                  {targetSec > 0 ? (
+                  {isRest ? (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                      🛋️ Rest Day (Streak Safe 🛡️)
+                    </span>
+                  ) : targetSec > 0 ? (
                     isGoalMet ? (
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/30 flex items-center gap-1">
                         ✓ Goal Met! 🎉
@@ -587,17 +581,7 @@ export default function Plan({ userName }) {
                       </span>
                     ) : (
                       <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#222] text-gray-400 border border-[#333]">
-                        {isSundayBuffer ? '📝 Mock / Revision 🛡️' : '📅 Target Set'}
-                      </span>
-                    )
-                  ) : isSundayBuffer ? (
-                    dayActualSec > 0 ? (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                        🛋️ Bonus {formatHoursMinutes(dayActualSec)} (Streak Safe 🛡️)
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1">
-                        🛋️ Rest Day (Streak Safe 🛡️)
+                        📅 Target Set
                       </span>
                     )
                   ) : dayActualSec > 0 ? (
@@ -610,48 +594,6 @@ export default function Plan({ userName }) {
                     </span>
                   )}
                 </div>
-
-                {/* Sunday Quick Presets */}
-                {isSundayBuffer && (
-                  <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
-                    <span className="text-[10px] text-purple-300 font-semibold uppercase tracking-wider">
-                      Quick Preset:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleSundayPreset(0, '🛋️ Rest & Recharge')}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all ${
-                        d.targetMinutes === 0
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'bg-[#1e1e2d] hover:bg-[#28283d] text-gray-300 border border-[#333]'
-                      }`}
-                    >
-                      🛋️ Full Rest (0h)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSundayPreset(120, '📝 Mock Test & Analysis')}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all ${
-                        d.targetMinutes === 120
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'bg-[#1e1e2d] hover:bg-[#28283d] text-gray-300 border border-[#333]'
-                      }`}
-                    >
-                      📝 Mock Test (2h)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSundayPreset(180, '📚 Weekly Revision')}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all ${
-                        d.targetMinutes === 180
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'bg-[#1e1e2d] hover:bg-[#28283d] text-gray-300 border border-[#333]'
-                      }`}
-                    >
-                      📚 Revision (3h)
-                    </button>
-                  </div>
-                )}
 
                 {/* Target vs Actual Metrics */}
                 <div className="flex items-center justify-between text-xs pt-0.5">
@@ -686,7 +628,7 @@ export default function Plan({ userName }) {
                 </div>
 
                 {/* Progress bar */}
-                {targetSec > 0 && (
+                {!isRest && targetSec > 0 && (
                   <div className="relative h-2 rounded-full bg-[#222] overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
@@ -702,37 +644,50 @@ export default function Plan({ userName }) {
                   </div>
                 )}
 
-                {/* Hours slider */}
-                <div className="flex flex-col gap-1 pt-1">
-                  <div className="flex justify-between text-[11px] text-gray-500">
-                    <span>0h</span>
-                    <span>4h</span>
-                    <span>8h</span>
-                    <span>12h</span>
-                    <span>16h</span>
+                {/* Hours slider or Rest Day Badge */}
+                {isRest ? (
+                  <div className="py-2.5 px-3 rounded-xl bg-purple-950/30 border border-purple-500/30 flex items-center justify-between">
+                    <span className="text-xs text-purple-300 font-medium flex items-center gap-1.5">
+                      <span>🛋️</span>
+                      <span>Rest Day (Streak Shield Active)</span>
+                    </span>
+                    <span className="text-xs font-bold text-gray-400 font-mono">0h · Rest</span>
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={960}
-                    step={30}
-                    value={d.targetMinutes}
-                    onChange={(e) => handleHoursChange(key, Number(e.target.value))}
-                    onPointerUp={(e) => handleSliderRelease(key, Number(e.target.value))}
-                    onTouchEnd={(e) => handleSliderRelease(key, Number(e.target.value))}
-                    className="w-full accent-purple-500 cursor-pointer"
-                    style={{ accentColor: '#8b5cf6' }}
-                  />
-                </div>
+                ) : (
+                  <div className="flex flex-col gap-1 pt-1">
+                    <div className="flex justify-between text-[11px] text-gray-500">
+                      <span>0h</span>
+                      <span>4h</span>
+                      <span>8h</span>
+                      <span>12h</span>
+                      <span>16h</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={960}
+                      step={30}
+                      value={d.targetMinutes}
+                      onChange={(e) => handleHoursChange(key, Number(e.target.value))}
+                      onPointerUp={(e) => handleSliderRelease(key, Number(e.target.value))}
+                      onTouchEnd={(e) => handleSliderRelease(key, Number(e.target.value))}
+                      className="w-full accent-purple-500 cursor-pointer"
+                      style={{ accentColor: '#8b5cf6' }}
+                    />
+                  </div>
+                )}
 
                 {/* Subjects input */}
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="Subjects / topics planned for this day (e.g. Physics, Chemistry)"
-                    value={d.subjects}
+                    placeholder={isRest ? "🛋️ Rest Day — Recharge for next week!" : "Subjects / topics planned for this day (e.g. Physics, Chemistry)"}
+                    value={isRest ? '' : d.subjects}
+                    disabled={isRest}
                     onChange={(e) => handleSubjectsChange(key, e.target.value)}
-                    className="flex-1 rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 px-3 py-2 text-xs outline-none focus:border-purple-500 transition-colors"
+                    className={`flex-1 rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 px-3 py-2 text-xs outline-none transition-colors ${
+                      isRest ? 'opacity-60 cursor-not-allowed bg-[#181524]' : 'focus:border-purple-500'
+                    }`}
                   />
                 </div>
 

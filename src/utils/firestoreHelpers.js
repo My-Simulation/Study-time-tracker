@@ -10,6 +10,7 @@ import {
 import { signInWithPopup } from 'firebase/auth'
 import { db, getStorageInstance, auth, googleProvider } from '../firebase'
 import { hashPassword, verifyPassword } from './auth'
+import { toLocalDateStr, getLocalWeekdayId, todayString } from './formatTime'
 
 // ─────────────────────────────────────────────
 // USERNAME VALIDATION
@@ -250,6 +251,84 @@ export async function changeUsername(oldUsername, newUsername) {
 }
 
 // ─────────────────────────────────────────────
+// USER SETTINGS (Single Source of Truth)
+// ─────────────────────────────────────────────
+
+export async function getUserSettings(userName, force = false) {
+  if (!userName) return { sundayRestDay: false, effectiveFrom: null }
+  const uKey = userName.toLowerCase()
+  try {
+    const cached = localStorage.getItem(`stt_settings_${uKey}`)
+    if (cached && !force) {
+      const parsed = JSON.parse(cached)
+      return {
+        sundayRestDay: Boolean(parsed.sundayRestDay),
+        effectiveFrom: parsed.effectiveFrom || null,
+      }
+    }
+  } catch {}
+
+  try {
+    const docData = await getUserDoc(uKey, force)
+    const settings = {
+      sundayRestDay: Boolean(docData?.settings?.sundayRestDay),
+      effectiveFrom: docData?.settings?.effectiveFrom || null,
+    }
+    try {
+      localStorage.setItem(`stt_settings_${uKey}`, JSON.stringify(settings))
+    } catch {}
+    return settings
+  } catch {
+    return { sundayRestDay: false, effectiveFrom: null }
+  }
+}
+
+export async function saveUserSettings(userName, newSettings) {
+  if (!userName) return { sundayRestDay: false, effectiveFrom: null }
+  const uKey = userName.toLowerCase()
+  invalidateUserCache(uKey)
+  const isEnabled = Boolean(newSettings?.sundayRestDay)
+  const settings = {
+    sundayRestDay: isEnabled,
+    effectiveFrom: isEnabled
+      ? (newSettings?.effectiveFrom || todayString())
+      : null,
+  }
+  try {
+    localStorage.setItem(`stt_settings_${uKey}`, JSON.stringify(settings))
+  } catch {}
+
+  try {
+    await setDoc(
+      doc(db, 'users', uKey),
+      { settings },
+      { merge: true }
+    )
+  } catch (err) {
+    console.warn('Error saving settings to Firestore:', err)
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('study_settings_updated', { detail: { userName, settings } })
+    )
+  }
+  return settings
+}
+
+/**
+ * Single source of truth helper to check if a given date is an active rest day.
+ * Never checks "is it Sunday" independently.
+ * Uses getLocalWeekdayId to avoid raw array indexing and timezone skews.
+ */
+export function isRestDay(dateInput, settings) {
+  if (!settings || !settings.sundayRestDay || !settings.effectiveFrom) return false
+  const dateStr = toLocalDateStr(dateInput)
+  if (dateStr < settings.effectiveFrom) return false
+  return getLocalWeekdayId(dateInput) === 'Sun'
+}
+
+// ─────────────────────────────────────────────
 // WEEKLY PLAN
 // ─────────────────────────────────────────────
 
@@ -355,9 +434,15 @@ export async function saveSession({
   topic = '',
   reflectionTag = '',
 }) {
+  const localDate = toLocalDateStr(date)
+  const settings = await getUserSettings(userName)
+  if (isRestDay(localDate, settings)) {
+    throw new Error('Rest Day Active: No study sessions can be recorded on a Rest Day (Streak Shield Active).')
+  }
+
   const sessionData = {
     userName: userName.toLowerCase(),
-    date,
+    date: localDate,
     totalTime,
     totalSeconds,
     laps,
@@ -457,107 +542,148 @@ export function groupSessionsByDate(sessions) {
 // STREAKS + GOALS
 // ─────────────────────────────────────────────
 
-export function calculateStreaks(dateGroups, weeklyPlan = null) {
-  if (!dateGroups || !dateGroups.length) return { currentStreak: 0, longestStreak: 0 }
-  const studiedDates = new Set(dateGroups.map((g) => g.date))
-  const isSundayRest = weeklyPlan ? weeklyPlan.sundayRest !== false : true
-
-  // Helper to check if a day is an eligible rest/buffer day (Sunday)
-  const isEligibleBufferDay = (dateObj) => {
-    if (!isSundayRest) return false
-    return dateObj.getDay() === 0 // Sunday
-  }
-
-  // ── 1. Calculate Current Streak with Weekly Buffer ──
-  let currentStreak = 0
-  const d = new Date()
-  let lastBufferTime = null
-
-  for (let i = 0; i < 365; i++) {
-    const str = toDateStr(d)
-    if (studiedDates.has(str)) {
-      currentStreak++
-      d.setDate(d.getDate() - 1)
-    } else if (i === 0) {
-      // Today is not finished / not studied yet
-      if (isEligibleBufferDay(d)) {
-        // Today is Sunday rest day: keep streak protected
-        currentStreak++
-        lastBufferTime = d.getTime()
-      }
-      d.setDate(d.getDate() - 1)
-      continue
-    } else if (isEligibleBufferDay(d)) {
-      // Past Sunday rest day: allow at most 1 buffer per rolling week (>= 5 days apart)
-      const canUseBuffer = !lastBufferTime || Math.abs(Math.round((lastBufferTime - d.getTime()) / 86400000)) >= 5
-      if (canUseBuffer) {
-        currentStreak++
-        lastBufferTime = d.getTime()
-        d.setDate(d.getDate() - 1)
-        continue
-      } else {
-        break
-      }
-    } else {
-      break
-    }
-  }
-
-  // ── 2. Calculate Longest Streak ──
-  const sorted = [...studiedDates].sort()
-  let longest = 0, streak = 0, prev = null
-
-  for (const s of sorted) {
-    if (prev) {
-      const prevDate = new Date(prev)
-      const curDate = new Date(s)
-      const diff = Math.round((curDate - prevDate) / 86400000)
-
-      if (diff === 1) {
-        streak = streak + 1
-      } else if (diff === 2) {
-        // Exactly 1 skipped day: check if it was an eligible Sunday buffer day
-        const skippedDate = new Date(prevDate)
-        skippedDate.setDate(skippedDate.getDate() + 1)
-        if (isEligibleBufferDay(skippedDate)) {
-          streak = streak + 2 // include buffer rest day
-        } else {
-          streak = 1
-        }
-      } else {
-        streak = 1
-      }
-    } else {
-      streak = 1
-    }
-    longest = Math.max(longest, streak)
-    prev = s
-  }
-
-  return { currentStreak, longestStreak: Math.max(longest, currentStreak) }
+function addDaysToDateStr(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  date.setDate(date.getDate() + days)
+  const ny = date.getFullYear()
+  const nm = String(date.getMonth() + 1).padStart(2, '0')
+  const nd = String(date.getDate()).padStart(2, '0')
+  return `${ny}-${nm}-${nd}`
 }
 
-function toDateStr(date) {
-  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
-}
-
-export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
-  if (!dateStr) return null
-
-  // 1. Priority: check if specific Day Planner sheet has targetHours for this date
-  const dp = dayPlanners?.[dateStr]
-  const dpHours = Number(dp?.targetHours)
-  if (dp && (dp.isRestDay || dpHours === 0)) {
+function normalizeSettings(settingsOrPlan) {
+  if (!settingsOrPlan) return { sundayRestDay: false, effectiveFrom: null }
+  if (typeof settingsOrPlan.sundayRestDay === 'boolean') {
     return {
-      targetMinutes: !isNaN(dpHours) && dpHours > 0 ? Math.round(dpHours * 60) : 0,
-      targetHours: !isNaN(dpHours) && dpHours > 0 ? dpHours : 0,
-      isRestDay: true,
-      restType: dp.restType || (dpHours > 0 ? 'mock' : 'rest'),
-      subjects: dp.goals?.[0] || '🛋️ Rest & Buffer Day (Streak Protected)',
-      source: 'dayPlanner',
+      sundayRestDay: settingsOrPlan.sundayRestDay,
+      effectiveFrom: settingsOrPlan.effectiveFrom || (settingsOrPlan.sundayRestDay ? '1970-01-01' : null),
+    }
+  }
+  if (settingsOrPlan.settings && typeof settingsOrPlan.settings.sundayRestDay === 'boolean') {
+    return {
+      sundayRestDay: settingsOrPlan.settings.sundayRestDay,
+      effectiveFrom: settingsOrPlan.settings.effectiveFrom || (settingsOrPlan.settings.sundayRestDay ? '1970-01-01' : null),
+    }
+  }
+  if (typeof settingsOrPlan.sundayRest === 'boolean') {
+    return {
+      sundayRestDay: settingsOrPlan.sundayRest,
+      effectiveFrom: settingsOrPlan.sundayRest ? '1970-01-01' : null,
+    }
+  }
+  return { sundayRestDay: false, effectiveFrom: null }
+}
+
+/**
+ * Pure Derived Streak Calculation Engine
+ * ──────────────────────────────────────
+ * isStreakDay(d) =
+ *     hasStudySession(d)
+ *     OR ( isRestDay(d) AND d <= today AND isStreakDay(d - 1) )
+ *
+ * streak = number of consecutive streak days ending today (or yesterday, if today's normal day is still in progress).
+ */
+export function calculateStreaks(dateGroups, settingsOrPlan = null, todayDateStr = null) {
+  if (!dateGroups || !dateGroups.length) return { currentStreak: 0, longestStreak: 0 }
+  const settings = normalizeSettings(settingsOrPlan)
+  const todayStr = todayDateStr || todayString()
+
+  // 1. Build set of dates with positive study time
+  const studiedDates = new Set()
+  for (const g of dateGroups) {
+    if (!g) continue
+    const dStr = typeof g === 'string' ? g : g.date
+    const totalSec = typeof g.totalSeconds === 'number' ? g.totalSeconds : (g.sessions ? g.sessions.reduce((s, x) => s + (x.totalSeconds || 0), 0) : 1)
+    if (dStr && totalSec > 0) {
+      studiedDates.add(toLocalDateStr(dStr))
     }
   }
 
+  if (studiedDates.size === 0) {
+    return { currentStreak: 0, longestStreak: 0 }
+  }
+
+  // 2. Evaluate streak days chronologically from earliest study date up to todayStr
+  const sortedStudied = Array.from(studiedDates).sort()
+  const minDate = sortedStudied[0]
+  const streakDaysSet = new Set()
+
+  let curDate = minDate
+  while (curDate <= todayStr) {
+    const hasStudy = studiedDates.has(curDate)
+    const prevDate = addDaysToDateStr(curDate, -1)
+    const prevIsStreak = streakDaysSet.has(prevDate)
+    const isRest = isRestDay(curDate, settings)
+
+    const isStreak = hasStudy || (isRest && prevIsStreak)
+    if (isStreak) {
+      streakDaysSet.add(curDate)
+    }
+    curDate = addDaysToDateStr(curDate, 1)
+  }
+
+  // 3. Compute Current Streak
+  let currentStreak = 0
+  if (streakDaysSet.has(todayStr)) {
+    // Today is an active streak day (studied or rest day with Sat studied)
+    let c = todayStr
+    while (streakDaysSet.has(c)) {
+      currentStreak++
+      c = addDaysToDateStr(c, -1)
+    }
+  } else if (!isRestDay(todayStr, settings)) {
+    // Today is an ordinary study day still in progress (not ended/missed yet)
+    const yesterday = addDaysToDateStr(todayStr, -1)
+    if (streakDaysSet.has(yesterday)) {
+      let c = yesterday
+      while (streakDaysSet.has(c)) {
+        currentStreak++
+        c = addDaysToDateStr(c, -1)
+      }
+    }
+  }
+
+  // 4. Compute Longest Streak
+  let longestStreak = 0
+  let runningStreak = 0
+  let walkDate = minDate
+  while (walkDate <= todayStr) {
+    if (streakDaysSet.has(walkDate)) {
+      runningStreak++
+      if (runningStreak > longestStreak) longestStreak = runningStreak
+    } else {
+      runningStreak = 0
+    }
+    walkDate = addDaysToDateStr(walkDate, 1)
+  }
+  longestStreak = Math.max(longestStreak, currentStreak)
+
+  return { currentStreak, longestStreak }
+}
+
+export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null, settings = null) {
+  if (!dateStr) return null
+  const localDateStr = toLocalDateStr(dateStr)
+  const normSettings = normalizeSettings(settings || weeklyPlan)
+  const isRest = isRestDay(localDateStr, normSettings)
+
+  // 1. If configured rest day
+  if (isRest) {
+    const dp = dayPlanners?.[localDateStr]
+    return {
+      targetMinutes: 0,
+      targetHours: 0,
+      isRestDay: true,
+      restType: 'rest',
+      subjects: dp?.notes || '🛋️ Sunday Rest Day (Streak Shield Active)',
+      source: 'restDay',
+    }
+  }
+
+  // 2. Specific Day Planner sheet targetHours for this date
+  const dp = dayPlanners?.[localDateStr]
+  const dpHours = Number(dp?.targetHours)
   if (dp && !isNaN(dpHours) && dpHours > 0) {
     return {
       targetMinutes: Math.round(dpHours * 60),
@@ -567,47 +693,18 @@ export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
     }
   }
 
-  // 2. Fallback to weeklyPlan template
+  // 3. Fallback to weeklyPlan template
   if (!weeklyPlan) return null
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const date = new Date(y, m - 1, d)
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const dayKey = days[date.getDay()]
+  const dayKey = getLocalWeekdayId(localDateStr)
   const wp = weeklyPlan[dayKey]
   const wpMin = Number(wp?.targetMinutes)
-
-  // Check if Sunday is configured as Rest Day
-  const isSundayRest = dayKey === 'Sun' && weeklyPlan?.sundayRest !== false
-
-  if (isSundayRest && (!wpMin || wpMin <= 0)) {
-    return {
-      targetMinutes: 0,
-      targetHours: 0,
-      isRestDay: true,
-      restType: wp?.restType || 'rest',
-      subjects: wp?.subjects || '🛋️ Sunday Rest & Buffer Day (Streak Protected)',
-      source: 'weeklyPlan',
-    }
-  }
 
   if (wp && !isNaN(wpMin) && wpMin > 0) {
     return {
       ...wp,
       targetMinutes: wpMin,
       targetHours: Number((wpMin / 60).toFixed(2)),
-      isRestDay: isSundayRest,
-      restType: wp?.restType || (isSundayRest ? 'mock' : undefined),
-      source: 'weeklyPlan',
-    }
-  }
-
-  if (isSundayRest) {
-    return {
-      targetMinutes: 0,
-      targetHours: 0,
-      isRestDay: true,
-      restType: 'rest',
-      subjects: '🛋️ Sunday Rest & Buffer Day (Streak Protected)',
+      isRestDay: false,
       source: 'weeklyPlan',
     }
   }
@@ -862,11 +959,7 @@ export async function syncTargetHours(userName, dateStr, targetHours) {
   const uKey = userName.toLowerCase()
   const numHours = Number(targetHours) || 0
   const targetMinutes = Math.round(numHours * 60)
-
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const dateObj = new Date(y, m - 1, d)
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const dayKey = days[dateObj.getDay()]
+  const dayKey = getLocalWeekdayId(dateStr)
 
   // 1. Update local cache for dayPlanner
   try {
@@ -991,17 +1084,25 @@ export async function finalizeAndRolloverDay(userName, currentDateStr, nextDateS
   }
   await saveDayPlanner(userName, currentDateStr, finalizedCurrent)
 
-  // 2. Extract uncompleted tasks & goals from current day
-  const uncompletedRows = (currentPlanData.rows || []).filter(
+  // 2. Check if nextDate is a Rest Day; if so, push study rollover to Monday!
+  const settings = await getUserSettings(userName)
+  let targetDate = nextDateStr
+  if (isRestDay(targetDate, settings)) {
+    targetDate = addDaysToDateStr(targetDate, 1)
+  }
+
+  // 3. Extract uncompleted tasks & goals from current day
+  const isCurRest = isRestDay(currentDateStr, settings)
+  const uncompletedRows = isCurRest ? [] : (currentPlanData.rows || []).filter(
     (r) => !r.done && (r.topic || r.plan || (r.subject && r.subject !== 'New Subject'))
   )
 
-  const uncompletedGoals = (currentPlanData.goals || []).filter(
+  const uncompletedGoals = isCurRest ? [] : (currentPlanData.goals || []).filter(
     (g) => g && g.trim().length > 0
   )
 
-  // 3. Load or initialize next day's planner
-  const existingNextPlan = await getDayPlanner(userName, nextDateStr)
+  // 4. Load or initialize next active study day's planner
+  const existingNextPlan = await getDayPlanner(userName, targetDate)
 
   // Create rollover rows with clear backlog marking
   const rolloverRows = uncompletedRows.map((r, i) => ({
@@ -1038,18 +1139,38 @@ export async function finalizeAndRolloverDay(userName, currentDateStr, nextDateS
     }
   }
 
-  const nextDayNumber = (currentPlanData.dayNumber || 1) + 1
+  // If nextDateStr is Sunday Rest Day, pre-fill Sunday as completed rest day
+  if (targetDate !== nextDateStr) {
+    const sunDayNum = (currentPlanData.dayNumber || 1) + 1
+    await saveDayPlanner(userName, nextDateStr, {
+      date: nextDateStr,
+      dayNumber: sunDayNum,
+      targetHours: 0,
+      isRestDay: true,
+      restType: 'rest',
+      isLocked: true,
+      goals: ['🛋️ Full Rest & Recovery 🔋', '☕ Self-Care & Relaxation', '🌟 Mindset Recharge for Next Week'],
+      rows: [],
+      notes: 'Sunday Rest & Buffer Day — Streak Shield Active 🛡️',
+      progressRating: 'excellent',
+      updatedAt: Date.now(),
+    })
+  }
+
+  const nextDayNumber = targetDate !== nextDateStr
+    ? (currentPlanData.dayNumber || 1) + 2
+    : (currentPlanData.dayNumber || 1) + 1
 
   const nextPlanData = {
     ...(existingNextPlan || {}),
-    date: nextDateStr,
+    date: targetDate,
     dayNumber: nextDayNumber,
     targetHours: existingNextPlan?.targetHours || currentPlanData.targetHours || 6,
     goals: nextGoals,
     rows:
       combinedRows.length > 0
         ? combinedRows
-        : currentPlanData.rows.map((r) => ({
+        : (currentPlanData.rows || []).map((r) => ({
             ...r,
             id: `row_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
             done: false,
@@ -1060,7 +1181,7 @@ export async function finalizeAndRolloverDay(userName, currentDateStr, nextDateS
     updatedAt: Date.now(),
   }
 
-  await saveDayPlanner(userName, nextDateStr, nextPlanData)
+  await saveDayPlanner(userName, targetDate, nextPlanData)
   return { finalizedCurrent, nextPlanData }
 }
 

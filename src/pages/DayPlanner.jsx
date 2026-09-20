@@ -19,8 +19,9 @@ import {
   getDayPlanner, saveDayPlanner, calculateDayNumber,
   getSyllabus, getUserSessions, finalizeAndRolloverDay,
   getWeeklyPlan, syncTargetHours,
+  getUserSettings, isRestDay as checkIsRestDay,
 } from '../utils/firestoreHelpers'
-import { todayString, formatHoursMinutes, formatTargetHoursText, parseHoursInput } from '../utils/formatTime'
+import { todayString, formatHoursMinutes, formatTargetHoursText, parseHoursInput, toLocalDateStr, getLocalWeekdayId } from '../utils/formatTime'
 import AITimeTableModal from '../components/AITimeTableModal'
 import AICoachDrawer from '../components/AICoachDrawer'
 import { buildUserAIContext } from '../utils/aiService'
@@ -84,6 +85,7 @@ export default function DayPlanner({ userName }) {
   const [actualSeconds, setActualSeconds] = useState(0)
   const [targetSynced, setTargetSynced] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
+  const [settings, setSettings] = useState({ sundayRestDay: false, effectiveFrom: '' })
 
   // Memoized available target options (dynamically adds current targetHours if unique)
   const availableTargetOptions = React.useMemo(() => {
@@ -151,14 +153,16 @@ export default function DayPlanner({ userName }) {
   const loadDay = useCallback(async (targetDate) => {
     setLoading(true)
     try {
-      const [savedPlan, computedDay, syllabus, sessions, weeklyPlan] = await Promise.all([
+      const [savedPlan, computedDay, syllabus, sessions, weeklyPlan, userSettings] = await Promise.all([
         getDayPlanner(userName, targetDate),
         calculateDayNumber(userName, targetDate),
         getSyllabus(userName),
         getUserSessions(userName),
         getWeeklyPlan(userName),
+        getUserSettings(userName),
       ])
 
+      setSettings(userSettings || { sundayRestDay: false, effectiveFrom: '' })
       setDayNumber(computedDay || 1)
       if (syllabus && syllabus.length > 0) {
         setAvailableSubjects(syllabus.map((s) => s.name))
@@ -186,87 +190,70 @@ export default function DayPlanner({ userName }) {
       }
       setActualSeconds(sec)
 
-      // Determine day-of-week key (Sun..Sat)
-      const [y, m, d] = targetDate.split('-').map(Number)
-      const dateObj = new Date(y, m - 1, d)
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-      const dayKey = days[dateObj.getDay()]
-      const isSunday = dayKey === 'Sun'
-      const isSundayRestConfig = isSunday && weeklyPlan?.sundayRest !== false
+      // Determine day-of-week key (Sun..Sat) and whether this is a rest day
+      const dayKey = getLocalWeekdayId(targetDate)
+      const isRest = checkIsRestDay(targetDate, userSettings)
 
-      // Target hours priority: savedPlan -> weeklyPlan for day of week -> default 6
+      // Target hours priority:
+      // If rest day -> strictly 0
+      // Otherwise: savedPlan -> weeklyPlan for day of week -> default 6
       let effectiveTargetHours = 6
-      let isRest = false
-      let effectiveRestType = 'rest'
-
-      if (savedPlan && savedPlan.targetHours !== undefined && !isNaN(Number(savedPlan.targetHours))) {
+      if (isRest) {
+        effectiveTargetHours = 0
+      } else if (savedPlan && savedPlan.targetHours !== undefined && !isNaN(Number(savedPlan.targetHours))) {
         effectiveTargetHours = Number(savedPlan.targetHours)
-        isRest = Boolean(savedPlan.isRestDay || effectiveTargetHours === 0 || (isSundayRestConfig && effectiveTargetHours === 0))
-        effectiveRestType = savedPlan.restType || (effectiveTargetHours > 0 ? 'mock' : 'rest')
-      } else if (isSundayRestConfig) {
-        const sunMin = weeklyPlan?.Sun?.targetMinutes || 0
-        effectiveTargetHours = Number((sunMin / 60).toFixed(2))
-        isRest = true
-        effectiveRestType = effectiveTargetHours > 0 ? 'mock' : 'rest'
       } else if (weeklyPlan && weeklyPlan[dayKey]?.targetMinutes > 0) {
         effectiveTargetHours = Number((weeklyPlan[dayKey].targetMinutes / 60).toFixed(2))
       }
 
       setTargetHours(effectiveTargetHours)
       setIsRestDay(isRest)
-      setRestType(effectiveRestType)
+      setRestType('rest')
 
       if (savedPlan) {
-        setIsLocked(Boolean(savedPlan.isLocked))
+        setIsLocked(isRest ? true : Boolean(savedPlan.isLocked))
         const hasCustomGoals = savedPlan.goals && savedPlan.goals.some((g) => g && g.trim().length > 0)
         if (!hasCustomGoals && isRest) {
           setGoals([
             '🛋️ Full Rest & Recovery 🔋',
-            '📝 Mock Analysis / Light Revision (Optional)',
-            '🌟 Relax & Prepare Mindset for Next Week',
+            '🧘 Relax and recharge your mind',
+            '🌟 Prepare mindset for next week',
           ])
         } else {
           setGoals(savedPlan.goals || ['', '', ''])
         }
         setRows(savedPlan.rows || [])
-        setNotes(savedPlan.notes || (isRest ? 'Sunday Rest & Buffer Day — Streak Shield Active 🛡️' : ''))
+        setNotes(savedPlan.notes || (isRest ? 'Rest & recovery day. Streak protected. 🛡️' : ''))
         setProgressRating(savedPlan.progressRating || (isRest ? 'excellent' : 'good'))
       } else {
-        setIsLocked(false)
+        setIsLocked(isRest ? true : false)
         if (isRest) {
           setGoals([
             '🛋️ Full Rest & Recovery 🔋',
-            '📝 Mock Analysis / Light Revision (Optional)',
-            '🌟 Relax & Prepare Mindset for Next Week',
+            '🧘 Relax and recharge your mind',
+            '🌟 Prepare mindset for next week',
           ])
-          setNotes('Sunday Rest & Buffer Day — Streak Shield Active 🛡️')
+          setNotes('Rest & recovery day. Streak protected. 🛡️')
           setProgressRating('excellent')
-          setRows([
-            {
-              id: `slot_rest_1`,
-              time: '08:00 AM - 10:00 AM',
-              block: 'Morning',
-              slotType: 'Break',
-              subject: '🛋️ Rest & Sleep',
-              topic: 'Late Morning Sleep & Rest',
-              plan: 'Rest and mental recovery',
-              done: true,
-            },
-            {
-              id: `slot_rest_2`,
-              time: '03:00 PM - 05:00 PM',
-              block: 'Afternoon',
-              slotType: 'Mock Test',
-              subject: '📝 Mock / Analysis',
-              topic: 'Weekly Mock Test or Mistake Analysis (Optional)',
-              plan: 'Analyze errors or revise weak areas',
-              done: false,
-            },
-          ])
+          setRows([])
         } else {
-          // Initialize default empty schedule based on syllabus or default subjects
           let initialRows = []
-          if (syllabus && syllabus.length > 0) {
+          if (weeklyPlan && weeklyPlan[dayKey]?.subjects) {
+            const subjList = weeklyPlan[dayKey].subjects
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+            initialRows = subjList.map((subj, idx) => ({
+              id: `slot_${Date.now()}_${idx}`,
+              time: '',
+              block: 'Morning',
+              slotType: 'Core Study',
+              subject: subj,
+              topic: '',
+              plan: '',
+              done: false,
+            }))
+          } else if (syllabus && syllabus.length > 0) {
             initialRows = syllabus.slice(0, 8).map((sub, idx) => ({
               id: `row_${Date.now()}_${idx}`,
               time: '',
@@ -309,11 +296,36 @@ export default function DayPlanner({ userName }) {
     }
     window.addEventListener('study_plan_updated', handleUpdate)
     window.addEventListener('study_sessions_updated', handleUpdate)
+    window.addEventListener('study_settings_updated', handleUpdate)
     return () => {
       window.removeEventListener('study_plan_updated', handleUpdate)
       window.removeEventListener('study_sessions_updated', handleUpdate)
+      window.removeEventListener('study_settings_updated', handleUpdate)
     }
   }, [currentDate, loadDay])
+
+  const handleSaveNotes = async (newNotes) => {
+    try {
+      const planData = {
+        date: currentDate,
+        dayNumber,
+        targetHours: Number(targetHours) || 0,
+        isRestDay: Boolean(isRestDay),
+        restType,
+        isLocked: Boolean(isLocked),
+        goals,
+        rows,
+        notes: newNotes,
+        progressRating,
+        updatedAt: Date.now(),
+      }
+      await saveDayPlanner(userName, currentDate, planData)
+      setSavedBadge(true)
+      setTimeout(() => setSavedBadge(false), 2000)
+    } catch (e) {
+      console.warn('Auto-save notes failed:', e)
+    }
+  }
 
   // Instant Target Hours dropdown change with bidirectional sync
   const handleTargetChange = async (newVal) => {
@@ -494,6 +506,10 @@ export default function DayPlanner({ userName }) {
 
   // Start Timer for this row
   const handleStartTimer = (row) => {
+    if (isRestDay) {
+      alert('Today is designated as a Rest Day. Timer and study logging are disabled to protect your rest!')
+      return
+    }
     handleSave()
     navigate('/', {
       state: {
@@ -634,7 +650,7 @@ export default function DayPlanner({ userName }) {
           }}
         >
           {/* Locked Notice Banner */}
-          {isLocked && (
+          {isLocked && !isRestDay && (
             <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
               <div className="flex items-center gap-2">
                 <span className="text-base">🔒</span>
@@ -713,8 +729,8 @@ export default function DayPlanner({ userName }) {
           </div>
 
           {/* ── Rest & Buffer Day Shield Banner ── */}
-          {isRestDay ? (
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-950/60 via-[#181824] to-emerald-950/40 border border-purple-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          {isRestDay && (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-950/60 via-[#181824] to-indigo-950/40 border border-purple-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
               <div className="flex items-center gap-3">
                 <span className="text-3xl">🛋️</span>
                 <div>
@@ -727,87 +743,16 @@ export default function DayPlanner({ userName }) {
                     </span>
                   </div>
                   <p className="text-xs text-gray-300 mt-0.5">
-                    Recharge day! Your study streak is completely protected even with 0 study hours.
+                    Rest & recovery day. Your study streak is completely protected. Study slots and timers are locked for rest; you can write reflections in the notes below.
                   </p>
                 </div>
               </div>
 
-              {/* Quick preset chips */}
-              <div className="flex items-center gap-1.5 flex-wrap self-stretch sm:self-auto justify-end">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleApplyRestPreset(
-                      0,
-                      'rest',
-                      ['🛋️ Full Rest & Recovery 🔋', '☕ Self-Care & Relaxation', '🌟 Mindset Recharge for Next Week'],
-                      'Sunday Rest & Buffer Day — Streak Shield Active 🛡️'
-                    )
-                  }
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                    targetHours === 0 && isRestDay
-                      ? 'bg-purple-600 text-white shadow-md'
-                      : 'bg-[#1b1b26] hover:bg-[#252538] text-gray-300 border border-[#333]'
-                  }`}
-                >
-                  🛋️ Full Rest (0h)
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleApplyRestPreset(
-                      2,
-                      'mock',
-                      ['📝 Full Mock Test (2h)', '🔍 Error & Weakness Analysis', '📚 Quick Formula Revision'],
-                      'Sunday Mock Test & Analysis Day — Streak Shield Active 🛡️'
-                    )
-                  }
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                    targetHours === 2 && isRestDay
-                      ? 'bg-purple-600 text-white shadow-md'
-                      : 'bg-[#1b1b26] hover:bg-[#252538] text-gray-300 border border-[#333]'
-                  }`}
-                >
-                  📝 Mock Test (2h)
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleApplyRestPreset(
-                      3,
-                      'revision',
-                      ['📚 Complete Weekly Revision', '🧠 Formula / Fact Review', '🎯 Solve Practice MCQs'],
-                      'Sunday Weekly Revision Day — Streak Shield Active 🛡️'
-                    )
-                  }
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                    targetHours === 3 && isRestDay
-                      ? 'bg-purple-600 text-white shadow-md'
-                      : 'bg-[#1b1b26] hover:bg-[#252538] text-gray-300 border border-[#333]'
-                  }`}
-                >
-                  📚 Revision (3h)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleRestMode}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-[#222] hover:bg-[#333] text-gray-400 hover:text-white transition-all border border-[#333]"
-                  title="Switch back to regular study day"
-                >
-                  Normal Study →
-                </button>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <span className="text-xs font-bold text-purple-300 px-3 py-1.5 rounded-xl bg-purple-500/15 border border-purple-500/30">
+                  0h · Rest Day
+                </span>
               </div>
-            </div>
-          ) : (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleToggleRestMode}
-                className="text-xs px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1.5 transition-all shadow-sm"
-              >
-                <span>🛋️</span>
-                <span>Switch to Rest / Buffer Day (Streak Safe 🛡️)</span>
-              </button>
             </div>
           )}
 
@@ -826,7 +771,12 @@ export default function DayPlanner({ userName }) {
                 <div className="flex items-center gap-1.5 text-xs text-gray-300">
                   <span className="text-gray-400 font-medium">🎯 Target:</span>
 
-                  {customInputMode ? (
+                  {isRestDay ? (
+                    <span className="text-xs font-bold text-purple-300 bg-purple-950/40 px-2.5 py-1 rounded-xl border border-purple-500/30 flex items-center gap-1">
+                      <span>🛋️</span>
+                      <span>0h (Rest Day)</span>
+                    </span>
+                  ) : customInputMode ? (
                     <form onSubmit={handleCustomSubmit} className="flex items-center gap-1">
                       <input
                         type="text"
@@ -856,7 +806,7 @@ export default function DayPlanner({ userName }) {
                     <div className="flex items-center gap-1">
                       <select
                         value={targetHours}
-                        disabled={isLocked}
+                        disabled={isLocked || isRestDay}
                         onChange={(e) => {
                           if (e.target.value === 'custom') {
                             setCustomInputVal(String(targetHours))
@@ -877,7 +827,7 @@ export default function DayPlanner({ userName }) {
                         </option>
                       </select>
 
-                      {!isLocked && (
+                      {!isLocked && !isRestDay && (
                         <button
                           type="button"
                           onClick={() => {
@@ -1083,31 +1033,39 @@ export default function DayPlanner({ userName }) {
 
             {/* Time Table / Schedule Grid */}
             {rows.length === 0 ? (
-              <div className="p-8 rounded-2xl border border-dashed border-[#2f2f38] text-center flex flex-col items-center justify-center gap-3 bg-[#131316]">
+              <div className={`p-8 rounded-2xl border border-dashed text-center flex flex-col items-center justify-center gap-3 ${
+                isRestDay ? 'border-purple-500/30 bg-purple-950/10' : 'border-[#2f2f38] bg-[#131316]'
+              }`}>
                 <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-2xl">
-                  📅
+                  {isRestDay ? '🛋️' : '📅'}
                 </div>
-                <h4 className="text-sm font-bold text-white">No Study Slots Added for Day {dayNumber}</h4>
+                <h4 className="text-sm font-bold text-white">
+                  {isRestDay ? 'Sunday Rest & Recovery Day' : `No Study Slots Added for Day ${dayNumber}`}
+                </h4>
                 <p className="text-xs text-gray-400 max-w-sm">
-                  Apne routine aur exam ke hisaab se AI se best time table banwayein, ya manually slots add karein.
+                  {isRestDay
+                    ? 'No study slots scheduled. Take rest, relax, and recharge your energy for next week! Streak Shield is active.'
+                    : 'Apne routine aur exam ke hisaab se AI se best time table banwayein, ya manually slots add karein.'}
                 </p>
-                <div className="flex items-center gap-2.5 mt-2">
-                  <button
-                    type="button"
-                    onClick={handleOpenAIModal}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-purple-600/20"
-                  >
-                    <span>✨</span>
-                    <span>Generate with AI</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => addCustomRow('Morning')}
-                    className="px-4 py-2 rounded-xl bg-[#222] hover:bg-[#2b2b30] border border-[#333] text-gray-200 font-semibold text-xs"
-                  >
-                    + Add Slot Manually
-                  </button>
-                </div>
+                {!isRestDay && !isLocked && (
+                  <div className="flex items-center gap-2.5 mt-2">
+                    <button
+                      type="button"
+                      onClick={handleOpenAIModal}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-purple-600/20"
+                    >
+                      <span>✨</span>
+                      <span>Generate with AI</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addCustomRow('Morning')}
+                      className="px-4 py-2 rounded-xl bg-[#222] hover:bg-[#2b2b30] border border-[#333] text-gray-200 font-semibold text-xs"
+                    >
+                      + Add Slot Manually
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-[#2b2b30] bg-[#121214] shadow-inner">
@@ -1154,8 +1112,8 @@ export default function DayPlanner({ userName }) {
                                 disabled={isLocked}
                                 value={row.time || ''}
                                 onChange={(e) => updateRow(row.id, 'time', e.target.value)}
-                                placeholder="09:00 - 11:00 AM"
-                                className="w-full bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-0.5 text-[11px] text-gray-400 font-mono outline-none disabled:opacity-75"
+                                placeholder="09:00 - 10:30 AM"
+                                className="w-full bg-transparent border-b border-transparent focus:border-purple-500 px-1 py-0.5 text-[11px] font-mono text-gray-400 outline-none disabled:opacity-75"
                               />
                             </div>
                           </td>
@@ -1166,7 +1124,7 @@ export default function DayPlanner({ userName }) {
                               disabled={isLocked}
                               value={row.slotType || 'Core Study'}
                               onChange={(e) => updateRow(row.id, 'slotType', e.target.value)}
-                              className={`w-full rounded px-2 py-1 text-[11px] font-bold border outline-none cursor-pointer disabled:opacity-75 ${currentType.badge}`}
+                              className={`rounded-lg px-2 py-1 text-[11px] font-bold border outline-none cursor-pointer disabled:opacity-75 ${currentType.badge} bg-[#16161d]`}
                             >
                               {SLOT_TYPES.map((st) => (
                                 <option key={st.id} value={st.id} className="bg-[#16161a] text-white">
@@ -1176,41 +1134,39 @@ export default function DayPlanner({ userName }) {
                             </select>
                           </td>
 
-                          {/* Subject with Backlog badge if rolled over */}
+                          {/* Subject */}
                           <td className="p-2.5">
-                            <div className="flex flex-col gap-1">
-                              {row.isRollover && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap w-fit">
-                                  ⚠️ Backlog (Kal nahi hua tha)
-                                </span>
-                              )}
-                              <input
-                                type="text"
-                                list="dayplanner-subjects"
-                                disabled={isLocked}
-                                value={row.subject || ''}
-                                onChange={(e) => updateRow(row.id, 'subject', e.target.value)}
-                                placeholder="Select / type subject..."
-                                className="w-full font-bold text-xs bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-purple-300 outline-none disabled:opacity-75"
-                              />
-                            </div>
+                            <input
+                              type="text"
+                              disabled={isLocked}
+                              list={`subj-list-${row.id}`}
+                              value={row.subject || ''}
+                              onChange={(e) => updateRow(row.id, 'subject', e.target.value)}
+                              placeholder="Select / Type Subject"
+                              className="w-full bg-[#16161a] border border-[#2a2a35] focus:border-purple-500 rounded px-2 py-1 text-xs text-white outline-none disabled:opacity-75"
+                            />
+                            <datalist id={`subj-list-${row.id}`}>
+                              {availableSubjects.map((s) => (
+                                <option key={s} value={s} />
+                              ))}
+                            </datalist>
                           </td>
 
-                          {/* Topic / Chapter */}
+                          {/* Topic */}
                           <td className="p-2.5">
                             <input
                               type="text"
                               disabled={isLocked}
                               value={row.topic || ''}
                               onChange={(e) => updateRow(row.id, 'topic', e.target.value)}
-                              placeholder="e.g. Fundamental Rights..."
-                              className={`w-full bg-transparent border border-transparent focus:border-[#333] rounded px-1.5 py-1 text-xs text-white outline-none disabled:opacity-75 ${
+                              placeholder="e.g. Fundamental Rights"
+                              className={`w-full bg-transparent border-b border-transparent focus:border-purple-500 px-1 py-1 text-xs text-white outline-none disabled:opacity-75 ${
                                 row.done ? 'line-through text-gray-500' : ''
                               }`}
                             />
                           </td>
 
-                          {/* Plan */}
+                          {/* Target & Plan */}
                           <td className="p-2.5">
                             <input
                               type="text"
@@ -1239,9 +1195,14 @@ export default function DayPlanner({ userName }) {
                           <td className="p-2.5 text-center">
                             <button
                               type="button"
+                              disabled={isLocked || isRestDay}
                               onClick={() => handleStartTimer(row)}
-                              className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600 hover:text-white transition-all whitespace-nowrap shadow-sm hover:shadow-purple-500/30"
-                              title="Open Stopwatch with this topic"
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all whitespace-nowrap shadow-sm ${
+                                isRestDay
+                                  ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+                                  : 'bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600 hover:text-white hover:shadow-purple-500/30'
+                              }`}
+                              title={isRestDay ? 'Timer disabled on Rest Day' : 'Open Stopwatch with this topic'}
                             >
                               ▶️ Start
                             </button>
@@ -1278,14 +1239,22 @@ export default function DayPlanner({ userName }) {
                 <span className="text-xs font-bold text-white uppercase tracking-wider">
                   REVISION / NOTES
                 </span>
+                {isRestDay && (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    Editable on Rest Day ✏️
+                  </span>
+                )}
               </div>
               <textarea
-                disabled={isLocked}
+                disabled={isLocked && !isRestDay}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Write key takeaways, weak areas to revise, or formulas to remember..."
+                onBlur={(e) => handleSaveNotes(e.target.value)}
+                placeholder={isRestDay ? "Write your reflections, relaxation notes, or thoughts for next week..." : "Write key takeaways, weak areas to revise, or formulas to remember..."}
                 rows={3}
-                className="w-full rounded-xl bg-[#141417] border border-[#2b2b30] p-3 text-xs text-white placeholder-gray-600 outline-none focus:border-purple-500 transition-colors disabled:opacity-75"
+                className={`w-full rounded-xl bg-[#141417] border p-3 text-xs text-white placeholder-gray-600 outline-none transition-colors ${
+                  isRestDay ? 'border-purple-500/40 focus:border-purple-500' : 'border-[#2b2b30] focus:border-purple-500 disabled:opacity-75'
+                }`}
               />
             </div>
 

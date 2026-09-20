@@ -58,6 +58,56 @@ export function formatDateDisplay(dateStr) {
   })
 }
 
+export const WEEKDAY_IDS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/**
+ * Safely converts any Date or 'YYYY-MM-DD' string into a local 'YYYY-MM-DD' string without UTC skew.
+ */
+export function toLocalDateStr(dateInput) {
+  if (!dateInput) return todayString()
+  if (typeof dateInput === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+      return dateInput.trim()
+    }
+    const d = new Date(dateInput)
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+    return todayString()
+  }
+  if (dateInput instanceof Date && !isNaN(dateInput.getTime())) {
+    const y = dateInput.getFullYear()
+    const m = String(dateInput.getMonth() + 1).padStart(2, '0')
+    const day = String(dateInput.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  return todayString()
+}
+
+/**
+ * Returns the 3-letter weekday ID ('Sun' | 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat')
+ * strictly using the local time of the user's device.
+ */
+export function getLocalWeekdayId(dateInput) {
+  if (!dateInput) return WEEKDAY_IDS[new Date().getDay()]
+  if (typeof dateInput === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+      const [y, m, d] = dateInput.trim().split('-').map(Number)
+      const dt = new Date(y, m - 1, d)
+      return WEEKDAY_IDS[dt.getDay()]
+    }
+    const d = new Date(dateInput)
+    return WEEKDAY_IDS[d.getDay()]
+  }
+  if (dateInput instanceof Date) {
+    return WEEKDAY_IDS[dateInput.getDay()]
+  }
+  return WEEKDAY_IDS[new Date().getDay()]
+}
+
 /**
  * Returns today's date as "YYYY-MM-DD".
  * @returns {string}
