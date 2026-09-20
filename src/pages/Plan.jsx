@@ -565,6 +565,8 @@ export default function Plan({ userName }) {
             const isPast = dayDate.isPast
             const isSunday = key === 'Sun'
             const isRest = isRestDay(dayDate.dateStr, settings) || (isSunday && isSundayRest)
+            // Lock slider & subjects for days that have already passed (not today)
+            const isLocked = Boolean(isPast && !isToday)
 
             const hours = Math.floor(d.targetMinutes / 60)
             const mins = d.targetMinutes % 60
@@ -709,6 +711,35 @@ export default function Plan({ userName }) {
                     </span>
                     <span className="text-xs font-bold text-gray-400 font-mono">0h · Rest</span>
                   </div>
+                ) : isLocked ? (
+                  /* Past day — show locked slider (read-only, no interaction) */
+                  <div className="flex flex-col gap-1 pt-1">
+                    <div className="flex justify-between text-[11px] text-gray-600">
+                      <span>0h</span>
+                      <span>4h</span>
+                      <span>8h</span>
+                      <span>12h</span>
+                      <span>16h</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="range"
+                        min={0}
+                        max={960}
+                        step={30}
+                        value={d.targetMinutes}
+                        disabled
+                        readOnly
+                        className="w-full cursor-not-allowed opacity-40 pointer-events-none"
+                        style={{ accentColor: '#6b7280' }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-end pr-1 pointer-events-none">
+                        <span className="text-[10px] text-gray-500 flex items-center gap-0.5 bg-[#1a1a1a] px-1.5 py-0.5 rounded-full border border-[#333]">
+                          🔒 Locked
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex flex-col gap-1 pt-1">
                     <div className="flex justify-between text-[11px] text-gray-500">
@@ -737,14 +768,25 @@ export default function Plan({ userName }) {
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder={isRest ? "🛋️ Rest Day — Recharge for next week!" : "Subjects / topics planned for this day (e.g. Physics, Chemistry)"}
+                    placeholder={
+                      isRest
+                        ? '🛋️ Rest Day — Recharge for next week!'
+                        : isLocked
+                        ? '🔒 Locked — day already completed'
+                        : 'Subjects / topics planned for this day (e.g. Physics, Chemistry)'
+                    }
                     value={isRest ? '' : d.subjects}
-                    disabled={isRest}
+                    disabled={isRest || isLocked}
                     onChange={(e) => handleSubjectsChange(key, e.target.value)}
                     className={`flex-1 rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 px-3 py-2 text-xs outline-none transition-colors ${
-                      isRest ? 'opacity-60 cursor-not-allowed bg-[#181524]' : 'focus:border-purple-500'
+                      isRest || isLocked
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'focus:border-purple-500'
                     }`}
                   />
+                  {isLocked && (
+                    <span className="text-gray-600 text-sm select-none" title="Past day — locked">🔒</span>
+                  )}
                 </div>
 
                 {/* Day Planner Sheet Link if active/saved */}
