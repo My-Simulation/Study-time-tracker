@@ -1082,7 +1082,7 @@ export function getSpacedRepetitionDue(sessions) {
   const calcDateStr = (daysAgo) => {
     const d = new Date(today)
     d.setDate(d.getDate() - daysAgo)
-    return toDateStr(d)
+    return toLocalDateStr(d)
   }
 
   const d1Str = calcDateStr(1)
