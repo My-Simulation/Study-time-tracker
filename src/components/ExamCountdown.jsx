@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { saveExamGoal, getExamGoal } from '../utils/firestoreHelpers'
 import { formatHoursMinutes } from '../utils/formatTime'
 
@@ -77,7 +78,8 @@ export default function ExamCountdown({ userName, totalStudiedSeconds = 0 }) {
   }
 
   return (
-    <div className="card p-3.5 flex flex-col gap-2.5 relative overflow-hidden">
+    <>
+    <div className="card p-3.5 flex flex-col gap-2.5 relative">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -139,84 +141,91 @@ export default function ExamCountdown({ userName, totalStudiedSeconds = 0 }) {
           </div>
         </div>
       )}
+    </div>
 
-      {/* Edit Modal / Inline Form */}
-      {isEditing && (
+    {/* Edit Modal — rendered via portal at document.body so parent overflow/transform can NEVER clip it */}
+    {isEditing && createPortal(
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+        onClick={() => setIsEditing(false)}
+      >
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
-          onClick={() => setIsEditing(false)}
+          className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl w-full max-w-sm p-5 flex flex-col gap-4 animate-scaleIn max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
         >
-          <div
-            className="card w-full max-w-sm p-5 flex flex-col gap-4 animate-scaleIn rounded-b-none sm:rounded-2xl max-h-[92vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">🎯 Set Exam Target & Countdown</h3>
-              <button onClick={() => setIsEditing(false)} className="modal-close-btn" aria-label="Close">
-                ✕
-              </button>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white">🎯 Set Exam Target & Countdown</h3>
+            <button
+              onClick={() => setIsEditing(false)}
+              className="modal-close-btn"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+
+          <form onSubmit={handleSave} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">Exam / Milestone Name</label>
+              <input
+                type="text"
+                value={examName}
+                onChange={(e) => setExamName(e.target.value)}
+                placeholder="e.g. JEE Advanced, Finals, UPSC"
+                required
+                autoFocus
+                className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-sm outline-none focus:border-purple-500"
+              />
             </div>
 
-            <form onSubmit={handleSave} className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Exam / Milestone Name</label>
-                <input
-                  type="text"
-                  value={examName}
-                  onChange={(e) => setExamName(e.target.value)}
-                  placeholder="e.g. JEE Advanced, Finals, UPSC"
-                  required
-                  autoFocus
-                  className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-sm outline-none focus:border-purple-500"
-                />
-              </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">Exam Date</label>
+              <input
+                type="date"
+                value={examDate}
+                onChange={(e) => setExamDate(e.target.value)}
+                required
+                className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-sm outline-none focus:border-purple-500"
+              />
+            </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Exam Date</label>
-                <input
-                  type="date"
-                  value={examDate}
-                  onChange={(e) => setExamDate(e.target.value)}
-                  required
-                  className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-sm outline-none focus:border-purple-500"
-                />
-              </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400">Total Study Target (Hours)</label>
+              <input
+                type="number"
+                min="1"
+                max="10000"
+                value={targetHours}
+                onChange={(e) => setTargetHours(e.target.value)}
+                required
+                className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-sm outline-none focus:border-purple-500"
+              />
+            </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400">Total Study Target (Hours)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10000"
-                  value={targetHours}
-                  onChange={(e) => setTargetHours(e.target.value)}
-                  required
-                  className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white px-3 py-2 text-sm outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div className="flex gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(false)}
-                  className="pill-btn flex-1 h-10 text-xs"
-                  style={{ background: '#2a2a2a', color: 'white' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="pill-btn flex-1 h-10 text-xs"
-                  style={{ background: '#8b5cf6', color: 'white' }}
-                >
-                  Save Goal
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="pill-btn flex-1 h-10 text-xs"
+                style={{ background: '#2a2a2a', color: 'white' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="pill-btn flex-1 h-10 text-xs"
+                style={{ background: '#8b5cf6', color: 'white' }}
+              >
+                Save Goal
+              </button>
+            </div>
+          </form>
         </div>
-      )}
-    </div>
+      </div>,
+      document.body
+    )}
+  </>
   )
 }
+
 
