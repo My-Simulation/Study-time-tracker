@@ -107,6 +107,7 @@ export function formatDuration(totalSeconds) {
  */
 export function formatTargetHoursText(hours, includeClock = false) {
   const num = Number(hours) || 0
+  if (num === 0) return includeClock ? '0h · Rest Day (0:00)' : '0h (Rest Day)'
   const h = Math.floor(num)
   const m = Math.round((num - h) * 60)
   const clock = `${h}:${String(m).padStart(2, '0')}`
@@ -120,6 +121,7 @@ export function formatTargetHoursText(hours, includeClock = false) {
 /**
  * Parses user input into a decimal hours number.
  * Supports:
+ * - "0" or "0h" -> 0
  * - "5:30" or "05:30" -> 5.5
  * - "5.5" or "5,5" -> 5.5
  * - "5h 30m" or "30m" or "5h" -> 5.5 or 0.5
@@ -129,12 +131,14 @@ export function formatTargetHoursText(hours, includeClock = false) {
  */
 export function parseHoursInput(input) {
   if (typeof input === 'number') {
-    return isNaN(input) || input <= 0 ? 6 : Number(input.toFixed(2))
+    if (isNaN(input) || input < 0) return 6
+    return Number(input.toFixed(2))
   }
   const str = String(input || '').trim().replace(',', '.')
+  if (str === '0' || str === '0h' || str === '0:00' || str === '0m') return 0
   if (!str) return 6
 
-  // Check H:MM pattern (e.g. "5:30", "0:45")
+  // Check H:MM pattern (e.g. "5:30", "0:45", "0:00")
   if (str.includes(':')) {
     const parts = str.split(':').map(Number)
     const h = parts[0] || 0
@@ -153,9 +157,9 @@ export function parseHoursInput(input) {
     return Number((h + m / 60).toFixed(2))
   }
 
-  // Float number (e.g. "5.5", "6")
+  // Float number (e.g. "5.5", "6", "0")
   const num = parseFloat(str)
-  if (!isNaN(num) && num > 0) {
+  if (!isNaN(num) && num >= 0) {
     return Number(num.toFixed(2))
   }
   return 6

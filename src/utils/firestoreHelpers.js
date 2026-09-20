@@ -547,6 +547,17 @@ export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
   // 1. Priority: check if specific Day Planner sheet has targetHours for this date
   const dp = dayPlanners?.[dateStr]
   const dpHours = Number(dp?.targetHours)
+  if (dp && (dp.isRestDay || dpHours === 0)) {
+    return {
+      targetMinutes: !isNaN(dpHours) && dpHours > 0 ? Math.round(dpHours * 60) : 0,
+      targetHours: !isNaN(dpHours) && dpHours > 0 ? dpHours : 0,
+      isRestDay: true,
+      restType: dp.restType || (dpHours > 0 ? 'mock' : 'rest'),
+      subjects: dp.goals?.[0] || '🛋️ Rest & Buffer Day (Streak Protected)',
+      source: 'dayPlanner',
+    }
+  }
+
   if (dp && !isNaN(dpHours) && dpHours > 0) {
     return {
       targetMinutes: Math.round(dpHours * 60),
@@ -862,6 +873,7 @@ export async function syncTargetHours(userName, dateStr, targetHours) {
     const raw = localStorage.getItem(`stt_day_plan_${uKey}_${dateStr}`)
     const existing = raw ? JSON.parse(raw) : { date: dateStr }
     existing.targetHours = numHours
+    existing.isRestDay = numHours === 0 ? true : (existing.isRestDay && numHours > 0 ? false : existing.isRestDay)
     existing.updatedAt = Date.now()
     localStorage.setItem(`stt_day_plan_${uKey}_${dateStr}`, JSON.stringify(existing))
   } catch {}
@@ -870,7 +882,12 @@ export async function syncTargetHours(userName, dateStr, targetHours) {
   try {
     const userDoc = await getUserDoc(uKey)
     const existingDayPlan = userDoc?.dayPlanners?.[dateStr] || { date: dateStr }
-    const updatedDayPlan = { ...existingDayPlan, targetHours: numHours, updatedAt: Date.now() }
+    const updatedDayPlan = {
+      ...existingDayPlan,
+      targetHours: numHours,
+      isRestDay: numHours === 0 ? true : (existingDayPlan.isRestDay && numHours > 0 ? false : existingDayPlan.isRestDay),
+      updatedAt: Date.now(),
+    }
 
     const existingWeeklyPlan = userDoc?.weeklyPlan || {}
     const existingDayWeekly = existingWeeklyPlan[dayKey] || {}

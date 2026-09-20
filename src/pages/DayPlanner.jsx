@@ -26,7 +26,7 @@ import AICoachDrawer from '../components/AICoachDrawer'
 import { buildUserAIContext } from '../utils/aiService'
 
 const TARGET_HOURS_OPTIONS = [
-  0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 18, 20
+  0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 18, 20
 ]
 
 const DEFAULT_SUBJECTS = [
@@ -77,6 +77,8 @@ export default function DayPlanner({ userName }) {
 
   // Sheet fields
   const [targetHours, setTargetHours] = useState(6)
+  const [isRestDay, setIsRestDay] = useState(false)
+  const [restType, setRestType] = useState('rest') // 'rest' | 'mock' | 'revision'
   const [customInputMode, setCustomInputMode] = useState(false)
   const [customInputVal, setCustomInputVal] = useState('')
   const [actualSeconds, setActualSeconds] = useState(0)
@@ -87,7 +89,7 @@ export default function DayPlanner({ userName }) {
   const availableTargetOptions = React.useMemo(() => {
     const list = [...TARGET_HOURS_OPTIONS]
     const cur = Number(targetHours)
-    if (!isNaN(cur) && cur > 0 && !list.includes(cur)) {
+    if (!isNaN(cur) && cur >= 0 && !list.includes(cur)) {
       list.push(cur)
       list.sort((a, b) => a - b)
     }
@@ -189,49 +191,105 @@ export default function DayPlanner({ userName }) {
       const dateObj = new Date(y, m - 1, d)
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
       const dayKey = days[dateObj.getDay()]
+      const isSunday = dayKey === 'Sun'
+      const isSundayRestConfig = isSunday && weeklyPlan?.sundayRest !== false
 
       // Target hours priority: savedPlan -> weeklyPlan for day of week -> default 6
       let effectiveTargetHours = 6
-      if (savedPlan && savedPlan.targetHours !== undefined && !isNaN(Number(savedPlan.targetHours)) && Number(savedPlan.targetHours) > 0) {
+      let isRest = false
+      let effectiveRestType = 'rest'
+
+      if (savedPlan && savedPlan.targetHours !== undefined && !isNaN(Number(savedPlan.targetHours))) {
         effectiveTargetHours = Number(savedPlan.targetHours)
+        isRest = Boolean(savedPlan.isRestDay || effectiveTargetHours === 0 || (isSundayRestConfig && effectiveTargetHours === 0))
+        effectiveRestType = savedPlan.restType || (effectiveTargetHours > 0 ? 'mock' : 'rest')
+      } else if (isSundayRestConfig) {
+        const sunMin = weeklyPlan?.Sun?.targetMinutes || 0
+        effectiveTargetHours = Number((sunMin / 60).toFixed(2))
+        isRest = true
+        effectiveRestType = effectiveTargetHours > 0 ? 'mock' : 'rest'
       } else if (weeklyPlan && weeklyPlan[dayKey]?.targetMinutes > 0) {
         effectiveTargetHours = Number((weeklyPlan[dayKey].targetMinutes / 60).toFixed(2))
       }
+
       setTargetHours(effectiveTargetHours)
+      setIsRestDay(isRest)
+      setRestType(effectiveRestType)
 
       if (savedPlan) {
         setIsLocked(Boolean(savedPlan.isLocked))
-        setGoals(savedPlan.goals || ['', '', ''])
-        setRows(savedPlan.rows || [])
-        setNotes(savedPlan.notes || '')
-        setProgressRating(savedPlan.progressRating || 'good')
-      } else {
-        // Initialize default empty schedule based on syllabus or default subjects
-        let initialRows = []
-        if (syllabus && syllabus.length > 0) {
-          initialRows = syllabus.slice(0, 8).map((sub, idx) => ({
-            id: `row_${Date.now()}_${idx}`,
-            time: '',
-            subject: sub.name,
-            topic: '',
-            plan: '',
-            done: false,
-          }))
+        const hasCustomGoals = savedPlan.goals && savedPlan.goals.some((g) => g && g.trim().length > 0)
+        if (!hasCustomGoals && isRest) {
+          setGoals([
+            '🛋️ Full Rest & Recovery 🔋',
+            '📝 Mock Analysis / Light Revision (Optional)',
+            '🌟 Relax & Prepare Mindset for Next Week',
+          ])
         } else {
-          initialRows = DEFAULT_SUBJECTS.map((s, idx) => ({
-            id: `row_${Date.now()}_${idx}`,
-            time: '',
-            subject: s.subject,
-            topic: '',
-            plan: '',
-            done: false,
-          }))
+          setGoals(savedPlan.goals || ['', '', ''])
         }
+        setRows(savedPlan.rows || [])
+        setNotes(savedPlan.notes || (isRest ? 'Sunday Rest & Buffer Day — Streak Shield Active 🛡️' : ''))
+        setProgressRating(savedPlan.progressRating || (isRest ? 'excellent' : 'good'))
+      } else {
         setIsLocked(false)
-        setGoals(['', '', ''])
-        setRows(initialRows)
-        setNotes('')
-        setProgressRating('good')
+        if (isRest) {
+          setGoals([
+            '🛋️ Full Rest & Recovery 🔋',
+            '📝 Mock Analysis / Light Revision (Optional)',
+            '🌟 Relax & Prepare Mindset for Next Week',
+          ])
+          setNotes('Sunday Rest & Buffer Day — Streak Shield Active 🛡️')
+          setProgressRating('excellent')
+          setRows([
+            {
+              id: `slot_rest_1`,
+              time: '08:00 AM - 10:00 AM',
+              block: 'Morning',
+              slotType: 'Break',
+              subject: '🛋️ Rest & Sleep',
+              topic: 'Late Morning Sleep & Rest',
+              plan: 'Rest and mental recovery',
+              done: true,
+            },
+            {
+              id: `slot_rest_2`,
+              time: '03:00 PM - 05:00 PM',
+              block: 'Afternoon',
+              slotType: 'Mock Test',
+              subject: '📝 Mock / Analysis',
+              topic: 'Weekly Mock Test or Mistake Analysis (Optional)',
+              plan: 'Analyze errors or revise weak areas',
+              done: false,
+            },
+          ])
+        } else {
+          // Initialize default empty schedule based on syllabus or default subjects
+          let initialRows = []
+          if (syllabus && syllabus.length > 0) {
+            initialRows = syllabus.slice(0, 8).map((sub, idx) => ({
+              id: `row_${Date.now()}_${idx}`,
+              time: '',
+              subject: sub.name,
+              topic: '',
+              plan: '',
+              done: false,
+            }))
+          } else {
+            initialRows = DEFAULT_SUBJECTS.map((s, idx) => ({
+              id: `row_${Date.now()}_${idx}`,
+              time: '',
+              subject: s.subject,
+              topic: '',
+              plan: '',
+              done: false,
+            }))
+          }
+          setGoals(['', '', ''])
+          setRows(initialRows)
+          setNotes('')
+          setProgressRating('good')
+        }
       }
     } catch (err) {
       console.warn('Error loading day planner:', err)
@@ -261,11 +319,87 @@ export default function DayPlanner({ userName }) {
   const handleTargetChange = async (newVal) => {
     const hoursNum = parseHoursInput(newVal)
     setTargetHours(hoursNum)
+    if (hoursNum === 0) {
+      setIsRestDay(true)
+      setRestType('rest')
+    }
     setTargetSynced(true)
     setTimeout(() => setTargetSynced(false), 2500)
 
     // Automatically sync target hours to both dayPlanners and weeklyPlan in Firestore
     await syncTargetHours(userName, currentDate, hoursNum)
+  }
+
+  // Apply quick Rest Day presets (0h Full Rest, 2h Mock, 3h Revision)
+  const handleApplyRestPreset = async (presetHours, presetType, defaultGoals, defaultNote) => {
+    setTargetHours(presetHours)
+    setIsRestDay(true)
+    setRestType(presetType)
+    setGoals(defaultGoals)
+    if (!notes || notes.trim().length === 0 || notes.includes('Rest & Buffer Day') || notes.includes('Mock Test')) {
+      setNotes(defaultNote)
+    }
+    setTargetSynced(true)
+    setTimeout(() => setTargetSynced(false), 2500)
+
+    await syncTargetHours(userName, currentDate, presetHours)
+    const planData = {
+      date: currentDate,
+      dayNumber,
+      targetHours: presetHours,
+      isRestDay: true,
+      restType: presetType,
+      isLocked,
+      goals: defaultGoals,
+      rows,
+      notes: defaultNote,
+      progressRating: 'excellent',
+      updatedAt: Date.now(),
+    }
+    await saveDayPlanner(userName, currentDate, planData)
+  }
+
+  // Toggle Rest Day Mode
+  const handleToggleRestMode = async () => {
+    const nextRest = !isRestDay
+    setIsRestDay(nextRest)
+    const newTarget = nextRest ? 0 : 6
+    setTargetHours(newTarget)
+    if (nextRest) {
+      const restGoals = [
+        '🛋️ Full Rest & Recovery 🔋',
+        '📝 Mock Analysis / Light Revision (Optional)',
+        '🌟 Relax & Prepare Mindset for Next Week',
+      ]
+      setGoals(restGoals)
+      setNotes('Sunday Rest & Buffer Day — Streak Shield Active 🛡️')
+      await syncTargetHours(userName, currentDate, 0)
+      await saveDayPlanner(userName, currentDate, {
+        date: currentDate,
+        dayNumber,
+        targetHours: 0,
+        isRestDay: true,
+        restType: 'rest',
+        goals: restGoals,
+        rows,
+        notes: 'Sunday Rest & Buffer Day — Streak Shield Active 🛡️',
+        progressRating: 'excellent',
+        updatedAt: Date.now(),
+      })
+    } else {
+      await syncTargetHours(userName, currentDate, 6)
+      await saveDayPlanner(userName, currentDate, {
+        date: currentDate,
+        dayNumber,
+        targetHours: 6,
+        isRestDay: false,
+        goals,
+        rows,
+        notes,
+        progressRating,
+        updatedAt: Date.now(),
+      })
+    }
   }
 
   // Handle custom target manual entry submission (e.g. 5:30 or 5.5)
@@ -287,7 +421,9 @@ export default function DayPlanner({ userName }) {
     const planData = {
       date: currentDate,
       dayNumber,
-      targetHours: Number(targetHours) || 6,
+      targetHours: Number(targetHours) || 0,
+      isRestDay: Boolean(isRestDay),
+      restType,
       isLocked: Boolean(lockStatus),
       goals,
       rows,
@@ -297,7 +433,7 @@ export default function DayPlanner({ userName }) {
     }
     await saveDayPlanner(userName, currentDate, planData)
     // Also sync to weekly plan for this day of week
-    await syncTargetHours(userName, currentDate, Number(targetHours) || 6)
+    await syncTargetHours(userName, currentDate, Number(targetHours) || 0)
     setSaving(false)
     setSavedBadge(true)
     setTimeout(() => setSavedBadge(false), 2000)
@@ -378,7 +514,9 @@ export default function DayPlanner({ userName }) {
     const currentPlanData = {
       date: currentDate,
       dayNumber,
-      targetHours: Number(targetHours) || 6,
+      targetHours: Number(targetHours) || 0,
+      isRestDay: Boolean(isRestDay),
+      restType,
       goals,
       rows,
       notes,
@@ -574,6 +712,105 @@ export default function DayPlanner({ userName }) {
             </div>
           </div>
 
+          {/* ── Rest & Buffer Day Shield Banner ── */}
+          {isRestDay ? (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-950/60 via-[#181824] to-emerald-950/40 border border-purple-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🛋️</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white tracking-wide">
+                      Sunday Rest & Buffer Day
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
+                      <span>🛡️</span> Streak Shield Active
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-300 mt-0.5">
+                    Recharge day! Your study streak is completely protected even with 0 study hours.
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick preset chips */}
+              <div className="flex items-center gap-1.5 flex-wrap self-stretch sm:self-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleApplyRestPreset(
+                      0,
+                      'rest',
+                      ['🛋️ Full Rest & Recovery 🔋', '☕ Self-Care & Relaxation', '🌟 Mindset Recharge for Next Week'],
+                      'Sunday Rest & Buffer Day — Streak Shield Active 🛡️'
+                    )
+                  }
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                    targetHours === 0 && isRestDay
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-[#1b1b26] hover:bg-[#252538] text-gray-300 border border-[#333]'
+                  }`}
+                >
+                  🛋️ Full Rest (0h)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleApplyRestPreset(
+                      2,
+                      'mock',
+                      ['📝 Full Mock Test (2h)', '🔍 Error & Weakness Analysis', '📚 Quick Formula Revision'],
+                      'Sunday Mock Test & Analysis Day — Streak Shield Active 🛡️'
+                    )
+                  }
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                    targetHours === 2 && isRestDay
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-[#1b1b26] hover:bg-[#252538] text-gray-300 border border-[#333]'
+                  }`}
+                >
+                  📝 Mock Test (2h)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleApplyRestPreset(
+                      3,
+                      'revision',
+                      ['📚 Complete Weekly Revision', '🧠 Formula / Fact Review', '🎯 Solve Practice MCQs'],
+                      'Sunday Weekly Revision Day — Streak Shield Active 🛡️'
+                    )
+                  }
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                    targetHours === 3 && isRestDay
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-[#1b1b26] hover:bg-[#252538] text-gray-300 border border-[#333]'
+                  }`}
+                >
+                  📚 Revision (3h)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleRestMode}
+                  className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-[#222] hover:bg-[#333] text-gray-400 hover:text-white transition-all border border-[#333]"
+                  title="Switch back to regular study day"
+                >
+                  Normal Study →
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleToggleRestMode}
+                className="text-xs px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1.5 transition-all shadow-sm"
+              >
+                <span>🛋️</span>
+                <span>Switch to Rest / Buffer Day (Streak Safe 🛡️)</span>
+              </button>
+            </div>
+          )}
+
           {/* ── Daily Study Target Hours vs Actual Stopwatch Time Card ── */}
           <div className="p-4 rounded-2xl bg-[#161619] border border-[#2a2a2f] flex flex-col gap-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#242428] pb-2.5">
@@ -664,7 +901,19 @@ export default function DayPlanner({ userName }) {
                 </div>
 
                 {/* Status Badge */}
-                {goalMet ? (
+                {isRestDay && targetHours === 0 ? (
+                  actualSeconds > 0 ? (
+                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 whitespace-nowrap flex items-center gap-1">
+                      <span>🛋️</span>
+                      <span>+{formatHoursMinutes(actualSeconds)} Bonus Study (Streak Safe 🛡️)</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 whitespace-nowrap flex items-center gap-1">
+                      <span>🛋️</span>
+                      <span>Rest Day · Streak Shield Active 🛡️</span>
+                    </span>
+                  )
+                ) : goalMet ? (
                   <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-green-500/20 text-green-300 border border-green-500/40 whitespace-nowrap">
                     ✓ Goal Achieved! 🎉
                   </span>
@@ -673,7 +922,7 @@ export default function DayPlanner({ userName }) {
                     ⏳ In Progress ({hoursPct}%)
                   </span>
                 ) : (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/20 whitespace-nowrap">
+                  <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/20 whitespace-nowrap">
                     Not Started
                   </span>
                 )}
@@ -687,7 +936,11 @@ export default function DayPlanner({ userName }) {
                   Actual Time Studied: <strong className="text-white font-mono">{formatHoursMinutes(actualSeconds)}</strong>
                 </span>
                 <span className="font-mono font-bold text-purple-400">
-                  {formatHoursMinutes(actualSeconds)} / {formatTargetHoursText(targetHours, false)} ({hoursPct}%)
+                  {isRestDay && targetHours === 0
+                    ? actualSeconds > 0
+                      ? `+${formatHoursMinutes(actualSeconds)} Bonus Studied`
+                      : '0h Target (Rest Day 🛋️)'
+                    : `${formatHoursMinutes(actualSeconds)} / ${formatTargetHoursText(targetHours, false)} (${hoursPct}%)`}
                 </span>
               </div>
 
@@ -695,9 +948,18 @@ export default function DayPlanner({ userName }) {
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{
-                    width: `${hoursPct}%`,
+                    width:
+                      isRestDay && targetHours === 0
+                        ? actualSeconds > 0
+                          ? '100%'
+                          : '100%'
+                        : `${hoursPct}%`,
                     background:
-                      goalMet
+                      isRestDay && targetHours === 0
+                        ? actualSeconds > 0
+                          ? 'linear-gradient(90deg, #10b981, #22c55e)'
+                          : 'linear-gradient(90deg, #6366f1, #8b5cf6)'
+                        : goalMet
                         ? '#22c55e'
                         : 'linear-gradient(90deg, #ec4899, #8b5cf6)',
                   }}
@@ -1063,23 +1325,41 @@ export default function DayPlanner({ userName }) {
             <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/40 to-pink-950/40 border border-purple-500/30 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <span>🏁</span>
-                  <span>Finish Day {dayNumber} & Lock Today's Record?</span>
+                  <span>{isRestDay ? '🛋️' : '🏁'}</span>
+                  <span>
+                    {isRestDay
+                      ? `Complete Rest Day ${dayNumber} & Proceed to Day ${dayNumber + 1}?`
+                      : `Finish Day ${dayNumber} & Lock Today's Record?`}
+                  </span>
                 </p>
                 <p className="text-[11px] text-gray-400 mt-0.5">
-                  {uncompletedRows.length > 0
+                  {isRestDay
+                    ? `Day ${dayNumber} is marked as Rest Day with Streak Shield 🛡️. Backlogs roll over cleanly to Day ${dayNumber + 1}.`
+                    : uncompletedRows.length > 0
                     ? `${uncompletedRows.length} unfinished topic(s) will automatically rollover to Day ${dayNumber + 1}.`
                     : 'All planned topics were checked off! Ready for tomorrow.'}
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowCompleteModal(true)}
-                className="pill-btn px-5 h-10 text-xs font-bold bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg shadow-purple-500/20 whitespace-nowrap hover:scale-105 transition-all"
-              >
-                🏁 Complete Day & Move to Day {dayNumber + 1} →
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {isRestDay && (
+                  <button
+                    type="button"
+                    onClick={handleCompleteAndRollover}
+                    disabled={completing}
+                    className="pill-btn px-4 h-10 text-xs font-bold bg-indigo-600/30 text-indigo-200 border border-indigo-500/40 hover:bg-indigo-600 hover:text-white transition-all whitespace-nowrap shadow-sm"
+                  >
+                    {completing ? 'Moving…' : `🛋️ Skip / Rest Done → Day ${dayNumber + 1}`}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowCompleteModal(true)}
+                  className="pill-btn px-5 h-10 text-xs font-bold bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg shadow-purple-500/20 whitespace-nowrap hover:scale-105 transition-all"
+                >
+                  🏁 {isRestDay ? 'Finalize Day & Move →' : `Complete Day & Move to Day ${dayNumber + 1} →`}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="p-3.5 rounded-2xl bg-[#18181c] border border-[#2b2b30] flex items-center justify-between">
@@ -1136,13 +1416,27 @@ export default function DayPlanner({ userName }) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Target Goal:</span>
-                  <span className="font-bold text-purple-400">{formatTargetHoursText(targetHours, true)} ({goalMet ? 'Achieved ✓' : 'Incomplete'})</span>
+                  <span className="font-bold text-purple-400">
+                    {isRestDay && targetHours === 0
+                      ? '0h · Rest Day (Streak Safe 🛡️)'
+                      : `${formatTargetHoursText(targetHours, true)} (${goalMet ? 'Achieved ✓' : 'Incomplete'})`}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Completed Topics:</span>
                   <span className="font-bold text-green-400">{completedCount} / {totalCount}</span>
                 </div>
               </div>
+
+              {/* Streak Shield Notice */}
+              {isRestDay && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2 text-[11px]">
+                  <span className="text-base">🛡️</span>
+                  <span>
+                    <strong>Streak Shield Active:</strong> Aaj rest lene par bhi aapki continuous study streak safe rahegi!
+                  </span>
+                </div>
+              )}
 
               {/* Uncompleted Items Rollover Alert */}
               {uncompletedRows.length > 0 && (
