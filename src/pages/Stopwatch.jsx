@@ -234,7 +234,7 @@ export default function Stopwatch({ userName }) {
 
       if (allUserSessions && allUserSessions.length > 0) {
         const groups = groupSessionsByDate(allUserSessions)
-        const st = calculateStreaks(groups)
+        const st = calculateStreaks(groups, plan)
         setStreakCount(st.currentStreak || 0)
       }
 
@@ -392,6 +392,19 @@ export default function Stopwatch({ userName }) {
       : (dailyGoal?.targetMinutes || 0)
 
     const studiedSec = todayStudied + Math.floor(elapsed / 1000)
+
+    if (dailyGoal?.isRestDay && (!dayPlan?.targetHours || Number(dayPlan.targetHours) === 0)) {
+      return {
+        hasTarget: false,
+        isRestDay: true,
+        pct: 100,
+        targetSec: 0,
+        studiedSec,
+        studiedLabel: formatHoursMinutes(studiedSec),
+        label: dailyGoal.subjects || 'Sunday Rest & Recovery',
+        source: 'Rest & Buffer Day',
+      }
+    }
 
     if (!targetMinutes || targetMinutes <= 0) {
       return {
@@ -766,7 +779,56 @@ export default function Stopwatch({ userName }) {
           {/* Daily Goal Progress Bar */}
           {goalProgress && (
             <div>
-              {goalProgress.hasTarget ? (
+              {goalProgress.isRestDay ? (
+                <div className="card px-4 py-3.5 flex flex-col gap-2.5 transition-all shadow-lg bg-gradient-to-r from-purple-950/40 via-[#181824] to-indigo-950/40 border border-purple-500/35">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">🛋️</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white tracking-wide">
+                            Sunday Rest & Buffer Day
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
+                            <span>🛡️</span> Streak Shield Active
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-gray-400 block mt-0.5">
+                          Recharge and recover! Your 6-day study streak will NOT break.
+                        </span>
+                      </div>
+                    </div>
+                    {goalProgress.studiedSec > 0 ? (
+                      <div className="text-right">
+                        <span className="text-xs font-bold font-mono text-emerald-400">
+                          +{goalProgress.studiedLabel}
+                        </span>
+                        <span className="block text-[10px] text-gray-400 font-medium">
+                          Bonus Study Time
+                        </span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => navigate('/planner')}
+                        className="text-[11px] px-3 py-1 rounded-xl bg-purple-600/25 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 font-semibold transition-all whitespace-nowrap"
+                      >
+                        Plan / Mock →
+                      </button>
+                    )}
+                  </div>
+                  {goalProgress.studiedSec > 0 && (
+                    <div className="text-[11px] text-emerald-400 flex items-center justify-between border-t border-[#2a2a38] pt-2">
+                      <span>🎉 Bonus session recorded today! Added to your lifetime total.</span>
+                      <button
+                        onClick={() => navigate('/planner')}
+                        className="text-[10px] text-purple-300 hover:text-purple-200 font-semibold hover:underline"
+                      >
+                        Day Sheet →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : goalProgress.hasTarget ? (
                 <div
                   className="card px-4 py-3.5 flex flex-col gap-2.5 transition-all shadow-lg bg-[#161622]/90 backdrop-blur-md border border-[#2d2d42]"
                   style={{

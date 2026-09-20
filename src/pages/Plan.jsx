@@ -173,6 +173,53 @@ export default function Plan({ userName }) {
     setSaved(false)
   }
 
+  const isSundayRest = plan.sundayRest !== false
+
+  const handleToggleSundayRest = async () => {
+    const newVal = !isSundayRest
+    const updatedPlan = {
+      ...plan,
+      sundayRest: newVal,
+    }
+    setPlan(updatedPlan)
+    setSaved(false)
+    try {
+      await saveWeeklyPlan(userName, updatedPlan)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('study_plan_updated', { detail: { userName, weeklyPlan: updatedPlan } })
+        )
+      }
+    } catch (e) {
+      console.warn('Auto-save sundayRest toggle failed:', e)
+    }
+  }
+
+  const handleSundayPreset = async (minutes, defaultSubjects) => {
+    const currentSubjects = plan.Sun?.subjects
+    const subjects = currentSubjects && currentSubjects.trim().length > 0 ? currentSubjects : defaultSubjects
+    const updatedPlan = {
+      ...plan,
+      Sun: {
+        ...(plan.Sun || {}),
+        targetMinutes: minutes,
+        subjects,
+      },
+    }
+    setPlan(updatedPlan)
+    setSaved(false)
+
+    const dStr = weekDates['Sun']?.dateStr
+    const targetHours = Number((minutes / 60).toFixed(2))
+    if (dStr && userName) {
+      try {
+        await syncTargetHours(userName, dStr, targetHours)
+      } catch (e) {
+        console.warn('Auto-sync Sunday preset target failed:', e)
+      }
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -221,12 +268,11 @@ export default function Plan({ userName }) {
     let totalStudiedSeconds = 0
     let daysGoalMet = 0
     let daysWithTarget = 0
+    const isSunRest = plan.sundayRest !== false
 
     DAYS.forEach(({ key }) => {
       const d = plan[key] || { targetMinutes: 0 }
       const targetMin = d.targetMinutes || 0
-      totalTargetMinutes += targetMin
-
       const dateStr = weekDates[key]?.dateStr
       const daySec = sessions
         .filter((s) => s.date === dateStr)
@@ -234,6 +280,17 @@ export default function Plan({ userName }) {
 
       totalStudiedSeconds += daySec
 
+      // If Sunday rest mode is active, do not demand target on Sunday unless explicitly set
+      if (key === 'Sun' && isSunRest) {
+        if (targetMin > 0) {
+          totalTargetMinutes += targetMin
+          daysWithTarget++
+          if (daySec >= targetMin * 60) daysGoalMet++
+        }
+        return
+      }
+
+      totalTargetMinutes += targetMin
       if (targetMin > 0) {
         daysWithTarget++
         if (daySec >= targetMin * 60) {
@@ -331,6 +388,47 @@ export default function Plan({ userName }) {
       ) : (
         <div className="flex-1 flex flex-col px-4 pb-28 max-w-lg mx-auto w-full gap-3">
 
+          {/* 6-Day Study + Sunday Rest / Streak Shield Toggle Banner */}
+          <div className="card p-3.5 flex items-center justify-between gap-3 bg-gradient-to-r from-purple-950/40 via-[#181824] to-indigo-950/40 border border-purple-500/30 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">🛡️</span>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-white">6-Day Study + Sunday Rest Buffer</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      isSundayRest
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-gray-800 text-gray-400'
+                    }`}
+                  >
+                    {isSundayRest ? 'Active' : 'Off'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">
+                  {isSundayRest
+                    ? 'Sunday rest will NOT break your streak. 6-day targets counted.'
+                    : 'Target counts all 7 days of the week.'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleSundayRest}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isSundayRest ? 'bg-purple-600' : 'bg-gray-700'
+              }`}
+              role="switch"
+              aria-checked={isSundayRest}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  isSundayRest ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
           {/* Weekly Performance Summary Card */}
           <div className="card p-4 flex flex-col gap-3.5 bg-gradient-to-br from-[#161228] to-[#121212] border border-purple-500/30 shadow-lg">
             <div className="flex items-center justify-between">
@@ -376,14 +474,31 @@ export default function Plan({ userName }) {
                   .filter((s) => s.date === dayDate.dateStr)
                   .reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
 
+                const isSunRest = key === 'Sun' && isSundayRest
                 const isMet = targetSec > 0 && daySec >= targetSec
-                const isMissed = targetSec > 0 && daySec < targetSec && dayDate.isPast
+                const isMissed = !isSunRest && targetSec > 0 && daySec < targetSec && dayDate.isPast
                 const isToday = dayDate.isToday
 
                 let dotColor = 'bg-[#222] text-gray-500'
-                if (isMet) dotColor = 'bg-green-500/20 text-green-400 border border-green-500/40'
-                else if (isMissed) dotColor = 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                else if (isToday) dotColor = 'bg-purple-500/30 text-purple-300 border border-purple-500'
+                let content = dayDate.dayNumber
+
+                if (isMet) {
+                  dotColor = 'bg-green-500/20 text-green-400 border border-green-500/40'
+                  content = '✓'
+                } else if (isSunRest && targetSec === 0) {
+                  if (daySec > 0) {
+                    dotColor = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    content = '✓'
+                  } else {
+                    dotColor = 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                    content = '🛋️'
+                  }
+                } else if (isMissed) {
+                  dotColor = 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                  content = '✕'
+                } else if (isToday) {
+                  dotColor = 'bg-purple-500/30 text-purple-300 border border-purple-500'
+                }
 
                 return (
                   <div key={key} className="flex flex-col items-center gap-1">
@@ -391,7 +506,7 @@ export default function Plan({ userName }) {
                       {key}
                     </span>
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${dotColor}`}>
-                      {isMet ? '✓' : isMissed ? '✕' : dayDate.dayNumber}
+                      {content}
                     </div>
                   </div>
                 )
@@ -405,6 +520,8 @@ export default function Plan({ userName }) {
             const dayDate = weekDates[key] || {}
             const isToday = dayDate.isToday
             const isPast = dayDate.isPast
+            const isSunday = key === 'Sun'
+            const isSundayBuffer = isSunday && isSundayRest
 
             const hours = Math.floor(d.targetMinutes / 60)
             const mins = d.targetMinutes % 60
@@ -420,7 +537,7 @@ export default function Plan({ userName }) {
             const targetSec = d.targetMinutes * 60
             const pct = targetSec > 0 ? Math.min(100, Math.round((dayActualSec / targetSec) * 100)) : 0
             const isGoalMet = targetSec > 0 && dayActualSec >= targetSec
-            const isGoalMissed = targetSec > 0 && dayActualSec < targetSec && isPast
+            const isGoalMissed = !isSundayBuffer && targetSec > 0 && dayActualSec < targetSec && isPast
 
             const daySheet = dayPlanners[dayDate.dateStr]
 
@@ -470,7 +587,17 @@ export default function Plan({ userName }) {
                       </span>
                     ) : (
                       <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#222] text-gray-400 border border-[#333]">
-                        📅 Target Set
+                        {isSundayBuffer ? '📝 Mock / Revision 🛡️' : '📅 Target Set'}
+                      </span>
+                    )
+                  ) : isSundayBuffer ? (
+                    dayActualSec > 0 ? (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                        🛋️ Bonus {formatHoursMinutes(dayActualSec)} (Streak Safe 🛡️)
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1">
+                        🛋️ Rest Day (Streak Safe 🛡️)
                       </span>
                     )
                   ) : dayActualSec > 0 ? (
@@ -483,6 +610,48 @@ export default function Plan({ userName }) {
                     </span>
                   )}
                 </div>
+
+                {/* Sunday Quick Presets */}
+                {isSundayBuffer && (
+                  <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                    <span className="text-[10px] text-purple-300 font-semibold uppercase tracking-wider">
+                      Quick Preset:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSundayPreset(0, '🛋️ Rest & Recharge')}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all ${
+                        d.targetMinutes === 0
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-[#1e1e2d] hover:bg-[#28283d] text-gray-300 border border-[#333]'
+                      }`}
+                    >
+                      🛋️ Full Rest (0h)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSundayPreset(120, '📝 Mock Test & Analysis')}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all ${
+                        d.targetMinutes === 120
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-[#1e1e2d] hover:bg-[#28283d] text-gray-300 border border-[#333]'
+                      }`}
+                    >
+                      📝 Mock Test (2h)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSundayPreset(180, '📚 Weekly Revision')}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all ${
+                        d.targetMinutes === 180
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-[#1e1e2d] hover:bg-[#28283d] text-gray-300 border border-[#333]'
+                      }`}
+                    >
+                      📚 Revision (3h)
+                    </button>
+                  </div>
+                )}
 
                 {/* Target vs Actual Metrics */}
                 <div className="flex items-center justify-between text-xs pt-0.5">

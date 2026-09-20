@@ -70,7 +70,7 @@ export default function History({ userName }) {
     navigate('/welcome', { replace: true })
   }
 
-  const { currentStreak, longestStreak } = calculateStreaks(dateGroups)
+  const { currentStreak, longestStreak } = calculateStreaks(dateGroups, weeklyPlan)
   const totalSeconds = dateGroups.reduce((s, g) => s + g.totalSeconds, 0)
   const bestDaySeconds = dateGroups.length ? Math.max(...dateGroups.map((g) => g.totalSeconds)) : 0
 
@@ -291,6 +291,11 @@ export default function History({ userName }) {
                           </span>
                           {goalMet && <GoalBadge type="met" />}
                           {goalMissed && <GoalBadge type="missed" />}
+                          {goal?.isRestDay && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 flex items-center gap-1">
+                              <span>🛡️</span> Sunday Buffer
+                            </span>
+                          )}
                         </div>
 
                         {/* Outcomes & tags row */}

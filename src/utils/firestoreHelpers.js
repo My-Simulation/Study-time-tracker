@@ -457,31 +457,84 @@ export function groupSessionsByDate(sessions) {
 // STREAKS + GOALS
 // ─────────────────────────────────────────────
 
-export function calculateStreaks(dateGroups) {
-  if (!dateGroups.length) return { currentStreak: 0, longestStreak: 0 }
+export function calculateStreaks(dateGroups, weeklyPlan = null) {
+  if (!dateGroups || !dateGroups.length) return { currentStreak: 0, longestStreak: 0 }
   const studiedDates = new Set(dateGroups.map((g) => g.date))
+  const isSundayRest = weeklyPlan ? weeklyPlan.sundayRest !== false : true
 
-  let currentStreak = 0
-  const d = new Date()
-  for (let i = 0; i < 365; i++) {
-    const str = toDateStr(d)
-    if (studiedDates.has(str)) { currentStreak++; d.setDate(d.getDate() - 1) }
-    else if (i === 0) { d.setDate(d.getDate() - 1); continue }
-    else break
+  // Helper to check if a day is an eligible rest/buffer day (Sunday)
+  const isEligibleBufferDay = (dateObj) => {
+    if (!isSundayRest) return false
+    return dateObj.getDay() === 0 // Sunday
   }
 
+  // ── 1. Calculate Current Streak with Weekly Buffer ──
+  let currentStreak = 0
+  const d = new Date()
+  let lastBufferTime = null
+
+  for (let i = 0; i < 365; i++) {
+    const str = toDateStr(d)
+    if (studiedDates.has(str)) {
+      currentStreak++
+      d.setDate(d.getDate() - 1)
+    } else if (i === 0) {
+      // Today is not finished / not studied yet
+      if (isEligibleBufferDay(d)) {
+        // Today is Sunday rest day: keep streak protected
+        currentStreak++
+        lastBufferTime = d.getTime()
+      }
+      d.setDate(d.getDate() - 1)
+      continue
+    } else if (isEligibleBufferDay(d)) {
+      // Past Sunday rest day: allow at most 1 buffer per rolling week (>= 5 days apart)
+      const canUseBuffer = !lastBufferTime || Math.abs(Math.round((lastBufferTime - d.getTime()) / 86400000)) >= 5
+      if (canUseBuffer) {
+        currentStreak++
+        lastBufferTime = d.getTime()
+        d.setDate(d.getDate() - 1)
+        continue
+      } else {
+        break
+      }
+    } else {
+      break
+    }
+  }
+
+  // ── 2. Calculate Longest Streak ──
   const sorted = [...studiedDates].sort()
   let longest = 0, streak = 0, prev = null
+
   for (const s of sorted) {
     if (prev) {
-      const diff = Math.round((new Date(s) - new Date(prev)) / 86400000)
-      streak = diff === 1 ? streak + 1 : 1
-    } else { streak = 1 }
+      const prevDate = new Date(prev)
+      const curDate = new Date(s)
+      const diff = Math.round((curDate - prevDate) / 86400000)
+
+      if (diff === 1) {
+        streak = streak + 1
+      } else if (diff === 2) {
+        // Exactly 1 skipped day: check if it was an eligible Sunday buffer day
+        const skippedDate = new Date(prevDate)
+        skippedDate.setDate(skippedDate.getDate() + 1)
+        if (isEligibleBufferDay(skippedDate)) {
+          streak = streak + 2 // include buffer rest day
+        } else {
+          streak = 1
+        }
+      } else {
+        streak = 1
+      }
+    } else {
+      streak = 1
+    }
     longest = Math.max(longest, streak)
     prev = s
   }
 
-  return { currentStreak, longestStreak: longest }
+  return { currentStreak, longestStreak: Math.max(longest, currentStreak) }
 }
 
 function toDateStr(date) {
@@ -508,16 +561,46 @@ export function getTargetForDate(dateStr, weeklyPlan, dayPlanners = null) {
   const [y, m, d] = dateStr.split('-').map(Number)
   const date = new Date(y, m - 1, d)
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const wp = weeklyPlan[days[date.getDay()]]
+  const dayKey = days[date.getDay()]
+  const wp = weeklyPlan[dayKey]
   const wpMin = Number(wp?.targetMinutes)
+
+  // Check if Sunday is configured as Rest Day
+  const isSundayRest = dayKey === 'Sun' && weeklyPlan?.sundayRest !== false
+
+  if (isSundayRest && (!wpMin || wpMin <= 0)) {
+    return {
+      targetMinutes: 0,
+      targetHours: 0,
+      isRestDay: true,
+      restType: wp?.restType || 'rest',
+      subjects: wp?.subjects || '🛋️ Sunday Rest & Buffer Day (Streak Protected)',
+      source: 'weeklyPlan',
+    }
+  }
+
   if (wp && !isNaN(wpMin) && wpMin > 0) {
     return {
       ...wp,
       targetMinutes: wpMin,
       targetHours: Number((wpMin / 60).toFixed(2)),
+      isRestDay: isSundayRest,
+      restType: wp?.restType || (isSundayRest ? 'mock' : undefined),
       source: 'weeklyPlan',
     }
   }
+
+  if (isSundayRest) {
+    return {
+      targetMinutes: 0,
+      targetHours: 0,
+      isRestDay: true,
+      restType: 'rest',
+      subjects: '🛋️ Sunday Rest & Buffer Day (Streak Protected)',
+      source: 'weeklyPlan',
+    }
+  }
+
   return null
 }
 
