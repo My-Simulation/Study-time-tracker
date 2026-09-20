@@ -45,7 +45,10 @@ export default function Profile({ userName }) {
     if (!userName) return []
     try {
       const raw = localStorage.getItem(`stt_user_sessions_${userName.toLowerCase()}`)
-      if (raw) return JSON.parse(raw)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return parsed
+      }
     } catch {}
     return []
   })
@@ -53,7 +56,10 @@ export default function Profile({ userName }) {
     if (!userName) return {}
     try {
       const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
-      if (raw) return JSON.parse(raw).weeklyPlan || {}
+      if (raw) {
+        const doc = JSON.parse(raw)
+        if (doc && typeof doc === 'object') return doc.weeklyPlan || {}
+      }
     } catch {}
     return {}
   })
@@ -61,7 +67,10 @@ export default function Profile({ userName }) {
     if (!userName) return {}
     try {
       const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
-      if (raw) return JSON.parse(raw).dayPlanners || {}
+      if (raw) {
+        const doc = JSON.parse(raw)
+        if (doc && typeof doc === 'object') return doc.dayPlanners || {}
+      }
     } catch {}
     return {}
   })
@@ -69,7 +78,10 @@ export default function Profile({ userName }) {
     if (!userName) return null
     try {
       const raw = localStorage.getItem(`stt_user_doc_${userName.toLowerCase()}`)
-      if (raw) return JSON.parse(raw)
+      if (raw) {
+        const doc = JSON.parse(raw)
+        if (doc && typeof doc === 'object') return doc
+      }
     } catch {}
     return null
   })

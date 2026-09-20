@@ -12,18 +12,70 @@ import Plan from './pages/Plan'
 import History from './pages/History'
 import Profile from './pages/Profile'
 import Analytics from './pages/Analytics'
+import Welcome from './pages/Welcome'
+import SignIn from './pages/SignIn'
+import SignUp from './pages/SignUp'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
 import { getWallpaper, getWallpaperConfig, subscribeToUserWallpaper } from './utils/wallpaperStorage'
 
 // Secondary / public route-level code splitting
-const Welcome = lazy(() => import('./pages/Welcome'))
-const SignIn = lazy(() => import('./pages/SignIn'))
-const SignUp = lazy(() => import('./pages/SignUp'))
 const HistoryDetail = lazy(() => import('./pages/HistoryDetail'))
 const Syllabus = lazy(() => import('./pages/Syllabus'))
 const WatchPartner = lazy(() => import('./pages/WatchPartner'))
 const PartnerHistory = lazy(() => import('./pages/PartnerHistory'))
 const WatchSearch = lazy(() => import('./pages/WatchPartner').then(m => ({ default: m.WatchSearch })))
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('App Error caught by boundary:', error, errorInfo)
+  }
+
+  handleReload = () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          for (const r of regs) r.unregister()
+        })
+      }
+      if ('caches' in window) {
+        caches.keys().then((keys) => {
+          for (const k of keys) caches.delete(k)
+        })
+      }
+    } catch {}
+    window.location.href = window.location.pathname + '?v=' + Date.now()
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-[#0d0d0d] text-white">
+          <div className="text-4xl mb-3">⚠️</div>
+          <h2 className="text-lg font-bold mb-2">Something went wrong</h2>
+          <p className="text-xs text-gray-400 max-w-sm mb-6">
+            An unexpected error occurred while loading this view. Tap below to reload fresh.
+          </p>
+          <button
+            onClick={this.handleReload}
+            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium text-sm transition-all shadow-lg"
+          >
+            ↻ Reload Application
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 function PageLoader() {
   return (
@@ -140,7 +192,9 @@ export default function App() {
         </div>
       )}
       <div className="relative z-10 min-h-screen">
-        <AnimatedRoutes />
+        <ErrorBoundary>
+          <AnimatedRoutes />
+        </ErrorBoundary>
       </div>
     </BrowserRouter>
   )

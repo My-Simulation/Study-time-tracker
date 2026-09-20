@@ -314,7 +314,8 @@ export default function Stopwatch({ userName }) {
             stop()
             reset()
 
-            await saveSession(userName, {
+            await saveSession({
+              userName,
               totalSeconds: satSec,
               date: startDate,
               subject: activeSubject || 'Focus Study',

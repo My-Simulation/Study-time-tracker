@@ -81,7 +81,10 @@ export default function DayPlanner({ userName }) {
     try {
       const u = (userName || '').toLowerCase()
       const raw = localStorage.getItem(`stt_day_plan_${u}_${currentDate}`)
-      if (raw) return JSON.parse(raw)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') return parsed
+      }
     } catch {}
     return null
   }, [userName, currentDate])

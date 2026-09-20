@@ -88,7 +88,9 @@ export default function Plan({ userName }) {
       const raw = localStorage.getItem(`stt_user_doc_${u}`)
       if (raw) {
         const doc = JSON.parse(raw)
-        return { ...DEFAULT_PLAN, ...(doc.weeklyPlan || {}) }
+        if (doc && typeof doc === 'object') {
+          return { ...DEFAULT_PLAN, ...(doc.weeklyPlan || {}) }
+        }
       }
     } catch {}
     return DEFAULT_PLAN
@@ -98,7 +100,10 @@ export default function Plan({ userName }) {
     try {
       const u = userName.toLowerCase()
       const raw = localStorage.getItem(`stt_user_sessions_${u}`)
-      if (raw) return JSON.parse(raw)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return parsed
+      }
     } catch {}
     return []
   })
@@ -107,7 +112,10 @@ export default function Plan({ userName }) {
     try {
       const u = userName.toLowerCase()
       const raw = localStorage.getItem(`stt_user_doc_${u}`)
-      if (raw) return JSON.parse(raw).dayPlanners || {}
+      if (raw) {
+        const doc = JSON.parse(raw)
+        if (doc && typeof doc === 'object') return doc.dayPlanners || {}
+      }
     } catch {}
     return {}
   })

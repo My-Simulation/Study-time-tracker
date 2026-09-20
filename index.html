@@ -18,13 +18,44 @@
   </head>
   <body style="background-color: #0d0d0d; color: white; margin: 0; min-height: 100vh;">
     <div id="root">
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background-color:#0d0d0d;color:#fff;font-family:system-ui,-apple-system,sans-serif;">
+      <div class="stt-initial-spinner" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background-color:#0d0d0d;color:#fff;font-family:system-ui,-apple-system,sans-serif;">
         <div style="font-size:36px;margin-bottom:12px;filter:drop-shadow(0 4px 12px rgba(168,85,247,0.3));">⏱️</div>
         <div style="font-size:17px;font-weight:600;letter-spacing:-0.01em;color:#e2e8f0;">Study Time Tracker</div>
         <div style="margin-top:16px;width:22px;height:22px;border:2.5px solid rgba(168,85,247,0.25);border-top-color:#a855f7;border-radius:50%;animation:sttSpin 0.7s linear infinite;"></div>
+        <button id="stt-rescue-btn" onclick="sttForceCleanReload()" style="display:none;margin-top:24px;padding:9px 18px;background:linear-gradient(135deg,#7c3aed,#9333ea);color:#fff;border:none;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(124,58,237,0.4);font-family:inherit;">↻ Tap to Refresh App</button>
       </div>
       <style>@keyframes sttSpin{to{transform:rotate(360deg)}}</style>
     </div>
+    <script>
+      // 1. Auto-recover if Vite chunk fails to load or stale hash requested
+      window.addEventListener('vite:preloadError', (event) => {
+        event.preventDefault();
+        window.location.reload();
+      });
+
+      // 2. Watchdog: if root still has the loading spinner after 2.8s, reveal manual rescue button
+      setTimeout(function() {
+        var root = document.getElementById('root');
+        if (root && root.querySelector && root.querySelector('.stt-initial-spinner')) {
+          var btn = document.getElementById('stt-rescue-btn');
+          if (btn) btn.style.display = 'inline-block';
+        }
+      }, 2800);
+
+      function sttForceCleanReload() {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            for (var i = 0; i < regs.length; i++) regs[i].unregister();
+          });
+        }
+        if ('caches' in window) {
+          caches.keys().then(function(keys) {
+            for (var i = 0; i < keys.length; i++) caches.delete(keys[i]);
+          });
+        }
+        window.location.href = window.location.pathname + '?v=' + Date.now();
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
