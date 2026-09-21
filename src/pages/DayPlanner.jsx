@@ -490,6 +490,7 @@ export default function DayPlanner({ userName }) {
     const ny = dt.getFullYear()
     const nm = String(dt.getMonth() + 1).padStart(2, '0')
     const nd = String(dt.getDate()).padStart(2, '0')
+    setDayNumber((prev) => Math.max(1, prev + offset))
     setCurrentDate(`${ny}-${nm}-${nd}`)
   }
 

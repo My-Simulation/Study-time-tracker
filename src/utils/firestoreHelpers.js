@@ -1261,29 +1261,121 @@ export async function getAllDayPlanners(userName) {
   }
 }
 
+function diffDays(startDateStr, endDateStr) {
+  if (!startDateStr || !endDateStr) return 0
+  const [y1, m1, d1] = startDateStr.split('-').map(Number)
+  const [y2, m2, d2] = endDateStr.split('-').map(Number)
+  if (isNaN(y1) || isNaN(m1) || isNaN(d1) || isNaN(y2) || isNaN(m2) || isNaN(d2)) return 0
+  const t1 = Date.UTC(y1, m1 - 1, d1)
+  const t2 = Date.UTC(y2, m2 - 1, d2)
+  return Math.round((t2 - t1) / (1000 * 60 * 60 * 24))
+}
+
 /**
  * Calculates a sequential Day Number (Day 1, Day 2, Day 3...)
- * based on user's first planned or studied date.
+ * based on user's first planned or studied date and known day anchors.
  */
 export async function calculateDayNumber(userName, targetDateStr, existingSessions = null, existingUserDoc = null) {
-  if (!userName || !targetDateStr) return 1
+  if (!targetDateStr) return 1
   try {
+    const uKey = (userName || '').toLowerCase()
+
+    // 1. Direct saved check in local day planner
+    if (typeof window !== 'undefined' && uKey) {
+      try {
+        const rawLocal = localStorage.getItem(`stt_day_plan_${uKey}_${targetDateStr}`)
+        if (rawLocal) {
+          const parsed = JSON.parse(rawLocal)
+          if (parsed?.dayNumber && Number(parsed.dayNumber) > 0) {
+            return Number(parsed.dayNumber)
+          }
+        }
+      } catch {}
+    }
+
     const [sessions, userDoc] = await Promise.all([
       existingSessions ? Promise.resolve(existingSessions) : getUserSessions(userName),
       existingUserDoc ? Promise.resolve(existingUserDoc) : getUserDoc(userName),
     ])
-    const allDates = new Set()
-    if (sessions) {
-      sessions.forEach((s) => s.date && allDates.add(s.date))
+
+    // 2. Direct saved check in userDoc.dayPlanners
+    if (userDoc?.dayPlanners?.[targetDateStr]?.dayNumber) {
+      const dNum = Number(userDoc.dayPlanners[targetDateStr].dayNumber)
+      if (dNum > 0) return dNum
+    }
+
+    // 3. Collect all known date -> dayNumber anchors from dayPlanners and localStorage
+    const anchorMap = new Map()
+
+    if (userDoc?.dayPlanners) {
+      for (const [dStr, plan] of Object.entries(userDoc.dayPlanners)) {
+        if (plan?.dayNumber && Number(plan.dayNumber) > 0 && /^\d{4}-\d{2}-\d{2}$/.test(dStr)) {
+          anchorMap.set(dStr, Number(plan.dayNumber))
+        }
+      }
+    }
+
+    if (typeof window !== 'undefined' && uKey) {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i)
+          if (k && k.startsWith(`stt_day_plan_${uKey}_`)) {
+            const dStr = k.replace(`stt_day_plan_${uKey}_`, '')
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dStr)) {
+              const raw = localStorage.getItem(k)
+              if (raw) {
+                const p = JSON.parse(raw)
+                if (p?.dayNumber && Number(p.dayNumber) > 0) {
+                  const existingNum = anchorMap.get(dStr) || 0
+                  if (Number(p.dayNumber) > existingNum) {
+                    anchorMap.set(dStr, Number(p.dayNumber))
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const sortedAnchors = Array.from(anchorMap.entries())
+      .map(([date, dayNumber]) => ({ date, dayNumber }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    if (sortedAnchors.length > 0) {
+      // Find the closest anchor
+      const pastAnchors = sortedAnchors.filter((a) => a.date <= targetDateStr)
+      if (pastAnchors.length > 0) {
+        const baseAnchor = pastAnchors[pastAnchors.length - 1]
+        const diff = diffDays(baseAnchor.date, targetDateStr)
+        return Math.max(1, baseAnchor.dayNumber + diff)
+      }
+
+      // If targetDateStr is before all anchors, use earliest anchor
+      const earliestAnchor = sortedAnchors[0]
+      const diff = diffDays(earliestAnchor.date, targetDateStr)
+      return Math.max(1, earliestAnchor.dayNumber + diff)
+    }
+
+    // 4. Fallback if no explicit dayNumber stored yet: count days from earliest recorded date
+    const allDates = []
+    if (sessions && Array.isArray(sessions)) {
+      sessions.forEach((s) => s.date && /^\d{4}-\d{2}-\d{2}$/.test(s.date) && allDates.push(s.date))
     }
     if (userDoc?.dayPlanners) {
-      Object.keys(userDoc.dayPlanners).forEach((d) => allDates.add(d))
+      Object.keys(userDoc.dayPlanners).forEach((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && allDates.push(d))
     }
-    allDates.add(targetDateStr)
-    const sorted = Array.from(allDates).sort()
-    const idx = sorted.indexOf(targetDateStr)
-    return idx >= 0 ? idx + 1 : 1
-  } catch {
+
+    if (allDates.length > 0) {
+      allDates.sort()
+      const startDate = allDates[0]
+      const diff = diffDays(startDate, targetDateStr)
+      return Math.max(1, 1 + diff)
+    }
+
+    return 1
+  } catch (err) {
+    console.warn('calculateDayNumber failed:', err)
     return 1
   }
 }
