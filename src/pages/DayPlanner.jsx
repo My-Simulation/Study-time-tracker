@@ -143,6 +143,9 @@ export default function DayPlanner({ userName }) {
 
   const handleOpenAICoach = async () => {
     const ctx = await buildUserAIContext(userName)
+    if (ctx && currentDate === todayString() && actualSeconds > 0) {
+      ctx.todayStudiedHours = Number((actualSeconds / 3600).toFixed(1))
+    }
     setUserAIContext(ctx)
     setShowAICoach(true)
   }

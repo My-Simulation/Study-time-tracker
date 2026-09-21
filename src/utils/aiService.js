@@ -15,6 +15,7 @@ import {
   getSyllabus,
   calculateStreaks,
   groupSessionsByDate,
+  getUserSettings,
 } from './firestoreHelpers.js'
 import { todayString, formatHoursMinutes, formatDuration } from './formatTime.js'
 
@@ -152,14 +153,35 @@ export async function buildUserAIContext(userName) {
   if (!userName) return null
 
   try {
-    const [userDoc, sessions, syllabus] = await Promise.all([
-      getUserDoc(userName),
-      getUserSessions(userName),
-      getSyllabus(userName),
+    const uKey = userName.toLowerCase()
+
+    // Local cached fallbacks for instant & offline reliability
+    let localSessions = []
+    let localSettings = { sundayRestDay: false, effectiveFrom: null }
+    let localUserDoc = null
+    try {
+      const rawS = localStorage.getItem(`stt_user_sessions_${uKey}`)
+      if (rawS) localSessions = JSON.parse(rawS)
+      const rawSet = localStorage.getItem(`stt_settings_${uKey}`)
+      if (rawSet) localSettings = JSON.parse(rawSet)
+      const rawDoc = localStorage.getItem(`stt_user_doc_${uKey}`)
+      if (rawDoc) localUserDoc = JSON.parse(rawDoc)
+    } catch {}
+
+    const [userDocRemote, sessionsRemote, syllabusRemote, settingsRemote] = await Promise.all([
+      getUserDoc(userName).catch(() => null),
+      getUserSessions(userName).catch(() => []),
+      getSyllabus(userName).catch(() => []),
+      getUserSettings(userName).catch(() => null),
     ])
 
+    const userDoc = userDocRemote || localUserDoc || {}
+    const sessions = (sessionsRemote && sessionsRemote.length > 0) ? sessionsRemote : localSessions
+    const settings = settingsRemote || localSettings || userDoc?.settings || { sundayRestDay: false }
+    const syllabus = syllabusRemote || []
+
     const dateGroups = groupSessionsByDate(sessions || [])
-    const streakInfo = calculateStreaks(dateGroups)
+    const streakInfo = calculateStreaks(dateGroups, settings)
 
     // Calculate subject distribution for the last 14 days
     const subjectMap = {}
@@ -185,11 +207,29 @@ export async function buildUserAIContext(userName) {
     // Check today's study
     const today = todayString()
     const todaySessions = (sessions || []).filter((s) => s.date === today)
-    const todayStudiedSec = todaySessions.reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+    let todayStudiedSec = todaySessions.reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
+
+    try {
+      const rawPlan = localStorage.getItem(`stt_day_plan_${uKey}_${today}`)
+      if (rawPlan) {
+        const p = JSON.parse(rawPlan)
+        if (p?.actualSeconds && p.actualSeconds > todayStudiedSec) {
+          todayStudiedSec = p.actualSeconds
+        }
+      }
+    } catch {}
 
     // Target hours
-    const dayPlan = userDoc?.dayPlanners?.[today]
-    const targetHours = Number(dayPlan?.targetHours || 6)
+    let targetHours = 6
+    try {
+      const rawPlan = localStorage.getItem(`stt_day_plan_${uKey}_${today}`)
+      if (rawPlan) {
+        const p = JSON.parse(rawPlan)
+        if (p?.targetHours !== undefined) targetHours = Number(p.targetHours)
+      } else if (userDoc?.dayPlanners?.[today]?.targetHours) {
+        targetHours = Number(userDoc.dayPlanners[today].targetHours)
+      }
+    } catch {}
 
     return {
       userName,
@@ -446,41 +486,79 @@ function generateAlgorithmicTimeTable({ targetStudyHours, routineType, wakeTime,
 export async function chatWithAIMentor(userContext, chatHistory, userMessage) {
   const quota = checkAndIncrementDailyLimit()
   if (!quota.allowed) {
-    throw new Error('Daily AI message quota reached (15/15). Resetting at 12:00 AM!')
+    throw new Error('Daily AI message quota reached (30/30). Resetting at 12:00 AM!')
   }
 
   const apiKey = getGeminiApiKey()
 
-  const systemContextPrompt = `
-You are "Antigravity AI Study Mentor" — a warm, highly disciplined, data-driven academic coach for @${userContext.userName}.
-You have direct, real-time access to the student's study performance data:
+  const systemContextPrompt = `You are Gemini, a friendly, intelligent, versatile AI assistant and mentor for @${userContext?.userName || 'student'}.
 
-STUDENT'S LIVE ACCOUNT DATA:
-- Display Name: ${userContext.displayName || userContext.userName}
-- Current Active Streak: ${userContext.currentStreak} consecutive days 🔥
-- Longest Streak: ${userContext.longestStreak} days
-- Total Study Sessions Logged: ${userContext.totalSessionsAllTime} sessions
-- Studied Today: ${userContext.todayStudiedHours} hrs / Target: ${userContext.todayTargetHours} hrs
-- Last 14 Days Total Hours: ${userContext.last14DaysTotalHours} hours
-- Subject Distribution in past 14 days:
-${userContext.subjectBreakdown?.map((s) => `  * ${s.subject}: ${s.hours}h (${s.pct}%)`).join('\n') || '  * No recorded subject logs yet'}
-- Registered Syllabus: ${userContext.syllabusList?.join(', ') || 'General subjects'}
-- Target Exam: ${userContext.examGoal?.name || 'Not set'}
+CORE CONVERSATIONAL BEHAVIOR:
+1. TALK LIKE REAL GEMINI (NATURAL & ADAPTIVE):
+   - Be friendly, warm, and direct.
+   - If the user sends a casual greeting or small talk ("hi", "hello", "kya haal hai", "hey", "sup"), reply briefly and warmly in 1-2 sentences. Example: "Hey ${userContext?.displayName || userContext?.userName || 'Dost'}! Kaise ho? Aaj kis exam, topic ya study plan me help chahiye?"
+   - NEVER give unsolicited lectures, study audits, or long action plans when the user just greets you.
+2. ANSWER ANY QUESTION FREELY:
+   - The user can ask you about ANYTHING:
+     * Competitive exams: SSC CGL/CHSL, UPSC, Railways, State PSC, Banking, JEE, NEET (eligibility, age limit, syllabus, books, strategy, cutoffs).
+     * Subject concepts, maths shortcuts, reasoning tricks, history dates, science topics, grammar, essay outlines.
+     * General knowledge, daily motivation, productivity tips, or life advice.
+   - Answer their specific question accurately, clearly, and concisely without forcing the topic back to their tracker logs.
+3. BACKGROUND ACCOUNT DATA (USE ONLY WHEN RELEVANT):
+   - You have background knowledge about their study profile (below).
+   - ONLY reference their study hours, streak, or subjects when:
+     a) They specifically ask about their performance, streak, progress, timetable, or study stats.
+     b) Or when it directly helps answer their strategy question (e.g. they ask "mere liye schedule banao" and you know their target exam).
+   - Never recite their raw metrics in a robotic way.
+4. TONE & LANGUAGE:
+   - Match the user's language (Hindi, Hinglish, or English).
+   - Keep answers clean, structured with markdown bullets when appropriate, and proportional to what was asked.
 
-YOUR COACHING PRINCIPLES:
-1. Always base your advice on their ACTUAL account data above. (e.g. if they neglect a subject, mention it by name! If their streak is high, applaud it!).
-2. Be encouraging, concise, actionable, and structured with bullet points.
-3. Answer in the user's language (Hindi, Hinglish, or English depending on how they asked).
-4. Give specific, practical time-management tips (Pomodoro, Spaced Repetition, Active Recall).
+STUDENT PROFILE (Background reference):
+- Name: ${userContext?.displayName || userContext?.userName || 'Aspirant'}
+- Target Exam: ${userContext?.examGoal?.name || 'Not set'}
+- Current Active Streak: ${userContext?.currentStreak || 0} days
+- Today Studied: ${userContext?.todayStudiedHours || 0}h (Target: ${userContext?.todayTargetHours || 6}h)
+- Last 14 Days Logged: ${userContext?.last14DaysTotalHours || 0}h
+- Recent Subjects: ${userContext?.subjectBreakdown?.map((s) => `${s.subject}: ${s.hours}h`).join(', ') || 'No logs yet'}
+- Registered Syllabus: ${userContext?.syllabusList?.join(', ') || 'None'}
 `
 
   if (apiKey) {
     try {
+      // Build clean multi-turn history ensuring valid alternation and starting with user
+      let sanitizedHistory = (chatHistory || [])
+        .filter((m) => m && m.text && (m.role === 'user' || m.role === 'assistant') && m.id !== 'welcome')
+        .slice(-8)
+        .map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.text }],
+        }))
+
+      while (sanitizedHistory.length > 0 && sanitizedHistory[0].role !== 'user') {
+        sanitizedHistory.shift()
+      }
+
+      const alternated = []
+      for (const item of sanitizedHistory) {
+        if (alternated.length === 0 || alternated[alternated.length - 1].role !== item.role) {
+          alternated.push(item)
+        }
+      }
+
+      if (alternated.length > 0 && alternated[alternated.length - 1].role === 'user') {
+        alternated.pop()
+      }
+
       const contents = [
-        { role: 'user', parts: [{ text: `${systemContextPrompt}\n\nStudent asks: ${userMessage}` }] },
+        ...alternated,
+        { role: 'user', parts: [{ text: userMessage }] },
       ]
 
       const answer = await callGeminiAPI(apiKey, {
+        systemInstruction: {
+          parts: [{ text: systemContextPrompt }],
+        },
         contents,
         generationConfig: {
           temperature: 0.7,
@@ -500,103 +578,55 @@ YOUR COACHING PRINCIPLES:
  * Generates local intelligent coaching analysis based on user account data
  */
 function generateOfflineCoachResponse(userContext, query) {
-  const q = (query || '').toLowerCase()
+  const q = (query || '').toLowerCase().trim()
   const streak = userContext.currentStreak || 0
   const todayHrs = userContext.todayStudiedHours || 0
   const targetHrs = userContext.todayTargetHours || 6
   const breakdown = userContext.subjectBreakdown || []
   const exam = userContext.examGoal?.name || 'Aapka Target Exam'
+  const name = userContext.displayName || userContext.userName || 'Dost'
 
-  const apiNote = `\n\n*(💡 Tip: Bilkul free Gemini API Key lagane ke liye Profile ya ⚙️ icon par jayein — fir aap bina kisi limit ke detailed AI mentoring le sakte hain!)*`
+  // Greetings: hi, hello, hey, etc.
+  if (/^(hi|hello|hey|hlo|namaste|hola|sup|good morning|good evening)\b/i.test(q)) {
+    return `👋 **Hey ${name}!** Kaise ho? Aaj kis exam, topic ya study plan me help chahiye? Kuch bhi pooch sakte ho!`
+  }
 
-  // Case 1: Performance / Progress analysis
-  if (q.includes('performance') || q.includes('progress') || q.includes('kaisa') || q.includes('report') || q.includes('analyze')) {
+  // SSC / General Exam inquiry
+  if (q.includes('ssc')) {
+    return `🎯 **SSC Exams Guide:**\n\n- **SSC CGL (Graduate Level):** Tier-1 & Tier-2 (Maths, Reasoning, English, General Awareness, Computer).\n- **SSC CHSL (10+2 Level):** LDC, DEO, JSA posts.\n- **Eligibility:** CGL ke liye graduation, CHSL ke liye 12th pass; age generally 18-27 ya 18-32 years.\n\nAapko specific syllabus ya subject booklist ke baare me poochhna hai?`
+  }
+
+  // Case 1: Performance / Progress analysis (only when explicitly asked)
+  if (q.includes('performance') || q.includes('progress') || q.includes('kaisa chal raha') || q.includes('report') || q.includes('analyze') || q.includes('streak')) {
     let neglected = breakdown.length > 1 ? breakdown[breakdown.length - 1] : null
     let dominant = breakdown.length > 0 ? breakdown[0] : null
 
-    return `📊 **Aapke Study Account Ka Real-Time Analysis:**
-
-🔥 **Consistency & Streak:**
-- Aapka current streak **${streak} days** ka hai! ${streak >= 3 ? 'Bohot badiya momentum bana hua hai!' : 'Rozana padhne ki aadat ko 7 din tak stretch karein.'}
-- Aaj aapne **${todayHrs} hrs** padha hai (${targetHrs}h ke target me se).
-
-📚 **Subject Balance (Pichle 14 Din):**
-${dominant ? `- **Sabse zyada focus:** ${dominant.subject} (${dominant.hours} hours - ${dominant.pct}%)` : ''}
-${neglected && neglected !== dominant ? `- ⚠️ **Neglected Subject:** ${neglected.subject} par sirf ${neglected.hours} hours diye hain. Ise aage ke slots me priority dein!` : ''}
-
-💡 **Mera Recommendation:**
-1. Apne weak subject ko **Morning 06:00 - 08:30 AM** wale fresh mind slot me rakhein.
-2. Roz raat ko 45 minute ka **Spaced Revision** zaroor lagayein taaki padha hua bhool na jayein.${apiNote}`
+    return `📊 **Aapka Study Analysis (${name}):**\n\n🔥 **Streak & Consistency:**\n- Current Streak: **${streak} days** 🔥\n- Today's Study: **${todayHrs}h** / ${targetHrs}h target.\n\n📚 **Subjects:**\n${dominant ? `- Top Focus: ${dominant.subject} (${dominant.hours}h)\n` : ''}${neglected && neglected !== dominant ? `- Kam time: ${neglected.subject} (${neglected.hours}h) — ispar thoda dhyan dein.\n` : ''}\nKuch specific study plan ya tip chahiye toh batao!`
   }
 
   // Case 2: Weak subject inquiry
   if (q.includes('subject') || q.includes('kam') || q.includes('weak') || q.includes('neglect')) {
     if (breakdown.length > 1) {
       const weak = breakdown[breakdown.length - 1]
-      return `⚖️ **Subject Analysis:**
-Aapke data ke mutabiq pichle 14 din me **${weak.subject}** ko sabse kam time (${weak.hours} hours, sirf ${weak.pct}%) mila hai.
-
-👉 **Action Plan:**
-- Kal ke Day Planner me **${weak.subject}** ke 2 continuous slots (kam se kam 2 ghante) schedule karein.
-- Pehle 30 minute theory revise karein, fir 1 ghanta MCQs / questions solve karein.${apiNote}`
+      return `⚖️ **Subject Analysis:**\nAapke data ke mutabiq pichle 14 din me **${weak.subject}** ko sabse kam time (${weak.hours} hours, ${weak.pct}%) mila hai.\n\n👉 **Tip:** Kal ke planner me **${weak.subject}** ke 2 continuous slots pehle se schedule karein.`
     }
   }
 
   // Case 3: Exam Prep / Strategy / Kaise padhein / Target
   if (q.includes('exam') || q.includes('prep') || q.includes('target') || q.includes('kese') || q.includes('kaise') || q.includes('strategy') || q.includes('tips')) {
-    return `🎯 **${exam} Ke Liye Smart Preparation Strategy:**
-
-1. **Daily Slot Split (3-Tier Rule):**
-   - **Morning (Tier 1 - Concept):** Naye aur tough topics ko subah fresh dimaag se padhein (2.5 - 3 ghante).
-   - **Afternoon/Evening (Tier 2 - Practice):** PYQs, numericals aur sectional tests solve karein. Sirf theory padhna kafi nahi hota!
-   - **Night (Tier 3 - Revision):** 45 minute ka active recall — jo subah padha tha bina dekhe short points likhein.
-
-2. **Streak & Rest Balance:**
-   - Aapka current streak **${streak} days** hai. Sunday Rest Day toggle on rakhein taaki Sunday ko 0h target ho aur streak safe rahe!
-
-3. **Weak Subject Priority:**
-   - Day Planner me weak subjects ke liye 2 specific slots pehle se fix karke rakhein.${apiNote}`
+    return `🎯 **${exam} Ke Liye Smart Strategy:**\n\n1. **Morning (Concepts):** Naye aur tough topics fresh dimaag se padhein.\n2. **Afternoon (Practice):** PYQs, numericals aur mock test questions solve karein.\n3. **Night (Revision):** 30-45 minute active recall revision karein.\n\nAapka current streak **${streak} days** hai — consistency maintain rakhein!`
   }
 
   // Case 4: Routine / Time Table / Schedule
   if (q.includes('routine') || q.includes('time table') || q.includes('timetable') || q.includes('schedule') || q.includes('kab')) {
-    return `⏰ **Ideal Daily Study Routine (${targetHrs} Ghante Target):**
-
-- 🌅 **06:30 - 08:30 AM (2h):** High-Weightage Core Subject (Deep Focus)
-- 🍳 *08:30 - 09:30 AM:* Breakfast & Refreshment
-- 📖 **09:30 - 11:30 AM (2h):** Second Subject / Theory Reading
-- 🍛 *01:00 - 02:00 PM:* Lunch & Short Nap
-- ✍️ **02:00 - 04:00 PM (2h):** Practice Questions & PYQs
-- 🏃 *05:00 - 06:00 PM:* Walk / Exercise (Mental refresh)
-- 🧠 **08:30 - 09:30 PM (1h):** Spaced Repetition Revision of Today's Work
-
-👉 Day Planner me jaakar **"✨ AI Time Table"** par click karein aur apne routine ke hisaab se auto-generate karein!${apiNote}`
+    return `⏰ **Suggested Daily Study Routine (${targetHrs}h Target):**\n\n- 🌅 **06:30 - 08:30 AM (2h):** High-Weightage Core Subject\n- 📖 **09:30 - 11:30 AM (2h):** Second Subject / Theory\n- ✍️ **02:00 - 04:00 PM (2h):** Practice Questions & PYQs\n- 🧠 **08:30 - 09:30 PM (1h):** Spaced Repetition Revision\n\nDay Planner me jaakar **"✨ AI Generator"** par click karke customized time table auto-generate bhi kar sakte hain!`
   }
 
   // Case 5: Motivation / Focus / Distraction
   if (q.includes('focus') || q.includes('distract') || q.includes('motivation') || q.includes('man') || q.includes('burnout')) {
-    return `🔥 **Focus & Motivation Booster:**
-
-1. **Pomodoro Rule:**
-   - 50 minute full study + 10 minute complete break. Phone ko dusre kamre me rakhein.
-2. **2-Minute Rule:**
-   - Jab padhne ka man na kare, sirf stopwatch on karke bolo "main bas 5 minute baithunga". 90% baar aapka momentum ban jayega.
-3. **Your Hard Work:**
-   - Aapne **${userContext.totalSessionsAllTime} sessions** aur **${streak} days streak** maintain ki hai! Consistency hi topper banati hai.${apiNote}`
+    return `🔥 **Focus & Motivation Tips:**\n\n1. **Pomodoro:** 50 min deep study + 10 min break. Phone ko dusre kamre me rakhein.\n2. **5-Minute Rule:** Jab padhne ka man na kare, sirf timer on karke bolo "main bas 5 minute baithunga". Flow apne aap ban jata hai.\n3. Aapne ab tak **${userContext.totalSessionsAllTime || 0} sessions** aur **${streak} days streak** banayi hai. Momentum tootne mat do!`
   }
 
-  // Default mentor response
-  return `👋 **Namaste ${userContext.displayName || userContext.userName}!**
-
-Maine aapka study history review kiya hai:
-- **Target Exam:** ${exam}
-- **Active Streak:** ${streak} Days 🔥
-- **Total Logged Sessions:** ${userContext.totalSessionsAllTime}
-- **Today's Progress:** ${todayHrs}h / ${targetHrs}h
-
-Aap mujhse pooch sakte hain:
-1. *"Mera exam prep analysis do"*
-2. *"Main kaunsa subject neglect kar raha hu?"*
-3. *"Mere routine ke liye time table bana do"*
-4. *"Exam ke liye consistency & focus tips do"*${apiNote}`
+  // Default friendly response
+  return `👋 **Hey ${name}!**\n\nAap mujhse kisi bhi exam details (SSC, UPSC, JEE, etc.), doubts, syllabus, time table ya study tips ke baare me pooch sakte hain.\n\nAapko kis topic me help chahiye?`
 }

@@ -16,10 +16,10 @@ import {
 } from '../utils/aiService'
 
 const QUICK_PROMPTS = [
-  { label: '📊 Analyze My Progress', prompt: 'Mera recent study performance analyze karke batao, mai kaisa chal raha hu?' },
-  { label: '⚖️ Neglected Subjects', prompt: 'Maine pichle 14 din me kaunsa subject sabse kam padha hai aur kya karna chahiye?' },
-  { label: '🔥 Streak & Consistency', prompt: 'Mera streak kaisa chal raha hai aur mai consistency kaise maintain karu?' },
-  { label: '💡 Quick Study Tips', prompt: 'Exam me retention aur focus badhane ke liye 3 practical tips do.' },
+  { label: '📊 My Progress', prompt: 'Mera recent study performance aur streak analyze karke batao, mai kaisa chal raha hu?' },
+  { label: '🎯 Exam Strategy', prompt: 'Mere target exam ke liye ek realistic strategy aur daily routine batao.' },
+  { label: '⚖️ Weak Subjects', prompt: 'Maine pichle 14 din me kaunsa subject sabse kam padha hai aur use kaise cover karu?' },
+  { label: '💡 Quick Study Tips', prompt: 'Focus aur memory retention badhane ke liye 3 practical scientific tips do.' },
 ]
 
 export default function AICoachDrawer({ isOpen, onClose, userContext }) {
@@ -27,7 +27,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
     {
       id: 'welcome',
       role: 'assistant',
-      text: `👋 **Namaste ${userContext?.displayName || userContext?.userName || 'Aspirant'}!**\n\nMai aapka **AI Study Mentor** hu. Maine aapka study account, streaks, aur subject history review kar li hai.\n\nAap mujhse apne performance ke baare me pooch sakte hain ya neeche diye kisi topic par click karein!`,
+      text: `👋 **Namaste ${userContext?.displayName || userContext?.userName || 'Aspirant'}!**\n\nMai aapka **Gemini AI Mentor** hu. Aap mujhse kisi bhi exam (SSC, UPSC, State Exams), syllabus, daily routine, conceptual doubts ya apne study progress ke baare me pooch sakte hain.\n\nAapko aaj kis topic ya plan me help chahiye?`,
     },
   ])
   const [input, setInput] = useState('')
@@ -185,7 +185,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
             Today: <strong className="text-purple-300">{userContext?.todayStudiedHours || 0}h</strong>
           </span>
           <span className="text-gray-400">
-            Status: <strong className={hasGeminiApiKey() ? 'text-emerald-400' : 'text-amber-400'}>{hasGeminiApiKey() ? 'Gemini 1.5 Live' : 'Offline Mode'}</strong>
+            Status: <strong className={hasGeminiApiKey() ? 'text-emerald-400' : 'text-amber-400'}>{hasGeminiApiKey() ? 'Gemini Flash Live' : 'Offline Mode'}</strong>
           </span>
         </div>
 
@@ -214,7 +214,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
           {loading && (
             <div className="flex items-center gap-2 text-xs text-gray-400 p-2">
               <span className="w-3 h-3 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
-              <span>Analyzing your study records…</span>
+              <span>Gemini AI is thinking…</span>
             </div>
           )}
 
@@ -242,7 +242,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask AI Mentor anything about your study..."
+            placeholder="Ask Gemini anything (e.g. SSC syllabus, maths doubt, study plan)..."
             disabled={loading}
             className="flex-1 px-3.5 py-2 rounded-xl bg-[#101014] border border-[#2c2c38] text-white placeholder-gray-500 text-xs outline-none focus:border-purple-500 transition-colors"
           />
