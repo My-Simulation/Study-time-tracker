@@ -6,7 +6,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getUserSessions, groupSessionsByDate, calculateStreaks, getUserDoc, checkUserPrivacyAccess } from '../utils/firestoreHelpers'
+import { getUserSessions, groupSessionsByDate, calculateStreaks, getUserDoc, checkUserPrivacyAccess, getUserSettings } from '../utils/firestoreHelpers'
 import { formatDateDisplay, formatHoursMinutes } from '../utils/formatTime'
 import { getSession } from '../utils/auth'
 
@@ -17,6 +17,7 @@ export default function PartnerHistory() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [partnerDoc, setPartnerDoc] = useState(null)
+  const [partnerSettings, setPartnerSettings] = useState(null)
   const [privacyBlock, setPrivacyBlock] = useState(null)
 
   useEffect(() => {
@@ -28,8 +29,14 @@ export default function PartnerHistory() {
       try {
         const session = getSession()
         const viewerName = session?.username || ''
-        const pDoc = await getUserDoc(partnerName)
-        if (!cancelled) setPartnerDoc(pDoc)
+        const [pDoc, pSettings] = await Promise.all([
+          getUserDoc(partnerName),
+          getUserSettings(partnerName),
+        ])
+        if (!cancelled) {
+          setPartnerDoc(pDoc)
+          setPartnerSettings(pSettings || pDoc?.settings || null)
+        }
 
         const access = checkUserPrivacyAccess(pDoc, viewerName)
         if (pDoc && !access.allowed) {
@@ -52,7 +59,8 @@ export default function PartnerHistory() {
 
   const stats = (() => {
     if (!dateGroups.length) return { totalDays: 0, totalSeconds: 0, bestDaySeconds: 0, currentStreak: 0, longestStreak: 0 }
-    const { currentStreak, longestStreak } = calculateStreaks(dateGroups)
+    const effSettings = partnerSettings || partnerDoc?.settings || null
+    const { currentStreak, longestStreak } = calculateStreaks(dateGroups, effSettings)
     return {
       totalDays: dateGroups.length,
       totalSeconds: dateGroups.reduce((s, g) => s + g.totalSeconds, 0),

@@ -411,7 +411,7 @@ export default function Stopwatch({ userName }) {
           setTodayStudied(todaySec)
           if (allUserSessions && allUserSessions.length > 0) {
             const groups = groupSessionsByDate(allUserSessions)
-            const st = calculateStreaks(groups)
+            const st = calculateStreaks(groups, settings)
             setStreakCount(st.currentStreak || 0)
           }
         } catch {
@@ -420,7 +420,7 @@ export default function Stopwatch({ userName }) {
         }
       }
     },
-    [reset, userName]
+    [reset, userName, settings]
   )
 
   const dismissToast = useCallback(() => setToast({ visible: false, message: '' }), [])
