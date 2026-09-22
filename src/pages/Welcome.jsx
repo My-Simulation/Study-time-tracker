@@ -40,16 +40,17 @@ export default function Welcome() {
             📚
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-white tracking-tight">Study Time Tracker</h1>
-            <p className="text-gray-500 text-sm mt-1">Track. Compete. Improve.</p>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">JeetPrep</h1>
+            <p className="text-purple-400 text-xs font-bold tracking-widest uppercase mt-0.5">Study Tracker & Prep OS</p>
+            <p className="text-gray-400 text-sm mt-1.5">Track Study Hours · Live Partner · Kit AI Mentor</p>
           </div>
         </div>
 
         {/* Feature pills */}
         <div className="flex flex-wrap justify-center gap-2">
           {[
-            '⏱ Live Timer', '🔥 Streaks', '📅 Weekly Plan',
-            '👁 Watch Partner', '📊 Progress', '🏆 Goals',
+            '⏱ Precision Timer', '🤖 Kit AI Coach', '🔥 Streaks',
+            '👁 Watch Partner', '📅 Day & Week Plan', '📊 Syllabus Tracker',
           ].map((f) => (
             <span
               key={f}

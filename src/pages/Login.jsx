@@ -72,8 +72,9 @@ export default function Login() {
             📚
           </div>
           <div className="text-center">
-            <h1 className="text-xl font-bold text-white">Study Time Tracker</h1>
-            <p className="text-sm text-gray-500 mt-1">Pick a unique username to get started</p>
+            <h1 className="text-2xl font-bold text-white">JeetPrep</h1>
+            <p className="text-xs text-purple-400 font-semibold uppercase tracking-wider mt-0.5">Study Tracker</p>
+            <p className="text-xs text-gray-500 mt-1">Pick a unique username to get started</p>
           </div>
         </div>
 

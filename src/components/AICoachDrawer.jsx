@@ -27,7 +27,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
     {
       id: 'welcome',
       role: 'assistant',
-      text: `👋 **Namaste ${userContext?.displayName || userContext?.userName || 'Aspirant'}!**\n\nMai aapka **Gemini AI Mentor** hu. Aap mujhse kisi bhi exam (SSC, UPSC, State Exams), syllabus, daily routine, conceptual doubts ya apne study progress ke baare me pooch sakte hain.\n\nAapko aaj kis topic ya plan me help chahiye?`,
+      text: `👋 **Namaste ${userContext?.displayName || userContext?.userName || 'Aspirant'}!**\n\nMai aapka **Kit AI Study Mentor** hu on **JeetPrep**. Aap mujhse kisi bhi exam (SSC, UPSC, State Exams), syllabus, daily routine, conceptual doubts ya apne study progress ke baare me pooch sakte hain.\n\nAapko aaj kis topic ya plan me help chahiye?`,
     },
   ])
   const [input, setInput] = useState('')
@@ -97,7 +97,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
             </div>
             <div>
               <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5">
-                AI Study Mentor
+                Kit AI · Study Mentor
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
               </h3>
               <p className="text-[10px] text-gray-400">
@@ -242,7 +242,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask Gemini anything (e.g. SSC syllabus, maths doubt, study plan)..."
+            placeholder="Ask Kit anything (e.g. SSC syllabus, maths doubt, study plan)..."
             disabled={loading}
             className="flex-1 px-3.5 py-2 rounded-xl bg-[#101014] border border-[#2c2c38] text-white placeholder-gray-500 text-xs outline-none focus:border-purple-500 transition-colors"
           />

@@ -1,7 +1,7 @@
 {
-  "name": "Study Time Tracker",
-  "short_name": "StudyTracker",
-  "description": "Precision study stopwatch with live lock screen controls, day planner, and streaks",
+  "name": "JeetPrep · Study Tracker",
+  "short_name": "JeetPrep",
+  "description": "JeetPrep - Precision study stopwatch with live lock screen controls, day planner, and Kit AI coach",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

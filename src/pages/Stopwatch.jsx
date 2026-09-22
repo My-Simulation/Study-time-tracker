@@ -19,6 +19,8 @@ import ExamCountdown from '../components/ExamCountdown'
 import DailyMissions from '../components/DailyMissions'
 import ShareCardModal from '../components/ShareCardModal'
 import BackgroundModal from '../components/BackgroundModal'
+import AICoachDrawer from '../components/AICoachDrawer'
+import { buildUserAIContext } from '../utils/aiService'
 import {
   getWallpaper,
   setWallpaper as saveWallpaperPref,
@@ -56,6 +58,8 @@ export default function Stopwatch({ userName }) {
   const [pomoBreakMinutes, setPomoBreakMinutes] = useState(5)
   const [isZenMode, setIsZenMode] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [showAICoach, setShowAICoach] = useState(false)
+  const [userAIContext, setUserAIContext] = useState(null)
   const [showWallpaperModal, setShowWallpaperModal] = useState(false)
   const [wallpaper, setWallpaper] = useState(() => getWallpaper(userName))
   const [wallpaperConfig, setWallpaperConfig] = useState(() => getWallpaperConfig(userName))
@@ -524,6 +528,17 @@ export default function Stopwatch({ userName }) {
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
           {/* Profile pill */}
           <ProfilePill userName={userName} avatarColor={userProfile.avatarColor || avatarColor} photoUrl={userProfile.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
+
+          {/* JeetPrep Branding Chip */}
+          <div className="hidden lg:flex items-center gap-1.5 pl-2 border-l border-[#282828]">
+            <span className="text-xs font-black tracking-tight text-white flex items-center gap-1">
+              <span className="text-purple-400 font-bold">⚡</span> JeetPrep
+            </span>
+            <span className="text-[10px] font-semibold text-gray-400 bg-[#161616] border border-[#2a2a2a] px-1.5 py-0.5 rounded">
+              Study Tracker
+            </span>
+          </div>
+
           {!isStandalone && (
             <button
               onClick={handleInstallApp}
@@ -548,6 +563,23 @@ export default function Stopwatch({ userName }) {
 
         {/* Right icons */}
         <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+          {/* Kit AI Coach Button */}
+          <button
+            onClick={async () => {
+              const ctx = await buildUserAIContext(userName)
+              if (ctx && todayStudied > 0) {
+                ctx.todayStudiedHours = Number(((todayStudied + Math.floor(elapsed / 1000)) / 3600).toFixed(1))
+              }
+              setUserAIContext(ctx)
+              setShowAICoach(true)
+            }}
+            title="Chat with Kit AI"
+            aria-label="Kit AI"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl bg-gradient-to-r from-purple-600/25 to-indigo-600/25 hover:from-purple-600/40 hover:to-indigo-600/40 border border-purple-500/40 text-purple-300 text-xs font-bold transition-all cursor-pointer flex-shrink-0 shadow-sm mr-0.5"
+          >
+            <span>🤖</span>
+            <span className="hidden sm:inline">Kit AI</span>
+          </button>
           {/* Day Planner Sheet icon */}
           <IconButton onClick={() => navigate('/planner')} title="Daily Study Planner" aria-label="Day Planner">
             <span className="text-sm sm:text-base leading-none">🌸</span>
@@ -1073,6 +1105,12 @@ export default function Stopwatch({ userName }) {
         onResetDefault={handleResetWallpaper}
       />
       <Toast message={toast.message} visible={toast.visible} onDismiss={dismissToast} />
+      {/* ── Kit AI Coach Drawer ── */}
+      <AICoachDrawer
+        isOpen={showAICoach}
+        onClose={() => setShowAICoach(false)}
+        userContext={userAIContext}
+      />
 
       {/* ── Zen / Fullscreen Focus Mode Overlay ── */}
       {isZenMode && (

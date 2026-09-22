@@ -624,15 +624,15 @@ export default function DayPlanner({ userName }) {
             <span className="sm:hidden">AI Plan</span>
           </button>
 
-          {/* AI Mentor Button */}
+          {/* Kit AI Mentor Button */}
           <button
             type="button"
             onClick={handleOpenAICoach}
             className="px-3 py-1.5 rounded-xl bg-[#1d1d28] hover:bg-[#272738] border border-purple-500/30 text-purple-300 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Chat with your AI Study Mentor"
+            title="Chat with Kit AI"
           >
             <span>🤖</span>
-            <span className="hidden sm:inline">AI Coach</span>
+            <span>Kit AI</span>
           </button>
 
           {savedBadge && (
@@ -1484,16 +1484,16 @@ export default function DayPlanner({ userName }) {
         </div>
       )}
 
-      {/* ── Floating AI Mentor Button ── */}
+      {/* ── Floating Kit AI Button ── */}
       <button
         type="button"
         onClick={handleOpenAICoach}
         className="fixed bottom-6 right-6 z-40 px-4 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 text-white shadow-xl shadow-purple-600/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer border border-purple-400/30 group"
-        title="Chat with your AI Study Mentor"
+        title="Chat with Kit AI"
       >
         <span className="text-lg">🤖</span>
         <span className="text-xs font-bold tracking-wide">
-          AI Mentor
+          Kit AI
         </span>
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>

@@ -491,12 +491,12 @@ export async function chatWithAIMentor(userContext, chatHistory, userMessage) {
 
   const apiKey = getGeminiApiKey()
 
-  const systemContextPrompt = `You are Gemini, a friendly, intelligent, versatile AI assistant and mentor for @${userContext?.userName || 'student'}.
+  const systemContextPrompt = `You are Kit (Kit AI), a friendly, highly intelligent, versatile AI study coach and mentor on JeetPrep for @${userContext?.userName || 'student'}.
 
 CORE CONVERSATIONAL BEHAVIOR:
-1. TALK LIKE REAL GEMINI (NATURAL & ADAPTIVE):
+1. TALK LIKE REAL KIT AI (NATURAL, SHARP & ADAPTIVE):
    - Be friendly, warm, and direct.
-   - If the user sends a casual greeting or small talk ("hi", "hello", "kya haal hai", "hey", "sup"), reply briefly and warmly in 1-2 sentences. Example: "Hey ${userContext?.displayName || userContext?.userName || 'Dost'}! Kaise ho? Aaj kis exam, topic ya study plan me help chahiye?"
+   - If the user sends a casual greeting or small talk ("hi", "hello", "kya haal hai", "hey", "sup"), reply briefly and warmly in 1-2 sentences. Example: "Hey ${userContext?.displayName || userContext?.userName || 'Dost'}! Main Kit hoon. Kaise ho? Aaj kis exam, topic ya study plan me help chahiye?"
    - NEVER give unsolicited lectures, study audits, or long action plans when the user just greets you.
 2. ANSWER ANY QUESTION FREELY:
    - The user can ask you about ANYTHING:
@@ -588,7 +588,7 @@ function generateOfflineCoachResponse(userContext, query) {
 
   // Greetings: hi, hello, hey, etc.
   if (/^(hi|hello|hey|hlo|namaste|hola|sup|good morning|good evening)\b/i.test(q)) {
-    return `👋 **Hey ${name}!** Kaise ho? Aaj kis exam, topic ya study plan me help chahiye? Kuch bhi pooch sakte ho!`
+    return `👋 **Hey ${name}! Main Kit hoon.** Kaise ho? Aaj kis exam, topic ya study plan me help chahiye? Kuch bhi pooch sakte ho!`
   }
 
   // SSC / General Exam inquiry

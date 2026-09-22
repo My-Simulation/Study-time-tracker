@@ -222,16 +222,16 @@ class BackgroundTimerService {
       const origin = typeof window !== 'undefined' ? window.location.origin : ''
       const subtitle = subject
         ? `${subject}${topic ? ` · ${topic}` : ''}`
-        : 'Study Time Tracker'
+        : 'JeetPrep · Study Tracker'
 
       // 1. Dynamic document title
       if (typeof document !== 'undefined') {
         if (isRunning) {
-          document.title = `(${timeFormatted}) Study Tracker`
+          document.title = `(${timeFormatted}) JeetPrep · Study Tracker`
         } else if (rawTime !== '0:00:00.00' && rawTime !== '0:00:00') {
-          document.title = `(Paused) Study Tracker`
+          document.title = `(Paused) JeetPrep · Study Tracker`
         } else {
-          document.title = 'Study Time Tracker'
+          document.title = 'JeetPrep · Study Time Tracker'
         }
       }
 
