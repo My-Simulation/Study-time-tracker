@@ -132,6 +132,9 @@ export function invalidateUserCache(userName) {
   memoryCache.userSessions.delete(u)
   inFlightUserDoc.delete(u)
   inFlightSessions.delete(u)
+  try {
+    localStorage.removeItem(`stt_user_doc_${u}`)
+  } catch {}
 }
 
 /**
@@ -1186,29 +1189,50 @@ export async function saveDayPlanner(userName, dateStr, planData) {
  * - Writes to Firestore and updates localStorage caches
  * - Dispatches 'study_plan_updated' event for instant real-time sync across all components
  */
-export async function syncTargetHours(userName, dateStr, targetHours) {
+export async function syncTargetHours(userName, dateStr, targetHours, source = '') {
   if (!userName || !dateStr) return
-  invalidateUserCache(userName)
   const uKey = userName.toLowerCase()
   const numHours = Number(targetHours) || 0
   const targetMinutes = Math.round(numHours * 60)
   const dayKey = getLocalWeekdayId(dateStr)
 
   // 1. Update local cache for dayPlanner
+  let updatedDayPlan = { date: dateStr, targetHours: numHours, updatedAt: Date.now() }
   try {
     const raw = localStorage.getItem(`stt_day_plan_${uKey}_${dateStr}`)
     const existing = raw ? JSON.parse(raw) : { date: dateStr }
     existing.targetHours = numHours
     existing.isRestDay = numHours === 0 ? true : (existing.isRestDay && numHours > 0 ? false : existing.isRestDay)
     existing.updatedAt = Date.now()
+    updatedDayPlan = existing
     localStorage.setItem(`stt_day_plan_${uKey}_${dateStr}`, JSON.stringify(existing))
   } catch {}
 
-  // 2. Update Firestore document atomically with merge
+  // 2. Update local cache for user doc immediately so subsequent SWR reads get fresh targets
   try {
+    const rawDoc = localStorage.getItem(`stt_user_doc_${uKey}`)
+    if (rawDoc) {
+      const parsedDoc = JSON.parse(rawDoc)
+      if (!parsedDoc.dayPlanners) parsedDoc.dayPlanners = {}
+      parsedDoc.dayPlanners[dateStr] = updatedDayPlan
+      parsedDoc[`dayPlanners.${dateStr}`] = updatedDayPlan
+      if (!parsedDoc.weeklyPlan) parsedDoc.weeklyPlan = {}
+      parsedDoc.weeklyPlan[dayKey] = {
+        ...(parsedDoc.weeklyPlan[dayKey] || {}),
+        targetMinutes,
+      }
+      localStorage.setItem(`stt_user_doc_${uKey}`, JSON.stringify(parsedDoc))
+    }
+  } catch {}
+
+  invalidateUserCache(userName)
+
+  // 3. Update Firestore document
+  try {
+    const userDocRef = doc(db, 'users', uKey)
     const userDoc = await getUserDoc(uKey)
-    const existingDayPlan = userDoc?.dayPlanners?.[dateStr] || { date: dateStr }
-    const updatedDayPlan = {
+    const existingDayPlan = userDoc?.dayPlanners?.[dateStr] || userDoc?.[`dayPlanners.${dateStr}`] || { date: dateStr }
+    const fullDayPlan = {
       ...existingDayPlan,
       targetHours: numHours,
       isRestDay: numHours === 0 ? true : (existingDayPlan.isRestDay && numHours > 0 ? false : existingDayPlan.isRestDay),
@@ -1225,23 +1249,33 @@ export async function syncTargetHours(userName, dateStr, targetHours) {
       },
     }
 
-    await setDoc(
-      doc(db, 'users', uKey),
-      {
-        [`dayPlanners.${dateStr}`]: updatedDayPlan,
-        weeklyPlan: updatedWeeklyPlan,
-      },
-      { merge: true }
-    )
+    // Try updateDoc (properly updates nested dayPlanners.YYYY-MM-DD field path)
+    await updateDoc(userDocRef, {
+      [`dayPlanners.${dateStr}`]: fullDayPlan,
+      weeklyPlan: updatedWeeklyPlan,
+    }).catch(async () => {
+      // Fallback to setDoc with nested structure if doc was partially initialized
+      await setDoc(
+        userDocRef,
+        {
+          dayPlanners: {
+            ...(userDoc?.dayPlanners || {}),
+            [dateStr]: fullDayPlan,
+          },
+          weeklyPlan: updatedWeeklyPlan,
+        },
+        { merge: true }
+      )
+    })
   } catch (err) {
     console.warn('Failed to sync target hours to Firestore:', err)
   }
 
-  // 3. Dispatch broadcast event for 0ms reactivity on all views
+  // 4. Dispatch broadcast event for 0ms reactivity on all views
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent('study_plan_updated', {
-        detail: { userName, dateStr, dayKey, targetHours: numHours, targetMinutes },
+        detail: { userName, dateStr, dayKey, targetHours: numHours, targetMinutes, source },
       })
     )
   }
@@ -1256,9 +1290,10 @@ export async function getDayPlanner(userName, dateStr) {
   } catch {}
   try {
     const docData = await getUserDoc(uKey)
-    if (docData?.dayPlanners?.[dateStr]) {
-      localStorage.setItem(`stt_day_plan_${uKey}_${dateStr}`, JSON.stringify(docData.dayPlanners[dateStr]))
-      return docData.dayPlanners[dateStr]
+    const p = docData?.dayPlanners?.[dateStr] || docData?.[`dayPlanners.${dateStr}`]
+    if (p) {
+      localStorage.setItem(`stt_day_plan_${uKey}_${dateStr}`, JSON.stringify(p))
+      return p
     }
   } catch {}
   return null
@@ -1269,7 +1304,32 @@ export async function getAllDayPlanners(userName) {
   const uKey = userName.toLowerCase()
   try {
     const docData = await getUserDoc(uKey)
-    return docData?.dayPlanners || {}
+    const result = { ...(docData?.dayPlanners || {}) }
+    if (docData) {
+      Object.keys(docData).forEach((k) => {
+        if (k.startsWith('dayPlanners.')) {
+          const dStr = k.replace('dayPlanners.', '')
+          result[dStr] = { ...(result[dStr] || {}), ...docData[k] }
+        }
+      })
+    }
+    // Also merge any localStorage day plans if newer
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith(`stt_day_plan_${uKey}_`)) {
+          const dStr = k.replace(`stt_day_plan_${uKey}_`, '')
+          const raw = localStorage.getItem(k)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (parsed && (!result[dStr] || (parsed.updatedAt || 0) >= (result[dStr].updatedAt || 0))) {
+              result[dStr] = parsed
+            }
+          }
+        }
+      }
+    } catch {}
+    return result
   } catch {
     return {}
   }

@@ -185,9 +185,13 @@ export default function Plan({ userName }) {
     load()
   }, [load])
 
+  const debounceSyncRef = useRef({})
+
   // Real-time synchronization listeners across tabs & pages
   useEffect(() => {
-    const handleUpdate = () => {
+    const handleUpdate = (e) => {
+      // If this update was triggered by our own slider on this page, do NOT reload to prevent slider snap-back
+      if (e?.detail?.source === 'plan_slider') return
       load()
     }
     window.addEventListener('study_plan_updated', handleUpdate)
@@ -206,15 +210,30 @@ export default function Plan({ userName }) {
       [dayKey]: { ...prev[dayKey], targetMinutes: minutes },
     }))
     setSaved(false)
+
+    // Debounced auto-sync (600ms) so target hours auto-syncs smoothly
+    const dStr = weekDates[dayKey]?.dateStr
+    if (dStr && userName) {
+      if (debounceSyncRef.current[dayKey]) {
+        clearTimeout(debounceSyncRef.current[dayKey])
+      }
+      debounceSyncRef.current[dayKey] = setTimeout(() => {
+        const targetHours = Number((minutes / 60).toFixed(2))
+        syncTargetHours(userName, dStr, targetHours, 'plan_slider').catch(() => {})
+      }, 600)
+    }
   }
 
   // Instant sync when slider is released/touched
   const handleSliderRelease = async (dayKey, minutes) => {
+    if (debounceSyncRef.current[dayKey]) {
+      clearTimeout(debounceSyncRef.current[dayKey])
+    }
     const dStr = weekDates[dayKey]?.dateStr
     const targetHours = Number((minutes / 60).toFixed(2))
     if (dStr && userName) {
       try {
-        await syncTargetHours(userName, dStr, targetHours)
+        await syncTargetHours(userName, dStr, targetHours, 'plan_slider')
       } catch (e) {
         console.warn('Auto-sync target failed:', e)
       }
@@ -757,6 +776,7 @@ export default function Plan({ userName }) {
                       value={d.targetMinutes}
                       onChange={(e) => handleHoursChange(key, Number(e.target.value))}
                       onPointerUp={(e) => handleSliderRelease(key, Number(e.target.value))}
+                      onMouseUp={(e) => handleSliderRelease(key, Number(e.target.value))}
                       onTouchEnd={(e) => handleSliderRelease(key, Number(e.target.value))}
                       className="w-full accent-purple-500 cursor-pointer"
                       style={{ accentColor: '#8b5cf6' }}
