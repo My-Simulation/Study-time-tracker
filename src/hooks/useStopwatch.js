@@ -66,6 +66,7 @@ export function useStopwatch(userName) {
   const startTimestampRef = useRef(null)
   const baseElapsedRef = useRef(0)
   const heartbeatRef = useRef(null)
+  const reconcileWithRemoteRef = useRef(null)
 
   // Load initial refs from localStorage
   useEffect(() => {
@@ -140,6 +141,116 @@ export function useStopwatch(userName) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [isRunning, tick])
+
+  // ── Real-Time Cross-Device Reconciliation ──────────────────────────────────
+  const reconcileWithRemote = useCallback(
+    (remote, isDirectFetch = false) => {
+      if (!remote) return
+      // Ignore echoes from this same device tab/session unless waking up directly
+      if (!isDirectFetch && remote.deviceId && remote.deviceId === deviceIdRef.current) return
+
+      const remoteUpdated = Number(remote.updatedAtMs) || 0
+      const remoteResetAt = Number(remote.resetAtMs) || 0
+      const remoteLastSavedAt = Number(remote.lastSavedAtMs) || 0
+      const localLastAction = lastLocalActionRef.current
+      const localStart = startTimestampRef.current
+
+      // Check if remote state represents an authoritative Reset or Save
+      const isRemoteReset =
+        remote.action === 'reset' ||
+        remote.action === 'save_reset' ||
+        (!remote.isRunning && Number(remote.baseElapsed || 0) === 0) ||
+        (Boolean(localStart) && remoteResetAt > 0 && remoteResetAt >= localStart - 500) ||
+        (Boolean(localStart) && remoteLastSavedAt > 0 && remoteLastSavedAt >= localStart - 500)
+
+      if (isRemoteReset) {
+        // Only ignore if user explicitly clicked "Start" locally strictly AFTER the remote reset/save
+        const remoteActionTime = Math.max(remoteUpdated, remoteResetAt, remoteLastSavedAt)
+        if (
+          localLastAction > 0 &&
+          lastLocalActionType.current === 'start' &&
+          localLastAction > remoteActionTime + 1000
+        ) {
+          return
+        }
+
+        // Apply clean reset: Mobile/other device stops and resets to 0:00 immediately
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        startTimestampRef.current = null
+        baseElapsedRef.current = 0
+        setElapsed(0)
+        setDisplayTime('0:00:00.00')
+        setIsRunning(false)
+        setLaps([])
+
+        backgroundTimer.resetState()
+
+        if (storageKey) {
+          try {
+            localStorage.removeItem(storageKey)
+          } catch {}
+        }
+        return
+      }
+
+      // If user performed a local manual action strictly AFTER remote update, local takes precedence
+      if (localLastAction > 0 && localLastAction > remoteUpdated + 500) {
+        return
+      }
+
+      const remoteRunning = Boolean(remote.isRunning)
+      const remoteStart = remote.startedAtMs || remote.startTimestamp || null
+      const remoteBase = Number(remote.baseElapsed) || 0
+      const remoteLaps = Array.isArray(remote.laps) ? remote.laps : []
+
+      if (remoteRunning && remoteStart) {
+        startTimestampRef.current = remoteStart
+        baseElapsedRef.current = remoteBase
+        const current = remoteBase + Math.max(0, Date.now() - remoteStart)
+
+        setElapsed(current)
+        setDisplayTime(formatTime(current))
+        setIsRunning(true)
+        setLaps(remoteLaps)
+
+        persistState(true, remoteStart, remoteBase, remoteLaps)
+
+        backgroundTimer.setTimerState({
+          isRunning: true,
+          startTimestamp: remoteStart,
+          baseElapsed: remoteBase,
+        })
+        backgroundTimer.startAudio()
+        backgroundTimer.requestWakeLock()
+
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(tick)
+      } else {
+        // Remote device paused
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+
+        startTimestampRef.current = null
+        baseElapsedRef.current = remoteBase
+
+        setElapsed(remoteBase)
+        setDisplayTime(formatTime(remoteBase))
+        setIsRunning(false)
+        setLaps(remoteLaps)
+
+        backgroundTimer.setTimerState({
+          isRunning: false,
+          startTimestamp: null,
+          baseElapsed: remoteBase,
+        })
+        backgroundTimer.pauseAudio()
+        backgroundTimer.releaseWakeLock()
+
+        persistState(false, null, remoteBase, remoteLaps)
+      }
+    },
+    [persistState, storageKey, tick]
+  )
+  reconcileWithRemoteRef.current = reconcileWithRemote
 
   // ── Heartbeat to Firestore while running (every 30 seconds) ───────────────
   useEffect(() => {
@@ -367,115 +478,6 @@ export function useStopwatch(userName) {
       return formatted
     })
   }, [isRunning, persistState, userName])
-
-  // ── Real-Time Cross-Device Reconciliation ──────────────────────────────────
-  const reconcileWithRemote = useCallback(
-    (remote, isDirectFetch = false) => {
-      if (!remote) return
-      // Ignore echoes from this same device tab/session unless waking up directly
-      if (!isDirectFetch && remote.deviceId && remote.deviceId === deviceIdRef.current) return
-
-      const remoteUpdated = Number(remote.updatedAtMs) || 0
-      const remoteResetAt = Number(remote.resetAtMs) || 0
-      const remoteLastSavedAt = Number(remote.lastSavedAtMs) || 0
-      const localLastAction = lastLocalActionRef.current
-      const localStart = startTimestampRef.current
-
-      // Check if remote state represents an authoritative Reset or Save
-      const isRemoteReset =
-        remote.action === 'reset' ||
-        remote.action === 'save_reset' ||
-        (!remote.isRunning && Number(remote.baseElapsed || 0) === 0) ||
-        (Boolean(localStart) && remoteResetAt > 0 && remoteResetAt >= localStart - 500) ||
-        (Boolean(localStart) && remoteLastSavedAt > 0 && remoteLastSavedAt >= localStart - 500)
-
-      if (isRemoteReset) {
-        // Only ignore if user explicitly clicked "Start" locally strictly AFTER the remote reset/save
-        const remoteActionTime = Math.max(remoteUpdated, remoteResetAt, remoteLastSavedAt)
-        if (
-          localLastAction > 0 &&
-          lastLocalActionType.current === 'start' &&
-          localLastAction > remoteActionTime + 1000
-        ) {
-          return
-        }
-
-        // Apply clean reset: Mobile/other device stops and resets to 0:00 immediately
-        if (rafRef.current) cancelAnimationFrame(rafRef.current)
-        startTimestampRef.current = null
-        baseElapsedRef.current = 0
-        setElapsed(0)
-        setDisplayTime('0:00:00.00')
-        setIsRunning(false)
-        setLaps([])
-
-        backgroundTimer.resetState()
-
-        if (storageKey) {
-          try {
-            localStorage.removeItem(storageKey)
-          } catch {}
-        }
-        return
-      }
-
-      // If user performed a local manual action strictly AFTER remote update, local takes precedence
-      if (localLastAction > 0 && localLastAction > remoteUpdated + 500) {
-        return
-      }
-
-      const remoteRunning = Boolean(remote.isRunning)
-      const remoteStart = remote.startedAtMs || remote.startTimestamp || null
-      const remoteBase = Number(remote.baseElapsed) || 0
-      const remoteLaps = Array.isArray(remote.laps) ? remote.laps : []
-
-      if (remoteRunning && remoteStart) {
-        startTimestampRef.current = remoteStart
-        baseElapsedRef.current = remoteBase
-        const current = remoteBase + Math.max(0, Date.now() - remoteStart)
-
-        setElapsed(current)
-        setDisplayTime(formatTime(current))
-        setIsRunning(true)
-        setLaps(remoteLaps)
-
-        persistState(true, remoteStart, remoteBase, remoteLaps)
-
-        backgroundTimer.setTimerState({
-          isRunning: true,
-          startTimestamp: remoteStart,
-          baseElapsed: remoteBase,
-        })
-        backgroundTimer.startAudio()
-        backgroundTimer.requestWakeLock()
-
-        if (rafRef.current) cancelAnimationFrame(rafRef.current)
-        rafRef.current = requestAnimationFrame(tick)
-      } else {
-        // Remote device paused
-        if (rafRef.current) cancelAnimationFrame(rafRef.current)
-
-        startTimestampRef.current = null
-        baseElapsedRef.current = remoteBase
-
-        setElapsed(remoteBase)
-        setDisplayTime(formatTime(remoteBase))
-        setIsRunning(false)
-        setLaps(remoteLaps)
-
-        backgroundTimer.setTimerState({
-          isRunning: false,
-          startTimestamp: null,
-          baseElapsed: remoteBase,
-        })
-        backgroundTimer.pauseAudio()
-        backgroundTimer.releaseWakeLock()
-
-        persistState(false, null, remoteBase, remoteLaps)
-      }
-    },
-    [persistState, storageKey, tick]
-  )
 
   // ── Firestore Snapshot Subscription ───────────────────────────────────────
   useEffect(() => {
