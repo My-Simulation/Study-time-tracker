@@ -455,7 +455,19 @@ export async function getWeeklyPlan(userName) {
 // LIVE STATUS (real-time cross-device & partner view)
 // ─────────────────────────────────────────────
 
-export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp, deviceId, laps, subject, topic }) {
+export async function getLiveStatus(userName) {
+  if (!userName) return null
+  try {
+    const statusRef = doc(db, 'liveStatus', userName.toLowerCase())
+    const snap = await getDoc(statusRef)
+    return snap.exists() ? snap.data() : null
+  } catch (err) {
+    console.warn('Failed to get liveStatus:', err)
+    return null
+  }
+}
+
+export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp, deviceId, laps, subject, topic, action, resetAtMs }) {
   if (!userName) return
   const statusRef = doc(db, 'liveStatus', userName.toLowerCase())
   const now = Date.now()
@@ -468,9 +480,11 @@ export async function updateLiveStatus(userName, { isRunning, baseElapsed, start
     updatedAt: serverTimestamp(),
   }
   if (deviceId) payload.deviceId = deviceId
-  if (laps) payload.laps = laps
+  if (laps !== undefined) payload.laps = laps
   if (subject !== undefined) payload.subject = subject
   if (topic !== undefined) payload.topic = topic
+  if (action) payload.action = action
+  if (resetAtMs) payload.resetAtMs = resetAtMs
 
   await setDoc(statusRef, payload, { merge: true })
 }

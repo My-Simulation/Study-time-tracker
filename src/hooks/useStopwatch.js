@@ -8,7 +8,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { formatTime } from '../utils/formatTime'
-import { updateLiveStatus, subscribeToLiveStatus } from '../utils/firestoreHelpers'
+import { updateLiveStatus, subscribeToLiveStatus, getLiveStatus } from '../utils/firestoreHelpers'
 import { backgroundTimer } from '../utils/backgroundTimer'
 
 const STORAGE_PREFIX = 'stt_stopwatch_state_'
@@ -19,6 +19,7 @@ export function useStopwatch(userName) {
     `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   )
   const lastLocalActionRef = useRef(0)
+  const lastLocalActionType = useRef('')
 
   // Initialize state from localStorage if available
   const [elapsed, setElapsed] = useState(() => {
@@ -140,19 +141,25 @@ export function useStopwatch(userName) {
     }
   }, [isRunning, tick])
 
-  // ── Heartbeat to Firestore while running (every 10 seconds) ───────────────
+  // ── Heartbeat to Firestore while running (every 45 seconds) ───────────────
   useEffect(() => {
     if (!userName) return
 
     if (isRunning && startTimestampRef.current) {
-      // Periodic heartbeat (every 45s to keep write quota light while ensuring partner presence)
       heartbeatRef.current = setInterval(() => {
+        // Guard: Don't blast heartbeats if document is backgrounded/sleeping or timer stopped
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+          return
+        }
+        if (!startTimestampRef.current) return
+
         updateLiveStatus(userName, {
           isRunning: true,
           baseElapsed: baseElapsedRef.current,
           startTimestamp: startTimestampRef.current,
           deviceId: deviceIdRef.current,
           laps,
+          action: 'heartbeat',
         }).catch(() => {})
       }, 45000)
     } else {
@@ -167,20 +174,19 @@ export function useStopwatch(userName) {
   // ── Start ─────────────────────────────────────────────────────────────────
   const start = useCallback(() => {
     if (isRunning) return
-    lastLocalActionRef.current = Date.now()
-
     const now = Date.now()
+    lastLocalActionRef.current = now
+    lastLocalActionType.current = 'start'
+
     startTimestampRef.current = now
     setIsRunning(true)
 
-    // Automatically prompt for notification permission on Android/mobile if not yet prompted
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       try {
         Notification.requestPermission().catch(() => {})
       } catch (e) {}
     }
 
-    // Immediately start audio and inform backgroundTimer with exact timestamps
     backgroundTimer.setTimerState({
       isRunning: true,
       startTimestamp: now,
@@ -198,6 +204,7 @@ export function useStopwatch(userName) {
         startTimestamp: now,
         deviceId: deviceIdRef.current,
         laps,
+        action: 'start',
       }).catch(() => {})
     }
 
@@ -208,10 +215,12 @@ export function useStopwatch(userName) {
   // ── Stop (pause) ──────────────────────────────────────────────────────────
   const stop = useCallback(() => {
     if (!isRunning) return
-    lastLocalActionRef.current = Date.now()
+    const now = Date.now()
+    lastLocalActionRef.current = now
+    lastLocalActionType.current = 'stop'
+
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
-    const now = Date.now()
     const finalElapsed = startTimestampRef.current
       ? baseElapsedRef.current + Math.max(0, now - startTimestampRef.current)
       : baseElapsedRef.current
@@ -239,13 +248,17 @@ export function useStopwatch(userName) {
         startTimestamp: null,
         deviceId: deviceIdRef.current,
         laps,
+        action: 'stop',
       }).catch(() => {})
     }
   }, [isRunning, laps, persistState, userName])
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
-    lastLocalActionRef.current = Date.now()
+    const now = Date.now()
+    lastLocalActionRef.current = now
+    lastLocalActionType.current = 'reset'
+
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
     baseElapsedRef.current = 0
@@ -276,6 +289,8 @@ export function useStopwatch(userName) {
         startTimestamp: null,
         deviceId: deviceIdRef.current,
         laps: [],
+        action: 'reset',
+        resetAtMs: now,
       }).catch(() => {})
     }
   }, [storageKey, userName])
@@ -283,8 +298,10 @@ export function useStopwatch(userName) {
   // ── Lap ───────────────────────────────────────────────────────────────────
   const lap = useCallback(() => {
     if (!isRunning || !startTimestampRef.current) return
-    lastLocalActionRef.current = Date.now()
     const now = Date.now()
+    lastLocalActionRef.current = now
+    lastLocalActionType.current = 'lap'
+
     const currentTotal = baseElapsedRef.current + Math.max(0, now - startTimestampRef.current)
 
     setLaps((prev) => {
@@ -325,6 +342,7 @@ export function useStopwatch(userName) {
           startTimestamp: startTimestampRef.current,
           deviceId: deviceIdRef.current,
           laps: formatted,
+          action: 'lap',
         }).catch(() => {})
       }
 
@@ -332,17 +350,60 @@ export function useStopwatch(userName) {
     })
   }, [isRunning, persistState, userName])
 
-  // ── Real-Time Cross-Device Subscription (Laptop <-> Mobile) ───────────────
-  useEffect(() => {
-    if (!userName) return
-
-    const unsubscribe = subscribeToLiveStatus(userName, (remote) => {
+  // ── Real-Time Cross-Device Reconciliation ──────────────────────────────────
+  const reconcileWithRemote = useCallback(
+    (remote, isDirectFetch = false) => {
       if (!remote) return
-      // Ignore echoes from this same device tab/session
-      if (remote.deviceId && remote.deviceId === deviceIdRef.current) return
+      // Ignore echoes from this same device tab/session unless waking up directly
+      if (!isDirectFetch && remote.deviceId && remote.deviceId === deviceIdRef.current) return
 
-      // If user performed an action locally in the last 1500ms, ignore updates from before/around that action
-      if (Date.now() - lastLocalActionRef.current < 1500) return
+      const remoteUpdated = Number(remote.updatedAtMs) || 0
+      const localLastAction = lastLocalActionRef.current
+
+      // Explicit Reset check: if remote was reset to 0:00 (e.g. from Laptop Save)
+      const isRemoteReset =
+        remote.action === 'reset' ||
+        (!remote.isRunning && Number(remote.baseElapsed || 0) === 0)
+
+      if (isRemoteReset) {
+        // If user explicitly pressed Start locally strictly AFTER remote reset, keep running
+        if (
+          localLastAction > 0 &&
+          lastLocalActionType.current === 'start' &&
+          localLastAction > remoteUpdated + 500
+        ) {
+          return
+        }
+
+        // Apply clean reset: Mobile/other device stops and resets to 0:00
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        startTimestampRef.current = null
+        baseElapsedRef.current = 0
+        setElapsed(0)
+        setDisplayTime('0:00:00.00')
+        setIsRunning(false)
+        setLaps([])
+
+        backgroundTimer.setTimerState({
+          isRunning: false,
+          startTimestamp: null,
+          baseElapsed: 0,
+        })
+        backgroundTimer.pauseAudio()
+        backgroundTimer.releaseWakeLock()
+
+        if (storageKey) {
+          try {
+            localStorage.removeItem(storageKey)
+          } catch {}
+        }
+        return
+      }
+
+      // If user performed a local manual action strictly AFTER remote update, local takes precedence
+      if (localLastAction > 0 && localLastAction > remoteUpdated + 500) {
+        return
+      }
 
       const remoteRunning = Boolean(remote.isRunning)
       const remoteStart = remote.startedAtMs || remote.startTimestamp || null
@@ -350,7 +411,6 @@ export function useStopwatch(userName) {
       const remoteLaps = Array.isArray(remote.laps) ? remote.laps : []
 
       if (remoteRunning && remoteStart) {
-        // Remote device started timer or is actively running
         startTimestampRef.current = remoteStart
         baseElapsedRef.current = remoteBase
         const current = remoteBase + Math.max(0, Date.now() - remoteStart)
@@ -373,7 +433,7 @@ export function useStopwatch(userName) {
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
         rafRef.current = requestAnimationFrame(tick)
       } else {
-        // Remote device paused or reset
+        // Remote device paused
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
         startTimestampRef.current = null
@@ -392,22 +452,60 @@ export function useStopwatch(userName) {
         backgroundTimer.pauseAudio()
         backgroundTimer.releaseWakeLock()
 
-        if (remoteBase === 0 && remoteLaps.length === 0) {
-          if (storageKey) {
-            try { localStorage.removeItem(storageKey) } catch {}
-          }
-        } else {
-          persistState(false, null, remoteBase, remoteLaps)
-        }
+        persistState(false, null, remoteBase, remoteLaps)
       }
+    },
+    [persistState, storageKey, tick]
+  )
+
+  // ── Firestore Snapshot Subscription ───────────────────────────────────────
+  useEffect(() => {
+    if (!userName) return
+
+    const unsubscribe = subscribeToLiveStatus(userName, (remote) => {
+      reconcileWithRemote(remote, false)
     })
 
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe()
     }
-  }, [userName, storageKey, persistState, tick])
+  }, [userName, reconcileWithRemote])
 
-  // Clean up animation frame on unmount (does NOT stop the timer)
+  // ── App Wake-Up / Visibility Change / Reconnect Reconciliation ────────────
+  // When device wakes up from lock screen or returns to tab: immediately fetch authoritative cloud state
+  useEffect(() => {
+    if (!userName) return
+
+    // 1. Initial direct check on mount
+    getLiveStatus(userName).then((remote) => {
+      if (remote) reconcileWithRemote(remote, true)
+    })
+
+    // 2. On wake-up, screen unlock, or focus
+    const handleWakeup = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        getLiveStatus(userName).then((remote) => {
+          if (remote) {
+            reconcileWithRemote(remote, true)
+          }
+        })
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleWakeup)
+    window.addEventListener('focus', handleWakeup)
+    window.addEventListener('pageshow', handleWakeup)
+    window.addEventListener('online', handleWakeup)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleWakeup)
+      window.removeEventListener('focus', handleWakeup)
+      window.removeEventListener('pageshow', handleWakeup)
+      window.removeEventListener('online', handleWakeup)
+    }
+  }, [userName, reconcileWithRemote])
+
+  // Clean up animation frame on unmount
   useEffect(() => {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -422,7 +520,6 @@ export function useStopwatch(userName) {
       onPause: stop,
       onLap: lap,
       onTick: (liveElapsed, liveDisplayTime) => {
-        // When document is hidden, keep React state synchronized as the background worker ticks
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
           setElapsed(liveElapsed)
           setDisplayTime(liveDisplayTime)
@@ -430,22 +527,6 @@ export function useStopwatch(userName) {
       },
     })
   }, [start, stop, lap])
-
-  // Resync immediately when tab/app becomes visible again
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && isRunning && startTimestampRef.current) {
-        const now = Date.now()
-        const current = baseElapsedRef.current + Math.max(0, now - startTimestampRef.current)
-        setElapsed(current)
-        setDisplayTime(formatTime(current))
-        if (rafRef.current) cancelAnimationFrame(rafRef.current)
-        rafRef.current = requestAnimationFrame(tick)
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [isRunning, tick])
 
   useEffect(() => {
     backgroundTimer.update({ isRunning, displayTime, elapsed })

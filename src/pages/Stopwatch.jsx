@@ -287,6 +287,17 @@ export default function Stopwatch({ userName }) {
 
   useEffect(() => {
     loadData()
+    const handleRefreshOnFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleRefreshOnFocus)
+    window.addEventListener('focus', handleRefreshOnFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', handleRefreshOnFocus)
+      window.removeEventListener('focus', handleRefreshOnFocus)
+    }
   }, [loadData])
 
   // ── Saturday midnight to Sunday Rest rollover check ──
