@@ -539,16 +539,6 @@ export default function Stopwatch({ userName }) {
             </span>
           </div>
 
-          {!isStandalone && (
-            <button
-              onClick={handleInstallApp}
-              title="Install as Mobile App"
-              className="hidden sm:flex text-[11px] px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 transition-all items-center gap-1 font-semibold flex-shrink-0"
-            >
-              <span>📲</span>
-              <span>Install</span>
-            </button>
-          )}
           {notifPermission === 'default' && (
             <button
               onClick={handleEnableNotification}
