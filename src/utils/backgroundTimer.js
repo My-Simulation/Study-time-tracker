@@ -25,6 +25,7 @@ class BackgroundTimerService {
       onPause: null,
       onLap: null,
       onTick: null,
+      onVerifyRemote: null,
     }
 
     this.timerState = {
@@ -78,12 +79,13 @@ class BackgroundTimerService {
     }
   }
 
-  setCallbacks({ onPlay, onPause, onLap, onTick }) {
+  setCallbacks({ onPlay, onPause, onLap, onTick, onVerifyRemote }) {
     this.actionCallbacks = {
       onPlay: onPlay || this.actionCallbacks.onPlay,
       onPause: onPause || this.actionCallbacks.onPause,
       onLap: onLap || this.actionCallbacks.onLap,
       onTick: onTick || this.actionCallbacks.onTick,
+      onVerifyRemote: onVerifyRemote || this.actionCallbacks.onVerifyRemote,
     }
     this._setupMediaSessionHandlers()
   }
@@ -193,6 +195,46 @@ class BackgroundTimerService {
 
     if (this.actionCallbacks.onTick) {
       this.actionCallbacks.onTick(elapsed, displayTime)
+    }
+
+    // Periodic remote verification during background playback (every ~20 seconds)
+    this.lastRemoteVerify = this.lastRemoteVerify || 0
+    if (now - this.lastRemoteVerify >= 20000) {
+      this.lastRemoteVerify = now
+      if (this.actionCallbacks.onVerifyRemote) {
+        this.actionCallbacks.onVerifyRemote()
+      }
+    }
+  }
+
+  /**
+   * Immediately resets and clears all background audio, wake lock, notifications, and metadata.
+   */
+  resetState() {
+    this.timerState = {
+      isRunning: false,
+      startTimestamp: null,
+      baseElapsed: 0,
+      subject: '',
+      topic: '',
+    }
+    this.lastState = {
+      isRunning: false,
+      displayTime: '0:00:00.00',
+      elapsed: 0,
+      subject: '',
+      topic: '',
+    }
+    if (this.fallbackInterval) {
+      clearInterval(this.fallbackInterval)
+      this.fallbackInterval = null
+    }
+    this.lastProcessedSecond = -1
+    this.pauseAudio()
+    this.releaseWakeLock()
+    this.closeAndroidNotification()
+    if (typeof document !== 'undefined') {
+      document.title = 'JeetPrep · Study Time Tracker'
     }
   }
 

@@ -130,6 +130,7 @@ export default function SaveModal({
         subject: subject.trim(),
         topic: topic.trim(),
         reflectionTag: reflectionTag || '',
+        resetLiveTimer: Boolean(shouldReset),
       })
 
       // 3. Done — notify parent

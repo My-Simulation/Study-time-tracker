@@ -250,12 +250,20 @@ export default function Stopwatch({ userName }) {
       const todaySec = todaySessions.reduce((sum, s) => sum + (s.totalSeconds || 0), 0)
       setTodayStudied(todaySec)
 
-      // If the stopwatch is paused and its elapsed time matches an already saved session,
-      // cleanly reset it to 0 so it never double-counts on the dashboard
-      if (!isRunningRef.current && elapsedRef.current > 0 && todaySessions.length > 0) {
+      // Check if current stopwatch session was already saved in todaySessions (on laptop or any device)
+      if (elapsedRef.current > 0 && todaySessions.length > 0) {
         const currentSec = Math.floor(elapsedRef.current / 1000)
-        const alreadySaved = todaySessions.some((s) => Math.abs((s.totalSeconds || 0) - currentSec) <= 3)
-        if (alreadySaved) {
+        // 1. Direct elapsed time match
+        const exactMatch = todaySessions.some((s) => Math.abs((s.totalSeconds || 0) - currentSec) <= 4)
+
+        // 2. Created-at match: was a session logged while this timer was running?
+        const timerStartedApproxMs = Date.now() - elapsedRef.current
+        const sessionSavedDuringThisRun = todaySessions.some((s) => {
+          const createdAtMs = s.createdAt?.seconds ? s.createdAt.seconds * 1000 : 0
+          return createdAtMs > 0 && createdAtMs >= timerStartedApproxMs - 60000
+        })
+
+        if (exactMatch || sessionSavedDuringThisRun) {
           resetRef.current()
         }
       }

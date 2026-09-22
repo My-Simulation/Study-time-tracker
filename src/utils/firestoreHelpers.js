@@ -3,7 +3,7 @@
  */
 
 import {
-  collection, doc, setDoc, getDoc, addDoc,
+  collection, doc, setDoc, getDoc, getDocFromServer, addDoc,
   getDocs, query, where, serverTimestamp, updateDoc,
   deleteDoc, onSnapshot, limit,
 } from 'firebase/firestore'
@@ -458,10 +458,19 @@ export async function getWeeklyPlan(userName) {
 // LIVE STATUS (real-time cross-device & partner view)
 // ─────────────────────────────────────────────
 
-export async function getLiveStatus(userName) {
+export async function getLiveStatus(userName, forceServer = false) {
   if (!userName) return null
   try {
     const statusRef = doc(db, 'liveStatus', userName.toLowerCase())
+    if (forceServer) {
+      try {
+        const snap = await getDocFromServer(statusRef)
+        return snap.exists() ? snap.data() : null
+      } catch (serverErr) {
+        // Fallback to cache if network is still reconnecting
+        console.warn('getDocFromServer fallback to cache:', serverErr?.message)
+      }
+    }
     const snap = await getDoc(statusRef)
     return snap.exists() ? snap.data() : null
   } catch (err) {
@@ -470,7 +479,7 @@ export async function getLiveStatus(userName) {
   }
 }
 
-export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp, deviceId, laps, subject, topic, action, resetAtMs }) {
+export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp, deviceId, laps, subject, topic, action, resetAtMs, lastSavedAtMs }) {
   if (!userName) return
   const statusRef = doc(db, 'liveStatus', userName.toLowerCase())
   const now = Date.now()
@@ -487,7 +496,8 @@ export async function updateLiveStatus(userName, { isRunning, baseElapsed, start
   if (subject !== undefined) payload.subject = subject
   if (topic !== undefined) payload.topic = topic
   if (action) payload.action = action
-  if (resetAtMs) payload.resetAtMs = resetAtMs
+  if (resetAtMs !== undefined) payload.resetAtMs = resetAtMs
+  if (lastSavedAtMs !== undefined) payload.lastSavedAtMs = lastSavedAtMs
 
   await setDoc(statusRef, payload, { merge: true })
 }
@@ -556,6 +566,7 @@ export async function saveSession({
   subject = '',
   topic = '',
   reflectionTag = '',
+  resetLiveTimer = false,
 }) {
   const localDate = toLocalDateStr(date)
   const settings = await getUserSettings(userName)
@@ -600,6 +611,18 @@ export async function saveSession({
       console.warn('Duplicate session detected, updating existing session instead of inserting duplicate:', duplicate.id)
       await updateDoc(doc(db, 'sessions', duplicate.id), sessionData)
       invalidateUserCache(userName)
+      if (resetLiveTimer && userName) {
+        const now = Date.now()
+        await updateLiveStatus(userName, {
+          isRunning: false,
+          baseElapsed: 0,
+          startTimestamp: null,
+          laps: [],
+          action: 'save_reset',
+          resetAtMs: now,
+          lastSavedAtMs: now,
+        }).catch(() => {})
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('study_sessions_updated', { detail: { userName, date } }))
       }
@@ -611,6 +634,18 @@ export async function saveSession({
 
   const ref2 = await addDoc(collection(db, 'sessions'), sessionData)
   invalidateUserCache(userName)
+  if (resetLiveTimer && userName) {
+    const now = Date.now()
+    await updateLiveStatus(userName, {
+      isRunning: false,
+      baseElapsed: 0,
+      startTimestamp: null,
+      laps: [],
+      action: 'save_reset',
+      resetAtMs: now,
+      lastSavedAtMs: now,
+    }).catch(() => {})
+  }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('study_sessions_updated', { detail: { userName, date } }))
   }

@@ -141,12 +141,35 @@ export function useStopwatch(userName) {
     }
   }, [isRunning, tick])
 
-  // ── Heartbeat to Firestore while running (every 45 seconds) ───────────────
+  // ── Heartbeat to Firestore while running (every 30 seconds) ───────────────
   useEffect(() => {
     if (!userName) return
 
     if (isRunning && startTimestampRef.current) {
-      heartbeatRef.current = setInterval(() => {
+      heartbeatRef.current = setInterval(async () => {
+        if (!startTimestampRef.current) return
+
+        // 1. ALWAYS verify remote state first, even if backgrounded!
+        try {
+          const fresh = await getLiveStatus(userName, true)
+          if (fresh) {
+            const freshReset = Number(fresh.resetAtMs) || 0
+            const freshSaved = Number(fresh.lastSavedAtMs) || 0
+            const localStart = startTimestampRef.current
+            const isFreshReset =
+              fresh.action === 'reset' ||
+              fresh.action === 'save_reset' ||
+              (!fresh.isRunning && Number(fresh.baseElapsed || 0) === 0) ||
+              (Boolean(localStart) && freshReset > 0 && freshReset >= localStart - 500) ||
+              (Boolean(localStart) && freshSaved > 0 && freshSaved >= localStart - 500)
+
+            if (isFreshReset && (!fresh.deviceId || fresh.deviceId !== deviceIdRef.current)) {
+              reconcileWithRemote(fresh, true)
+              return
+            }
+          }
+        } catch {}
+
         // Guard: Don't blast heartbeats if document is backgrounded/sleeping or timer stopped
         if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
           return
@@ -161,7 +184,7 @@ export function useStopwatch(userName) {
           laps,
           action: 'heartbeat',
         }).catch(() => {})
-      }, 45000)
+      }, 30000)
     } else {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
     }
@@ -169,7 +192,7 @@ export function useStopwatch(userName) {
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
     }
-  }, [isRunning, userName, laps])
+  }, [isRunning, userName, laps, reconcileWithRemote])
 
   // ── Start ─────────────────────────────────────────────────────────────────
   const start = useCallback(() => {
@@ -268,13 +291,7 @@ export function useStopwatch(userName) {
     setLaps([])
     setIsRunning(false)
 
-    backgroundTimer.setTimerState({
-      isRunning: false,
-      startTimestamp: null,
-      baseElapsed: 0,
-    })
-    backgroundTimer.pauseAudio()
-    backgroundTimer.releaseWakeLock()
+    backgroundTimer.resetState()
 
     if (storageKey) {
       try {
@@ -291,6 +308,7 @@ export function useStopwatch(userName) {
         laps: [],
         action: 'reset',
         resetAtMs: now,
+        lastSavedAtMs: now,
       }).catch(() => {})
     }
   }, [storageKey, userName])
@@ -358,24 +376,31 @@ export function useStopwatch(userName) {
       if (!isDirectFetch && remote.deviceId && remote.deviceId === deviceIdRef.current) return
 
       const remoteUpdated = Number(remote.updatedAtMs) || 0
+      const remoteResetAt = Number(remote.resetAtMs) || 0
+      const remoteLastSavedAt = Number(remote.lastSavedAtMs) || 0
       const localLastAction = lastLocalActionRef.current
+      const localStart = startTimestampRef.current
 
-      // Explicit Reset check: if remote was reset to 0:00 (e.g. from Laptop Save)
+      // Check if remote state represents an authoritative Reset or Save
       const isRemoteReset =
         remote.action === 'reset' ||
-        (!remote.isRunning && Number(remote.baseElapsed || 0) === 0)
+        remote.action === 'save_reset' ||
+        (!remote.isRunning && Number(remote.baseElapsed || 0) === 0) ||
+        (Boolean(localStart) && remoteResetAt > 0 && remoteResetAt >= localStart - 500) ||
+        (Boolean(localStart) && remoteLastSavedAt > 0 && remoteLastSavedAt >= localStart - 500)
 
       if (isRemoteReset) {
-        // If user explicitly pressed Start locally strictly AFTER remote reset, keep running
+        // Only ignore if user explicitly clicked "Start" locally strictly AFTER the remote reset/save
+        const remoteActionTime = Math.max(remoteUpdated, remoteResetAt, remoteLastSavedAt)
         if (
           localLastAction > 0 &&
           lastLocalActionType.current === 'start' &&
-          localLastAction > remoteUpdated + 500
+          localLastAction > remoteActionTime + 1000
         ) {
           return
         }
 
-        // Apply clean reset: Mobile/other device stops and resets to 0:00
+        // Apply clean reset: Mobile/other device stops and resets to 0:00 immediately
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
         startTimestampRef.current = null
         baseElapsedRef.current = 0
@@ -384,13 +409,7 @@ export function useStopwatch(userName) {
         setIsRunning(false)
         setLaps([])
 
-        backgroundTimer.setTimerState({
-          isRunning: false,
-          startTimestamp: null,
-          baseElapsed: 0,
-        })
-        backgroundTimer.pauseAudio()
-        backgroundTimer.releaseWakeLock()
+        backgroundTimer.resetState()
 
         if (storageKey) {
           try {
@@ -476,19 +495,22 @@ export function useStopwatch(userName) {
   useEffect(() => {
     if (!userName) return
 
-    // 1. Initial direct check on mount
-    getLiveStatus(userName).then((remote) => {
-      if (remote) reconcileWithRemote(remote, true)
-    })
+    const checkServer = async () => {
+      try {
+        const remote = await getLiveStatus(userName, true)
+        if (remote) reconcileWithRemote(remote, true)
+      } catch (e) {}
+    }
 
-    // 2. On wake-up, screen unlock, or focus
+    // 1. Initial direct check on mount
+    checkServer()
+
+    // 2. On wake-up, screen unlock, focus, or online reconnect
     const handleWakeup = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        getLiveStatus(userName).then((remote) => {
-          if (remote) {
-            reconcileWithRemote(remote, true)
-          }
-        })
+        checkServer()
+        setTimeout(checkServer, 1000)
+        setTimeout(checkServer, 2500)
       }
     }
 
@@ -525,8 +547,17 @@ export function useStopwatch(userName) {
           setDisplayTime(liveDisplayTime)
         }
       },
+      onVerifyRemote: async () => {
+        if (!userName) return
+        try {
+          const fresh = await getLiveStatus(userName, true)
+          if (fresh) {
+            reconcileWithRemote(fresh, true)
+          }
+        } catch (e) {}
+      },
     })
-  }, [start, stop, lap])
+  }, [start, stop, lap, userName, reconcileWithRemote])
 
   useEffect(() => {
     backgroundTimer.update({ isRunning, displayTime, elapsed })
