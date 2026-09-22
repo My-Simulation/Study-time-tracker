@@ -951,7 +951,7 @@ export default function Profile({ userName }) {
               <span className="text-xl">🤖</span>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white">AI Study Mentor & Time Table</h3>
+                  <h3 className="text-sm font-bold text-white">Kit AI · Study Mentor & Plan Generator</h3>
                   {isAiKeySaved ? (
                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -960,12 +960,12 @@ export default function Profile({ userName }) {
                   ) : (
                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Built-in Gemini AI Active
+                      Built-in Kit AI Active
                     </span>
                   )}
                 </div>
                 <p className="text-[11px] text-gray-400 mt-0.5">
-                  Apne exam & syllabus ke hisaab se personalized time table aur AI mentor chat activate karein
+                  Apne exam & syllabus ke hisaab se Kit Generated Plan aur Kit AI mentor chat activate karein
                 </p>
               </div>
             </div>

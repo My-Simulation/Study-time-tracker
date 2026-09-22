@@ -612,16 +612,16 @@ export default function DayPlanner({ userName }) {
         </button>
 
         <div className="flex items-center gap-2">
-          {/* AI Time Table Button */}
+          {/* Kit Plan Button */}
           <button
             type="button"
             onClick={handleOpenAIModal}
             className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-[0.98] cursor-pointer"
-            title="Generate custom study timetable with AI"
+            title="Generate custom study timetable with Kit"
           >
             <span>✨</span>
-            <span className="hidden sm:inline">AI Time Table</span>
-            <span className="sm:hidden">AI Plan</span>
+            <span className="hidden sm:inline">Kit Plan</span>
+            <span className="sm:hidden">Kit Plan</span>
           </button>
 
           {/* Kit AI Mentor Button */}
@@ -1014,10 +1014,10 @@ export default function DayPlanner({ userName }) {
                     type="button"
                     onClick={handleOpenAIModal}
                     className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer"
-                    title="Generate personalized study schedule with AI"
+                    title="Generate personalized study schedule with Kit"
                   >
                     <span>✨</span>
-                    <span>AI Generate Plan</span>
+                    <span>Kit Generated Plan</span>
                   </button>
 
                   <div className="flex items-center bg-[#18181c] border border-[#2e2e38] rounded-xl p-0.5">
@@ -1079,7 +1079,7 @@ export default function DayPlanner({ userName }) {
                 <p className="text-xs text-gray-400 max-w-sm">
                   {isRestDay
                     ? 'No study slots scheduled. Take rest, relax, and recharge your energy for next week! Streak Shield is active.'
-                    : 'Apne routine aur exam ke hisaab se AI se best time table banwayein, ya manually slots add karein.'}
+                    : 'Apne routine aur exam ke hisaab se Kit se best timetable banwayein, ya manually slots add karein.'}
                 </p>
                 {!isRestDay && !isLocked && (
                   <div className="flex items-center gap-2.5 mt-2">
@@ -1089,7 +1089,7 @@ export default function DayPlanner({ userName }) {
                       className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-purple-600/20"
                     >
                       <span>✨</span>
-                      <span>Generate with AI</span>
+                      <span>Kit Generated Plan</span>
                     </button>
                     <button
                       type="button"

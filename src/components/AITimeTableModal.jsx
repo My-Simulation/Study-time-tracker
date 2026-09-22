@@ -86,7 +86,7 @@ export default function AITimeTableModal({ isOpen, onClose, userContext, onApply
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight flex items-center gap-2 flex-wrap">
-                AI Time Table Generator
+                Kit Generated Plan
                 {hasGeminiApiKey() ? (
                   <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -261,7 +261,7 @@ export default function AITimeTableModal({ isOpen, onClose, userContext, onApply
                 disabled={loading}
                 className="pill-btn px-6 py-2.5 text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg disabled:opacity-50 cursor-pointer"
               >
-                {loading ? 'AI is crafting your timetable… ✨' : '⚡ Generate Time Table'}
+                {loading ? 'Kit is crafting your plan… ✨' : '⚡ Generate Kit Plan'}
               </button>
             </div>
           </form>
@@ -274,7 +274,7 @@ export default function AITimeTableModal({ isOpen, onClose, userContext, onApply
               <div className="flex items-center gap-2">
                 <span className="text-lg">🎉</span>
                 <div>
-                  <p className="text-xs font-bold text-white">Your AI-Optimized Time Table is Ready!</p>
+                  <p className="text-xs font-bold text-white">Your Kit-Generated Plan is Ready!</p>
                   <p className="text-[11px] text-gray-400">
                     {generatedSlots.length} structured slots totaling ~{targetStudyHours} hours of focused study
                   </p>
@@ -347,7 +347,7 @@ export default function AITimeTableModal({ isOpen, onClose, userContext, onApply
                 onClick={handleApplyToPlan}
                 className="pill-btn px-6 py-2.5 text-xs font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg cursor-pointer"
               >
-                🚀 Apply Directly to Day Planner
+                🚀 Apply Kit Plan to Day Planner
               </button>
             </div>
           </div>

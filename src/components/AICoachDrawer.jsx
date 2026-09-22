@@ -165,7 +165,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
         <div className="px-3.5 py-1.5 bg-purple-950/20 border-b border-purple-500/15 flex items-center justify-between gap-2">
           <span className="text-[11px] text-purple-200/90 truncate flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>{hasCustomGeminiApiKey() ? 'Personal Gemini Key Active' : 'Real Gemini AI Active (Free for All Users)'}</span>
+            <span>{hasCustomGeminiApiKey() ? 'Personal Key Active' : 'Kit AI Active (Free for All Users)'}</span>
           </span>
           <button
             type="button"
@@ -185,7 +185,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
             Today: <strong className="text-purple-300">{userContext?.todayStudiedHours || 0}h</strong>
           </span>
           <span className="text-gray-400">
-            Status: <strong className={hasGeminiApiKey() ? 'text-emerald-400' : 'text-amber-400'}>{hasGeminiApiKey() ? 'Gemini Flash Live' : 'Offline Mode'}</strong>
+            Status: <strong className={hasGeminiApiKey() ? 'text-emerald-400' : 'text-amber-400'}>{hasGeminiApiKey() ? 'Kit Online' : 'Kit Offline Mode'}</strong>
           </span>
         </div>
 
@@ -214,7 +214,7 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
           {loading && (
             <div className="flex items-center gap-2 text-xs text-gray-400 p-2">
               <span className="w-3 h-3 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
-              <span>Gemini AI is thinking…</span>
+              <span>Kit is thinking…</span>
             </div>
           )}
 
