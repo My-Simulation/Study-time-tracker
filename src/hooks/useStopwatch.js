@@ -439,6 +439,7 @@ export function useStopwatch(userName) {
     setDisplayTime('0:00:00.00')
     setLaps([])
     setIsRunning(false)
+    const previousTimeline = timelineRef.current || []
     setTimeline([])
     timelineRef.current = []
 
@@ -461,6 +462,7 @@ export function useStopwatch(userName) {
         resetAtMs: now,
         lastSavedAtMs: now,
         timeline: [],
+        lastSessionTimeline: previousTimeline,
       }).catch(() => {})
     }
   }, [storageKey, userName])

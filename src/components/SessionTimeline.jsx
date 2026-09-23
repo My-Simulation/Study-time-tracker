@@ -23,22 +23,34 @@ function formatDuration(ms) {
   return `${m}m`
 }
 
-export function parseTimeline(timeline = [], isRunning = false, startedAtMs = null, baseElapsed = 0) {
+export function parseTimeline(timeline = [], isRunning = false, startedAtMs = null, baseElapsed = 0, laps = []) {
   const events = Array.isArray(timeline) ? timeline : []
   const items = []
   let pausesCount = 0
 
-  // If no timeline events exist yet but baseElapsed exists
+  // If no timeline events exist yet, check laps or baseElapsed
   if (events.length === 0) {
-    if (baseElapsed > 0) {
+    if (Array.isArray(laps) && laps.length > 0) {
+      // Reconstruct intervals from laps
+      laps.forEach((lap, idx) => {
+        items.push({
+          type: 'chunk',
+          title: `Interval #${lap.lapNo || idx + 1}`,
+          subtitle: lap.split ? `Split: ${lap.split}` : 'Study interval',
+          durationText: formatDuration(lap.splitMs || lap.totalMs || 0),
+          isAccumulated: false,
+        })
+      })
+    } else if (baseElapsed > 0) {
       items.push({
         type: 'chunk',
-        title: 'Earlier Study Session',
-        subtitle: 'Accumulated time before recent start',
+        title: 'Study Session',
+        subtitle: 'Accumulated focus time',
         durationText: formatDuration(baseElapsed),
         isAccumulated: true,
       })
     }
+
     if (isRunning && startedAtMs) {
       items.push({
         type: 'active',
@@ -48,7 +60,7 @@ export function parseTimeline(timeline = [], isRunning = false, startedAtMs = nu
         isRunning: true,
       })
     }
-    return { items, chunkCount: items.length, pausesCount }
+    return { items, chunkCount: items.length, pausesCount: Math.max(0, items.length - 1) }
   }
 
   // If timeline events exist, pair up start and stop events
@@ -124,59 +136,66 @@ export function parseTimeline(timeline = [], isRunning = false, startedAtMs = nu
   return { items, chunkCount, pausesCount }
 }
 
-export default function SessionTimeline({ timeline = [], isRunning = false, startedAtMs = null, baseElapsed = 0 }) {
+export default function SessionTimeline({
+  timeline = [],
+  isRunning = false,
+  startedAtMs = null,
+  baseElapsed = 0,
+  laps = [],
+  label = 'Timeline',
+}) {
   const [isOpen, setIsOpen] = useState(false)
-  const { items, chunkCount, pausesCount } = parseTimeline(timeline, isRunning, startedAtMs, baseElapsed)
+  const { items, chunkCount, pausesCount } = parseTimeline(timeline, isRunning, startedAtMs, baseElapsed, laps)
 
   if (items.length === 0 && baseElapsed === 0 && !isRunning) {
     return null
   }
 
   return (
-    <div className="relative inline-flex flex-col items-center">
-      {/* Discreet pill button taking zero vertical space */}
+    <div className="w-full flex flex-col items-center">
+      {/* Discreet pill button taking zero extra space */}
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-200 bg-[#161616]/80 hover:bg-[#1f1f1f] border border-[#282828] transition-all cursor-pointer shadow-sm select-none"
+        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-300 hover:text-white bg-[#1a1a24] hover:bg-[#222232] border border-[#2e2e42] transition-all cursor-pointer shadow-sm select-none"
         title="Click to view study intervals & breaks"
       >
-        <span className="text-[10px]">🕒</span>
-        <span>{isOpen ? 'Hide Timeline' : 'Timeline'}</span>
+        <span className="text-[11px]">🕒</span>
+        <span>{isOpen ? 'Hide Timeline' : label}</span>
         {chunkCount > 0 && (
-          <span className="text-[10px] font-mono px-1 rounded bg-[#222] text-gray-300">
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-bold">
             {chunkCount} {chunkCount === 1 ? 'chunk' : 'chunks'}
           </span>
         )}
-        <span className="text-[9px] opacity-60">{isOpen ? '▲' : '▼'}</span>
+        <span className="text-[9px] opacity-70 ml-0.5">{isOpen ? '▲' : '▼'}</span>
       </button>
 
-      {/* Compact, sleek dropdown card */}
+      {/* In-flow expansion panel - NEVER clipped by overflow-hidden! */}
       {isOpen && (
         <div
-          className="absolute z-30 top-8 left-1/2 -translate-x-1/2 w-72 max-w-[90vw] p-3 rounded-xl bg-[#141417]/95 backdrop-blur-md border border-[#2b2b35] shadow-2xl text-left"
-          style={{ animation: 'fadeIn 120ms ease-out' }}
+          className="w-full max-w-[340px] sm:max-w-sm mt-3 p-3.5 rounded-2xl bg-[#12121a]/98 border border-[#2c2c40] shadow-2xl text-left transition-all z-20"
+          style={{ animation: 'scaleIn 150ms ease-out' }}
         >
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#23232a]">
-            <span className="text-[11px] font-bold text-gray-200 tracking-wide flex items-center gap-1.5">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#232332]">
+            <span className="text-xs font-bold text-gray-200 tracking-wide flex items-center gap-1.5">
               <span>🕒</span> Study Chunks & Breaks
             </span>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="text-gray-400 hover:text-white text-xs px-1 rounded hover:bg-[#252530]"
+              className="w-6 h-6 rounded-full bg-[#1c1c28] hover:bg-[#28283a] text-gray-400 hover:text-white text-xs flex items-center justify-center transition-colors cursor-pointer"
             >
               ✕
             </button>
           </div>
 
-          <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1">
+          <div className="flex flex-col gap-1.5 max-h-60 overflow-y-auto pr-1">
             {items.map((it, idx) => {
               if (it.type === 'break') {
                 return (
                   <div
                     key={idx}
-                    className="flex items-center justify-between text-[10px] text-amber-400/80 bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10 font-mono"
+                    className="flex items-center justify-between text-[11px] text-amber-400/90 bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-500/20 font-mono"
                   >
                     <span>☕ {it.title}</span>
                     <span className="font-semibold">{it.durationText}</span>
@@ -188,10 +207,10 @@ export default function SessionTimeline({ timeline = [], isRunning = false, star
                 return (
                   <div
                     key={idx}
-                    className="flex items-center justify-between text-[11px] text-green-400 bg-green-500/10 px-2 py-1 rounded border border-green-500/20 font-medium"
+                    className="flex items-center justify-between text-xs text-green-400 bg-green-500/15 px-2.5 py-1.5 rounded-xl border border-green-500/30 font-medium"
                   >
                     <div className="flex items-center gap-1.5 truncate">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+                      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
                       <span className="truncate">{it.title}</span>
                     </div>
                     <span className="font-mono font-bold text-xs ml-2 flex-shrink-0">{it.durationText}</span>
@@ -203,10 +222,10 @@ export default function SessionTimeline({ timeline = [], isRunning = false, star
                 return (
                   <div
                     key={idx}
-                    className="flex items-center justify-between text-[10px] text-gray-400 bg-[#1a1a22] px-2 py-0.5 rounded border border-[#282834]"
+                    className="flex items-center justify-between text-[11px] text-gray-400 bg-[#171722] px-2.5 py-1 rounded-xl border border-[#252536]"
                   >
                     <span>⏸️ {it.title}</span>
-                    <span className="text-gray-500 italic">Break</span>
+                    <span className="text-gray-500 italic text-[10px]">Break</span>
                   </div>
                 )
               }
@@ -214,13 +233,15 @@ export default function SessionTimeline({ timeline = [], isRunning = false, star
               return (
                 <div
                   key={idx}
-                  className="flex items-center justify-between text-[11px] text-gray-300 bg-[#181820] px-2 py-1 rounded border border-[#262630]"
+                  className="flex items-center justify-between text-xs text-gray-200 bg-[#161622] px-2.5 py-1.5 rounded-xl border border-[#26263a]"
                 >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span className="text-[10px] text-purple-400 font-bold"># {idx + 1}</span>
-                    <span className="truncate text-gray-200">{it.title}</span>
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-[10px] text-purple-400 font-bold bg-purple-500/15 px-1.5 py-0.5 rounded">
+                      #{idx + 1}
+                    </span>
+                    <span className="truncate">{it.title}</span>
                   </div>
-                  <span className="font-mono text-purple-300 font-semibold text-xs ml-2 flex-shrink-0">
+                  <span className="font-mono text-purple-300 font-bold text-xs ml-2 flex-shrink-0">
                     {it.durationText}
                   </span>
                 </div>
@@ -229,9 +250,9 @@ export default function SessionTimeline({ timeline = [], isRunning = false, star
           </div>
 
           {pausesCount > 0 && (
-            <div className="mt-2 pt-1.5 border-t border-[#23232a] flex items-center justify-between text-[10px] text-gray-400 font-mono">
-              <span>Total pauses: {pausesCount}</span>
-              <span className="text-gray-300">{chunkCount} session chunks</span>
+            <div className="mt-2.5 pt-2 border-t border-[#232332] flex items-center justify-between text-[11px] text-gray-400 font-mono">
+              <span>Pauses: {pausesCount}</span>
+              <span className="text-gray-300 font-semibold">{chunkCount} session chunks</span>
             </div>
           )}
         </div>

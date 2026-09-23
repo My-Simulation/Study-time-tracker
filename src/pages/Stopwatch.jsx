@@ -784,12 +784,13 @@ export default function Stopwatch({ userName }) {
               <StopwatchDisplay displayTime={displayTime} />
 
               {/* Subtle compact timeline pill */}
-              <div className="flex justify-center pb-2.5 relative z-20">
+              <div className="flex justify-center pb-2.5 px-3 relative z-20">
                 <SessionTimeline
                   timeline={timeline}
                   isRunning={isRunning}
                   startedAtMs={startTimestamp}
                   baseElapsed={elapsed}
+                  laps={laps}
                 />
               </div>
 

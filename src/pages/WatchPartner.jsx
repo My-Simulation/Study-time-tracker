@@ -19,6 +19,7 @@ export default function WatchPartner() {
     useWatchPartner(partnerName)
 
   const [partnerDoc, setPartnerDoc] = useState(null)
+  const [latestSession, setLatestSession] = useState(null)
   const [partnerInput, setPartnerInput] = useState('')
 
   const session = getSession()
@@ -32,6 +33,15 @@ export default function WatchPartner() {
         if (isMounted && docData) setPartnerDoc(docData)
       })
       .catch(() => {})
+
+    getUserSessions(partnerName)
+      .then((sessions) => {
+        if (isMounted && sessions && sessions.length > 0) {
+          setLatestSession(sessions[0])
+        }
+      })
+      .catch(() => {})
+
     return () => { isMounted = false }
   }, [partnerName])
 
@@ -164,12 +174,12 @@ export default function WatchPartner() {
 
         {/* Big live timer */}
         <div
-          className="card flex flex-col items-center justify-center py-12 gap-2 relative overflow-hidden"
+          className="card flex flex-col items-center justify-center py-10 gap-2 relative rounded-3xl"
           style={{ minHeight: '200px' }}
         >
-          {/* Glow */}
+          {/* Glow isolated in overflow-hidden sub-layer */}
           <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            className="absolute inset-0 flex items-center justify-center pointer-events-none rounded-3xl overflow-hidden"
             aria-hidden
           >
             <div style={{
@@ -217,17 +227,33 @@ export default function WatchPartner() {
             </p>
           )}
 
-          {/* Timeline pill - subtle and compact */}
-          <div className="relative z-20 mt-3 flex justify-center">
+          {/* Timeline pill & expanded panel - subtle, compact & unclipped */}
+          <div className="relative z-20 mt-3 w-full flex justify-center px-2">
             <SessionTimeline
-              timeline={status?.timeline}
+              timeline={
+                (status?.timeline && status.timeline.length > 0)
+                  ? status.timeline
+                  : (status?.lastSessionTimeline && status.lastSessionTimeline.length > 0)
+                  ? status.lastSessionTimeline
+                  : latestSession?.timeline || []
+              }
               isRunning={isLive}
               startedAtMs={
                 status?.startedAtMs ||
                 (status?.startedAt?.seconds ? status.startedAt.seconds * 1000 : null) ||
                 status?.startTimestamp
               }
-              baseElapsed={Number(status?.baseElapsed) || 0}
+              baseElapsed={
+                Number(status?.baseElapsed) > 0
+                  ? Number(status.baseElapsed)
+                  : (latestSession?.totalSeconds ? latestSession.totalSeconds * 1000 : 0)
+              }
+              laps={
+                (status?.laps && status.laps.length > 0)
+                  ? status.laps
+                  : latestSession?.laps || []
+              }
+              label={isLive || Number(status?.baseElapsed) > 0 ? 'Timeline' : 'Session Chunks'}
             />
           </div>
         </div>

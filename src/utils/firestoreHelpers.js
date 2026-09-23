@@ -479,7 +479,7 @@ export async function getLiveStatus(userName, forceServer = false) {
   }
 }
 
-export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp, deviceId, laps, subject, topic, action, resetAtMs, lastSavedAtMs, timeline }) {
+export async function updateLiveStatus(userName, { isRunning, baseElapsed, startTimestamp, deviceId, laps, subject, topic, action, resetAtMs, lastSavedAtMs, timeline, lastSessionTimeline }) {
   if (!userName) return
   const statusRef = doc(db, 'liveStatus', userName.toLowerCase())
   const now = Date.now()
@@ -499,6 +499,7 @@ export async function updateLiveStatus(userName, { isRunning, baseElapsed, start
   if (resetAtMs !== undefined) payload.resetAtMs = resetAtMs
   if (lastSavedAtMs !== undefined) payload.lastSavedAtMs = lastSavedAtMs
   if (timeline !== undefined) payload.timeline = timeline
+  if (lastSessionTimeline !== undefined) payload.lastSessionTimeline = lastSessionTimeline
 
   await setDoc(statusRef, payload, { merge: true })
 }
