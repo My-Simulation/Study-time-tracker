@@ -9,6 +9,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSyllabus, saveSyllabus, subscribeToSyllabus } from '../utils/firestoreHelpers'
+import AuthModal from '../components/AuthModal'
 
 const STATUS_CONFIG = {
   not_started: {
@@ -28,11 +29,76 @@ const STATUS_CONFIG = {
   },
 }
 
+const GUEST_DEFAULT_SUBJECTS = [
+  {
+    id: 'sub_physics',
+    name: 'Physics',
+    topics: [
+      { id: 'top_1', name: 'Kinematics & Newton Laws', status: 'completed' },
+      { id: 'top_2', name: 'Work, Energy & Power', status: 'in_progress' },
+      { id: 'top_3', name: 'Rotational Motion', status: 'not_started' },
+      { id: 'top_4', name: 'Thermodynamics & Heat', status: 'not_started' },
+    ],
+  },
+  {
+    id: 'sub_chemistry',
+    name: 'Chemistry',
+    topics: [
+      { id: 'top_5', name: 'Chemical Bonding & Structure', status: 'completed' },
+      { id: 'top_6', name: 'Atomic Structure & Periodicity', status: 'completed' },
+      { id: 'top_7', name: 'Chemical Equilibrium & Kinetics', status: 'in_progress' },
+      { id: 'top_8', name: 'General Organic Chemistry (GOC)', status: 'not_started' },
+    ],
+  },
+  {
+    id: 'sub_maths',
+    name: 'Mathematics',
+    topics: [
+      { id: 'top_9', name: 'Differential Calculus & Limits', status: 'completed' },
+      { id: 'top_10', name: 'Integral Calculus', status: 'in_progress' },
+      { id: 'top_11', name: 'Matrices & Determinants', status: 'not_started' },
+      { id: 'top_12', name: 'Coordinate Geometry & Vectors', status: 'not_started' },
+    ],
+  },
+]
+
 export default function Syllabus({ userName }) {
   const navigate = useNavigate()
-  const [subjects, setSubjects] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [activeSubjectId, setActiveSubjectId] = useState(null)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [subjects, setSubjects] = useState(() => {
+    if (!userName) {
+      try {
+        const raw = localStorage.getItem('stt_guest_syllabus')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        }
+      } catch {}
+      return GUEST_DEFAULT_SUBJECTS
+    }
+    try {
+      const u = userName.toLowerCase()
+      const raw = localStorage.getItem(`stt_user_doc_${u}`)
+      if (raw) {
+        const doc = JSON.parse(raw)
+        if (doc && Array.isArray(doc.syllabus)) return doc.syllabus
+      }
+    } catch {}
+    return []
+  })
+  const [loading, setLoading] = useState(() => {
+    if (!userName) return false
+    try {
+      const u = userName.toLowerCase()
+      return !localStorage.getItem(`stt_user_doc_${u}`)
+    } catch {
+      return true
+    }
+  })
+  const [activeSubjectId, setActiveSubjectId] = useState(() => {
+    if (!userName) return 'sub_physics'
+    return null
+  })
 
   // Modals / forms
   const [showAddSubject, setShowAddSubject] = useState(false)
@@ -41,7 +107,10 @@ export default function Syllabus({ userName }) {
   const [filterStatus, setFilterStatus] = useState('all') // 'all' | 'not_started' | 'in_progress' | 'completed'
 
   useEffect(() => {
-    if (!userName) return
+    if (!userName) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
 
     // Real-time Firestore subscription across all devices
@@ -72,7 +141,13 @@ export default function Syllabus({ userName }) {
 
   const persist = (updated) => {
     setSubjects(updated)
-    saveSyllabus(userName, updated)
+    if (userName) {
+      saveSyllabus(userName, updated)
+    } else {
+      try {
+        localStorage.setItem('stt_guest_syllabus', JSON.stringify(updated))
+      } catch {}
+    }
   }
 
   // Add Subject
@@ -176,16 +251,40 @@ export default function Syllabus({ userName }) {
           <span>←</span>
           <span>Back to Timer</span>
         </button>
-        <button
-          onClick={() => setShowAddSubject(true)}
-          className="text-xs px-3 py-1.5 rounded-full font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition-all"
-        >
-          + Add Subject
-        </button>
+        <div className="flex items-center gap-2">
+          {!userName && (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="text-xs px-3 py-1.5 rounded-full font-medium bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:brightness-110 shadow-sm transition-all"
+            >
+              ✨ Sign In
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddSubject(true)}
+            className="text-xs px-3 py-1.5 rounded-full font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition-all"
+          >
+            + Add Subject
+          </button>
+        </div>
       </div>
 
       {/* Header & Overall progress */}
       <div className="px-4 pb-4 max-w-lg mx-auto w-full">
+        {!userName && (
+          <div className="card p-3 mb-3 flex items-center justify-between bg-purple-950/30 border border-purple-500/30 shadow-sm">
+            <div className="flex items-center gap-2 text-xs text-purple-200">
+              <span className="text-base">💡</span>
+              <span><strong>Guest Mode:</strong> You can edit topics freely. Sign in to save & sync across all your devices!</span>
+            </div>
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="text-[11px] px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold flex-shrink-0 transition-all ml-2"
+            >
+              Sync Cloud →
+            </button>
+          </div>
+        )}
         <h1 className="text-xl font-bold text-white">📚 Syllabus & Topic Tracker</h1>
         <p className="text-xs text-gray-500 mt-0.5">Track topic completion & syllabus coverage</p>
 
@@ -433,6 +532,23 @@ export default function Syllabus({ userName }) {
           </div>
         </div>
       )}
+
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={async (newUsername) => {
+          setShowAuthModal(false)
+          if (newUsername && subjects.length > 0) {
+            try {
+              await saveSyllabus(newUsername, subjects)
+            } catch {}
+          }
+          window.location.reload()
+        }}
+        title="Sync Syllabus to Cloud"
+        subtitle="Sign in or create a free account to back up and track your syllabus across all devices."
+        actionContext="feature"
+      />
     </div>
   )
 }
