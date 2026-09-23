@@ -21,11 +21,9 @@ export default function GoogleOnboardingModal({
   googleData,
   onSuccess,
 }) {
-  if (!isOpen || !googleData) return null
-
   const navigate = useNavigate()
 
-  const [username, setUsername] = useState(googleData.suggestedUsername || '')
+  const [username, setUsername] = useState(googleData?.suggestedUsername || '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -37,8 +35,15 @@ export default function GoogleOnboardingModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (googleData?.suggestedUsername) {
+      setUsername(googleData.suggestedUsername)
+    }
+  }, [googleData])
+
   // Debounced real-time username availability check
   useEffect(() => {
+    if (!isOpen || !googleData) return
     const trimmed = username.trim().toLowerCase()
     const valErr = validateUsername(trimmed)
     if (valErr) {
@@ -130,6 +135,8 @@ export default function GoogleOnboardingModal({
       setLoading(false)
     }
   }
+
+  if (!isOpen || !googleData) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">

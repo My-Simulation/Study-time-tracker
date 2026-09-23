@@ -62,15 +62,28 @@ class ErrorBoundary extends React.Component {
         <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-[#0d0d0d] text-white">
           <div className="text-4xl mb-3">⚠️</div>
           <h2 className="text-lg font-bold mb-2">Something went wrong</h2>
-          <p className="text-xs text-gray-400 max-w-sm mb-6">
+          <p className="text-xs text-gray-400 max-w-sm mb-4">
             An unexpected error occurred while loading this view. Tap below to reload fresh.
           </p>
-          <button
-            onClick={this.handleReload}
-            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium text-sm transition-all shadow-lg"
-          >
-            ↻ Reload Application
-          </button>
+          {this.state.error?.message && (
+            <div className="text-[11px] font-mono text-rose-400 bg-rose-950/30 border border-rose-900/40 rounded-xl px-3 py-2 max-w-md mb-6 break-words">
+              {this.state.error.message}
+            </div>
+          )}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { window.location.href = '/' }}
+              className="px-4 py-2.5 rounded-xl bg-[#222] hover:bg-[#333] text-gray-300 font-medium text-sm transition-all"
+            >
+              ← Back to Timer
+            </button>
+            <button
+              onClick={this.handleReload}
+              className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium text-sm transition-all shadow-lg"
+            >
+              ↻ Reload Application
+            </button>
+          </div>
         </div>
       )
     }
