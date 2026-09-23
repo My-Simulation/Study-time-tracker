@@ -10,6 +10,7 @@ import { useWatchPartner } from '../hooks/useWatchPartner'
 import { getUserSessions, groupSessionsByDate, getUserDoc, checkUserPrivacyAccess } from '../utils/firestoreHelpers'
 import { formatHoursMinutes } from '../utils/formatTime'
 import { getSession } from '../utils/auth'
+import SessionTimeline from '../components/SessionTimeline'
 
 export default function WatchPartner() {
   const { partnerName } = useParams()
@@ -215,6 +216,20 @@ export default function WatchPartner() {
               Updated {lastSeenText}
             </p>
           )}
+
+          {/* Timeline pill - subtle and compact */}
+          <div className="relative z-20 mt-3 flex justify-center">
+            <SessionTimeline
+              timeline={status?.timeline}
+              isRunning={isLive}
+              startedAtMs={
+                status?.startedAtMs ||
+                (status?.startedAt?.seconds ? status.startedAt.seconds * 1000 : null) ||
+                status?.startTimestamp
+              }
+              baseElapsed={Number(status?.baseElapsed) || 0}
+            />
+          </div>
         </div>
 
         {/* View their history button */}

@@ -20,6 +20,7 @@ import DailyMissions from '../components/DailyMissions'
 import ShareCardModal from '../components/ShareCardModal'
 import BackgroundModal from '../components/BackgroundModal'
 import AICoachDrawer from '../components/AICoachDrawer'
+import SessionTimeline from '../components/SessionTimeline'
 import { buildUserAIContext } from '../utils/aiService'
 import {
   getWallpaper,
@@ -39,7 +40,7 @@ import { backgroundTimer } from '../utils/backgroundTimer'
 
 export default function Stopwatch({ userName }) {
   const navigate = useNavigate()
-  const { elapsed, isRunning, laps, displayTime, start, stop, reset, lap, togglePictureInPicture } = useStopwatch(userName)
+  const { elapsed, isRunning, laps, displayTime, timeline, startTimestamp, start, stop, reset, lap, togglePictureInPicture } = useStopwatch(userName)
 
   const location = useLocation()
   const [showModal, setShowModal] = useState(false)
@@ -747,6 +748,17 @@ export default function Stopwatch({ userName }) {
               )}
 
               <StopwatchDisplay displayTime={displayTime} />
+
+              {/* Subtle compact timeline pill */}
+              <div className="flex justify-center pb-2.5 relative z-20">
+                <SessionTimeline
+                  timeline={timeline}
+                  isRunning={isRunning}
+                  startedAtMs={startTimestamp}
+                  baseElapsed={elapsed}
+                />
+              </div>
+
               {laps.length > 0 && <div className="border-t border-[#2a2a2a]" />}
               <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
                 <LapTable laps={laps} />

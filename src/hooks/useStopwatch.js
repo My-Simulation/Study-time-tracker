@@ -59,6 +59,17 @@ export function useStopwatch(userName) {
     }
   })
 
+  const [timeline, setTimeline] = useState(() => {
+    if (!storageKey) return []
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return []
+      return JSON.parse(raw).timeline || []
+    } catch {
+      return []
+    }
+  })
+
   const [displayTime, setDisplayTime] = useState(() => formatTime(elapsed))
 
   // Refs for animation and timestamp tracking
@@ -67,6 +78,8 @@ export function useStopwatch(userName) {
   const baseElapsedRef = useRef(0)
   const heartbeatRef = useRef(null)
   const reconcileWithRemoteRef = useRef(null)
+  const timelineRef = useRef(timeline)
+  timelineRef.current = timeline
 
   // Load initial refs from localStorage
   useEffect(() => {
@@ -76,6 +89,10 @@ export function useStopwatch(userName) {
       if (raw) {
         const saved = JSON.parse(raw)
         baseElapsedRef.current = Number(saved.baseElapsed) || 0
+        if (Array.isArray(saved.timeline)) {
+          setTimeline(saved.timeline)
+          timelineRef.current = saved.timeline
+        }
         if (saved.isRunning && saved.startTimestamp) {
           startTimestampRef.current = Number(saved.startTimestamp)
           const current = baseElapsedRef.current + Math.max(0, Date.now() - startTimestampRef.current)
@@ -103,7 +120,7 @@ export function useStopwatch(userName) {
   }, [storageKey])
 
   // Save current state to localStorage helper
-  const persistState = useCallback((running, startMs, baseMs, currentLaps) => {
+  const persistState = useCallback((running, startMs, baseMs, currentLaps, currentTimeline) => {
     if (!storageKey) return
     try {
       localStorage.setItem(
@@ -113,6 +130,7 @@ export function useStopwatch(userName) {
           startTimestamp: startMs,
           baseElapsed: baseMs,
           laps: currentLaps,
+          timeline: currentTimeline !== undefined ? currentTimeline : timelineRef.current || [],
           updatedAt: Date.now(),
         })
       )
@@ -182,6 +200,8 @@ export function useStopwatch(userName) {
         setDisplayTime('0:00:00.00')
         setIsRunning(false)
         setLaps([])
+        setTimeline([])
+        timelineRef.current = []
 
         backgroundTimer.resetState()
 
@@ -196,6 +216,11 @@ export function useStopwatch(userName) {
       // If user performed a local manual action strictly AFTER remote update, local takes precedence
       if (localLastAction > 0 && localLastAction > remoteUpdated + 500) {
         return
+      }
+
+      if (Array.isArray(remote.timeline)) {
+        setTimeline(remote.timeline)
+        timelineRef.current = remote.timeline
       }
 
       const remoteRunning = Boolean(remote.isRunning)
@@ -213,7 +238,7 @@ export function useStopwatch(userName) {
         setIsRunning(true)
         setLaps(remoteLaps)
 
-        persistState(true, remoteStart, remoteBase, remoteLaps)
+        persistState(true, remoteStart, remoteBase, remoteLaps, remote.timeline || timelineRef.current)
 
         backgroundTimer.setTimerState({
           isRunning: true,
@@ -245,7 +270,7 @@ export function useStopwatch(userName) {
         backgroundTimer.pauseAudio()
         backgroundTimer.releaseWakeLock()
 
-        persistState(false, null, remoteBase, remoteLaps)
+        persistState(false, null, remoteBase, remoteLaps, remote.timeline || timelineRef.current)
       }
     },
     [persistState, storageKey, tick]
@@ -294,6 +319,7 @@ export function useStopwatch(userName) {
           deviceId: deviceIdRef.current,
           laps,
           action: 'heartbeat',
+          timeline: timelineRef.current || [],
         }).catch(() => {})
       }, 30000)
     } else {
@@ -312,6 +338,11 @@ export function useStopwatch(userName) {
     lastLocalActionRef.current = now
     lastLocalActionType.current = 'start'
 
+    const newEvent = { type: 'start', at: now, elapsed: baseElapsedRef.current }
+    const updatedTimeline = [...(timelineRef.current || []), newEvent].slice(-30)
+    setTimeline(updatedTimeline)
+    timelineRef.current = updatedTimeline
+
     startTimestampRef.current = now
     setIsRunning(true)
 
@@ -329,7 +360,7 @@ export function useStopwatch(userName) {
     backgroundTimer.startAudio()
     backgroundTimer.requestWakeLock()
 
-    persistState(true, now, baseElapsedRef.current, laps)
+    persistState(true, now, baseElapsedRef.current, laps, updatedTimeline)
 
     if (userName) {
       updateLiveStatus(userName, {
@@ -339,6 +370,7 @@ export function useStopwatch(userName) {
         deviceId: deviceIdRef.current,
         laps,
         action: 'start',
+        timeline: updatedTimeline,
       }).catch(() => {})
     }
 
@@ -365,6 +397,11 @@ export function useStopwatch(userName) {
     setDisplayTime(formatTime(finalElapsed))
     setIsRunning(false)
 
+    const newEvent = { type: 'stop', at: now, elapsed: finalElapsed }
+    const updatedTimeline = [...(timelineRef.current || []), newEvent].slice(-30)
+    setTimeline(updatedTimeline)
+    timelineRef.current = updatedTimeline
+
     backgroundTimer.setTimerState({
       isRunning: false,
       startTimestamp: null,
@@ -373,7 +410,7 @@ export function useStopwatch(userName) {
     backgroundTimer.pauseAudio()
     backgroundTimer.releaseWakeLock()
 
-    persistState(false, null, finalElapsed, laps)
+    persistState(false, null, finalElapsed, laps, updatedTimeline)
 
     if (userName) {
       updateLiveStatus(userName, {
@@ -383,6 +420,7 @@ export function useStopwatch(userName) {
         deviceId: deviceIdRef.current,
         laps,
         action: 'stop',
+        timeline: updatedTimeline,
       }).catch(() => {})
     }
   }, [isRunning, laps, persistState, userName])
@@ -401,6 +439,8 @@ export function useStopwatch(userName) {
     setDisplayTime('0:00:00.00')
     setLaps([])
     setIsRunning(false)
+    setTimeline([])
+    timelineRef.current = []
 
     backgroundTimer.resetState()
 
@@ -420,6 +460,7 @@ export function useStopwatch(userName) {
         action: 'reset',
         resetAtMs: now,
         lastSavedAtMs: now,
+        timeline: [],
       }).catch(() => {})
     }
   }, [storageKey, userName])
@@ -462,7 +503,7 @@ export function useStopwatch(userName) {
             : 'normal',
       }))
 
-      persistState(true, startTimestampRef.current, baseElapsedRef.current, formatted)
+      persistState(true, startTimestampRef.current, baseElapsedRef.current, formatted, timelineRef.current)
 
       if (userName) {
         updateLiveStatus(userName, {
@@ -472,6 +513,7 @@ export function useStopwatch(userName) {
           deviceId: deviceIdRef.current,
           laps: formatted,
           action: 'lap',
+          timeline: timelineRef.current || [],
         }).catch(() => {})
       }
 
@@ -588,6 +630,8 @@ export function useStopwatch(userName) {
     isRunning,
     laps,
     displayTime,
+    timeline,
+    startTimestamp: startTimestampRef.current,
     start,
     stop,
     reset,
