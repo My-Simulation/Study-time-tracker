@@ -139,14 +139,7 @@ function AnimatedRoutes() {
               </GuestGate>
             }
           />
-          <Route
-            path="/plan"
-            element={
-              <GuestGate feature="plan" isAuthenticated={Boolean(session)}>
-                <Plan userName={userName} />
-              </GuestGate>
-            }
-          />
+          <Route path="/plan" element={<Plan userName={userName} />} />
           <Route
             path="/analytics"
             element={

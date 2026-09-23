@@ -481,13 +481,18 @@ export default function Stopwatch({ userName }) {
   // ── Daily goal progress ───────────────────────────────────────────────────
   const goalProgress = (() => {
     // Determine effective target: DayPlanner targetHours takes precedence, else dailyGoal from weekly plan
-    const targetMinutes = (dayPlan?.targetHours && Number(dayPlan.targetHours) > 0)
+    let targetMinutes = (dayPlan?.targetHours && Number(dayPlan.targetHours) > 0)
       ? Math.round(Number(dayPlan.targetHours) * 60)
       : (dailyGoal?.targetMinutes || 0)
 
+    // For guest users, provide a default 6h target so the target progress bar is active and engaging
+    if (!userName && (!targetMinutes || targetMinutes <= 0)) {
+      targetMinutes = 360
+    }
+
     const studiedSec = todayStudied + Math.floor(elapsed / 1000)
 
-    if (isTodayRest || (dailyGoal?.isRestDay && (!dayPlan?.targetHours || Number(dayPlan.targetHours) === 0))) {
+    if (userName && (isTodayRest || (dailyGoal?.isRestDay && (!dayPlan?.targetHours || Number(dayPlan.targetHours) === 0)))) {
       return {
         hasTarget: false,
         isRestDay: true,
@@ -526,7 +531,11 @@ export default function Stopwatch({ userName }) {
       label: formatHoursMinutes(targetSec),
       studiedLabel: formatHoursMinutes(studiedSec),
       remainingLabel: formatHoursMinutes(remainingSec),
-      source: (dayPlan?.targetHours && Number(dayPlan.targetHours) > 0) ? `Day ${dayNum} Target` : 'Weekly Plan Goal',
+      source: !userName
+        ? 'Daily Focus Target (6h Plan)'
+        : (dayPlan?.targetHours && Number(dayPlan.targetHours) > 0)
+        ? `Day ${dayNum} Target`
+        : 'Weekly Plan Goal',
     }
   })()
 

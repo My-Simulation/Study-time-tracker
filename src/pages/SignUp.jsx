@@ -101,9 +101,23 @@ export default function SignUp() {
 
         {/* Back + Header */}
         <div>
-          <button onClick={() => step === 1 ? navigate('/welcome') : setStep(s => s - 1)} className="text-sm text-gray-500 hover:text-gray-300 transition-colors mb-4 flex items-center gap-1">
-            ← {step === 1 ? 'Back' : 'Previous'}
-          </button>
+          <div className="flex items-center justify-between mb-4">
+            <button
+              type="button"
+              onClick={() => step === 1 ? navigate('/') : setStep(s => s - 1)}
+              className="text-sm text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              ← {step === 1 ? 'Back to Timer' : 'Previous'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="w-8 h-8 rounded-full bg-[#1c1c24] hover:bg-[#282834] text-gray-400 hover:text-white flex items-center justify-center text-sm font-bold transition-all cursor-pointer shadow-sm active:scale-90"
+              title="Close and back to timer"
+            >
+              ✕
+            </button>
+          </div>
 
           {/* Step indicator */}
           <div className="flex gap-1.5 mb-4">

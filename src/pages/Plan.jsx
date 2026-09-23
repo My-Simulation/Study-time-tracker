@@ -20,6 +20,7 @@ import {
   getUserSettings, saveUserSettings, isRestDay,
 } from '../utils/firestoreHelpers'
 import { formatHoursMinutes, todayString, getLocalWeekdayId, toLocalDateStr } from '../utils/formatTime'
+import AuthModal from '../components/AuthModal'
 
 const DAYS = [
   { key: 'Mon', label: 'Monday' },
@@ -36,6 +37,16 @@ const TODAY_KEY = getLocalWeekdayId(new Date())
 const DEFAULT_PLAN = Object.fromEntries(
   DAYS.map(({ key }) => [key, { targetMinutes: 0, subjects: '' }])
 )
+
+const GUEST_DEFAULT_PLAN = {
+  Mon: { targetMinutes: 360, subjects: 'Core Study & Concepts' },
+  Tue: { targetMinutes: 360, subjects: 'Practice & Problem Solving' },
+  Wed: { targetMinutes: 360, subjects: 'Revision & Backlog' },
+  Thu: { targetMinutes: 360, subjects: 'Core Study & Concepts' },
+  Fri: { targetMinutes: 360, subjects: 'Practice & Mock Test' },
+  Sat: { targetMinutes: 300, subjects: 'Weekly Full Revision' },
+  Sun: { targetMinutes: 0, subjects: 'Rest & Recharge' },
+}
 
 /**
  * Calculates date info for each day of the week based on weekOffset (0 = this week).
@@ -81,8 +92,9 @@ function getWeekDates(weekOffset = 0) {
 
 export default function Plan({ userName }) {
   const navigate = useNavigate()
+  const [showAuthModal, setShowAuthModal] = useState(false)
   const [plan, setPlan] = useState(() => {
-    if (!userName) return DEFAULT_PLAN
+    if (!userName) return GUEST_DEFAULT_PLAN
     try {
       const u = userName.toLowerCase()
       const raw = localStorage.getItem(`stt_user_doc_${u}`)
@@ -130,7 +142,7 @@ export default function Plan({ userName }) {
     return { sundayRestDay: false, effectiveFrom: '' }
   })
   const [loading, setLoading] = useState(() => {
-    if (!userName) return true
+    if (!userName) return false
     try {
       const u = userName.toLowerCase()
       return !localStorage.getItem(`stt_user_doc_${u}`)
@@ -147,6 +159,10 @@ export default function Plan({ userName }) {
   )
 
   const load = useCallback(async () => {
+    if (!userName) {
+      setLoading(false)
+      return
+    }
     try {
       const [existingPlan, userSessions, allDayPlans, userSettings] = await Promise.all([
         getWeeklyPlan(userName),
@@ -251,6 +267,10 @@ export default function Plan({ userName }) {
   const isSundayRest = Boolean(settings?.sundayRestDay)
 
   const handleToggleSundayRest = async () => {
+    if (!userName) {
+      setShowAuthModal(true)
+      return
+    }
     const newVal = !isSundayRest
     const todayStr = toLocalDateStr(new Date())
     const updatedSettings = {
@@ -285,6 +305,10 @@ export default function Plan({ userName }) {
   }
 
   const handleSave = async () => {
+    if (!userName) {
+      setShowAuthModal(true)
+      return
+    }
     setSaving(true)
     try {
       // 1. Save weekly plan template
@@ -386,12 +410,22 @@ export default function Plan({ userName }) {
           <span>←</span><span>Back to Timer</span>
         </button>
 
-        <button
-          onClick={() => navigate('/planner')}
-          className="text-xs px-3 py-1 rounded-full bg-pink-500/10 text-pink-300 border border-pink-500/30 hover:bg-pink-500/20 transition-all font-medium flex items-center gap-1.5"
-        >
-          <span>🌸</span><span>Day Planner Sheet</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {!userName && (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="text-xs px-3 py-1 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-medium hover:brightness-110 shadow-sm transition-all"
+            >
+              ✨ Sign In
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/planner')}
+            className="text-xs px-3 py-1 rounded-full bg-pink-500/10 text-pink-300 border border-pink-500/30 hover:bg-pink-500/20 transition-all font-medium flex items-center gap-1.5"
+          >
+            <span>🌸</span><span>Day Planner Sheet</span>
+          </button>
+        </div>
       </div>
 
       {/* Header */}
@@ -848,6 +882,18 @@ export default function Plan({ userName }) {
           {saving ? 'Saving & Syncing…' : saved ? '✓ Weekly Plan Saved & Synced!' : 'Save Weekly Plan'}
         </button>
       </div>
+
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false)
+          window.location.reload()
+        }}
+        title="Save Your Weekly Plan"
+        subtitle="Sign in or create a free account to save your targets, sync with day planner & track weekly streak."
+        actionContext="plan"
+      />
     </div>
   )
 }

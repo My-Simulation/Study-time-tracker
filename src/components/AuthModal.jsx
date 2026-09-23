@@ -97,10 +97,23 @@ export default function AuthModal({
     }
   }
 
+  // Close on Escape key press
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose?.()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md cursor-pointer"
+    >
       <div
-        className="w-full max-w-md p-6 sm:p-7 rounded-3xl bg-[#14141a]/95 border border-[#2e2e42] shadow-2xl relative text-white flex flex-col gap-5 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md p-6 sm:p-7 rounded-3xl bg-[#14141a]/95 border border-[#2e2e42] shadow-2xl relative text-white flex flex-col gap-5 overflow-hidden cursor-default"
         style={{ animation: 'scaleIn 180ms ease-out' }}
       >
         {/* Top ambient glow */}
@@ -113,9 +126,13 @@ export default function AuthModal({
 
         {/* Close button */}
         <button
-          onClick={onClose}
+          onClick={(e) => {
+            e.stopPropagation()
+            onClose?.()
+          }}
           type="button"
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#1e1e28] hover:bg-[#2a2a38] text-gray-400 hover:text-white flex items-center justify-center text-sm transition-colors cursor-pointer z-10"
+          aria-label="Close modal"
+          className="absolute top-4 right-4 w-9 h-9 rounded-full bg-[#1e1e28] hover:bg-[#2e2e3e] text-gray-300 hover:text-white flex items-center justify-center text-base font-bold transition-all cursor-pointer z-50 shadow-md active:scale-90"
         >
           ✕
         </button>
