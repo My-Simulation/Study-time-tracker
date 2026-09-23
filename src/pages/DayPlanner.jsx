@@ -24,6 +24,7 @@ import {
 import { todayString, formatHoursMinutes, formatTargetHoursText, parseHoursInput, toLocalDateStr, getLocalWeekdayId } from '../utils/formatTime'
 import AITimeTableModal from '../components/AITimeTableModal'
 import AICoachDrawer from '../components/AICoachDrawer'
+import AuthModal from '../components/AuthModal'
 import { buildUserAIContext } from '../utils/aiService'
 
 const TARGET_HOURS_OPTIONS = [
@@ -75,6 +76,7 @@ export default function DayPlanner({ userName }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedBadge, setSavedBadge] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
 
   // Pre-load from local cache to render instantly on page load / refresh
   const cachedInitial = useMemo(() => {
@@ -136,12 +138,20 @@ export default function DayPlanner({ userName }) {
   const [userAIContext, setUserAIContext] = useState(null)
 
   const handleOpenAIModal = async () => {
+    if (!userName) {
+      setShowAuthModal(true)
+      return
+    }
     const ctx = await buildUserAIContext(userName)
     setUserAIContext(ctx)
     setShowAIModal(true)
   }
 
   const handleOpenAICoach = async () => {
+    if (!userName) {
+      setShowAuthModal(true)
+      return
+    }
     const ctx = await buildUserAIContext(userName)
     if (ctx && currentDate === todayString() && actualSeconds > 0) {
       ctx.todayStudiedHours = Number((actualSeconds / 3600).toFixed(1))
@@ -336,6 +346,7 @@ export default function DayPlanner({ userName }) {
   }, [currentDate, loadDay])
 
   const handleSaveNotes = async (newNotes) => {
+    if (!userName) return
     try {
       const planData = {
         date: currentDate,
@@ -460,6 +471,10 @@ export default function DayPlanner({ userName }) {
 
   // Save current sheet
   const handleSave = async (lockStatus = isLocked) => {
+    if (!userName) {
+      setShowAuthModal(true)
+      return
+    }
     setSaving(true)
     const planData = {
       date: currentDate,
@@ -553,6 +568,10 @@ export default function DayPlanner({ userName }) {
 
   // Complete Day & Rollover uncompleted tasks to next day
   const handleCompleteAndRollover = async () => {
+    if (!userName) {
+      setShowAuthModal(true)
+      return
+    }
     setCompleting(true)
     const [y, m, d] = currentDate.split('-').map(Number)
     const dt = new Date(y, m - 1, d)
@@ -612,6 +631,17 @@ export default function DayPlanner({ userName }) {
         </button>
 
         <div className="flex items-center gap-2">
+          {!userName && (
+            <button
+              type="button"
+              onClick={() => setShowAuthModal(true)}
+              className="px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-[0.98] cursor-pointer"
+            >
+              <span>✨</span>
+              <span>Sign In</span>
+            </button>
+          )}
+
           {/* Kit Plan Button */}
           <button
             type="button"
@@ -1514,6 +1544,19 @@ export default function DayPlanner({ userName }) {
         isOpen={showAICoach}
         onClose={() => setShowAICoach(false)}
         userContext={userAIContext}
+      />
+
+      {/* ── Guest Auth Modal ── */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => {
+          setShowAuthModal(false)
+          window.location.reload()
+        }}
+        title="Save Your Day Plan"
+        subtitle="Sign in or create an account to save your study goals, to-do list, and sync across devices."
+        actionContext="plan"
       />
     </div>
   )

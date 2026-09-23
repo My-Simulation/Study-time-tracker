@@ -14,7 +14,7 @@ import { backgroundTimer } from '../utils/backgroundTimer'
 const STORAGE_PREFIX = 'stt_stopwatch_state_'
 
 export function useStopwatch(userName) {
-  const storageKey = userName ? `${STORAGE_PREFIX}${userName.toLowerCase()}` : null
+  const storageKey = userName ? `${STORAGE_PREFIX}${userName.toLowerCase()}` : `${STORAGE_PREFIX}guest`
   const deviceIdRef = useRef(
     `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   )

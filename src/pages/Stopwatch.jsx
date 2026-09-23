@@ -21,6 +21,7 @@ import ShareCardModal from '../components/ShareCardModal'
 import BackgroundModal from '../components/BackgroundModal'
 import AICoachDrawer from '../components/AICoachDrawer'
 import SessionTimeline from '../components/SessionTimeline'
+import AuthModal from '../components/AuthModal'
 import { buildUserAIContext } from '../utils/aiService'
 import {
   getWallpaper,
@@ -44,6 +45,8 @@ export default function Stopwatch({ userName }) {
 
   const location = useLocation()
   const [showModal, setShowModal] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authModalConfig, setAuthModalConfig] = useState({ title: '', subtitle: '', sessionDuration: '' })
   const [toast, setToast] = useState({ visible: false, message: '' })
   const [dailyGoal, setDailyGoal] = useState(null)   // { targetMinutes, subjects }
   const [todayStudied, setTodayStudied] = useState(0) // seconds studied today
@@ -535,8 +538,30 @@ export default function Stopwatch({ userName }) {
       {/* ── Top bar (Spans max-w-7xl on desktop, responsive on mobile) ── */}
       <div className="relative z-40 flex items-center justify-between px-3 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-0 max-w-7xl mx-auto w-full">
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
-          {/* Profile pill */}
-          <ProfilePill userName={userName} avatarColor={userProfile.avatarColor || avatarColor} photoUrl={userProfile.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
+          {/* Profile pill for logged-in user OR Get Started button for Guest */}
+          {userName ? (
+            <ProfilePill userName={userName} avatarColor={userProfile.avatarColor || avatarColor} photoUrl={userProfile.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
+          ) : (
+            <button
+              onClick={() => {
+                setAuthModalConfig({
+                  title: 'Join JeetPrep',
+                  subtitle: 'Create a free account or sign in to save your study sessions and streaks.',
+                  sessionDuration: elapsed > 0 ? displayTime : '',
+                })
+                setShowAuthModal(true)
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white shadow-md transition-all active:scale-[0.98] cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                boxShadow: '0 2px 10px rgba(124, 58, 237, 0.4)',
+              }}
+              title="Sign in or create account"
+            >
+              <span>✨</span>
+              <span>Sign In / Get Started</span>
+            </button>
+          )}
 
           {/* JeetPrep Branding Chip */}
           <div className="hidden lg:flex items-center gap-1.5 pl-2 border-l border-[#282828]">
@@ -565,6 +590,15 @@ export default function Stopwatch({ userName }) {
           {/* Kit AI Coach Button */}
           <button
             onClick={async () => {
+              if (!userName) {
+                setAuthModalConfig({
+                  title: 'Meet Kit AI Coach',
+                  subtitle: 'Sign in to get personalized study tips, exam motivation, and smart scheduling advice.',
+                  sessionDuration: '',
+                })
+                setShowAuthModal(true)
+                return
+              }
               const ctx = await buildUserAIContext(userName)
               if (ctx && todayStudied > 0) {
                 ctx.todayStudiedHours = Number(((todayStudied + Math.floor(elapsed / 1000)) / 3600).toFixed(1))
@@ -785,11 +819,44 @@ export default function Stopwatch({ userName }) {
                 </div>
               )}
 
+              {/* Guest Explorer Mode Banner */}
+              {!userName && (
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-2 text-purple-200 text-xs">
+                    <span>🚀</span>
+                    <span className="font-medium">Guest Mode — Timer & tools are free to test</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthModalConfig({
+                        title: 'Join JeetPrep',
+                        subtitle: 'Create a free account or sign in to save your sessions and build streaks.',
+                        sessionDuration: elapsed > 0 ? displayTime : '',
+                      })
+                      setShowAuthModal(true)
+                    }}
+                    className="text-[11px] font-bold text-purple-300 hover:text-white underline cursor-pointer"
+                  >
+                    Sign In to Save →
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2 w-full">
                 {hasTime && !isTodayRest && (
                   <button
                     onClick={() => {
                       if (isRunning) stop()
+                      if (!userName) {
+                        setAuthModalConfig({
+                          title: 'Save Your Study Session',
+                          subtitle: 'Create a free account or sign in to save this focus session into your permanent stats and streaks.',
+                          sessionDuration: displayTime,
+                        })
+                        setShowAuthModal(true)
+                        return
+                      }
                       setShowModal(true)
                     }}
                     className="pill-btn flex-1"
@@ -1092,6 +1159,20 @@ export default function Stopwatch({ userName }) {
         userName={userName}
         initialSubject={activeSubject}
         initialTopic={activeTopic}
+      />
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={(loggedUsername) => {
+          setShowAuthModal(false)
+          // Open SaveModal if session had time
+          if (elapsed > 0) {
+            setShowModal(true)
+          }
+        }}
+        title={authModalConfig.title}
+        subtitle={authModalConfig.subtitle}
+        sessionDuration={authModalConfig.sessionDuration}
       />
       <ShareCardModal
         isOpen={showShareModal}

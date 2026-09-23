@@ -16,6 +16,7 @@ import Welcome from './pages/Welcome'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
+import GuestGate from './components/GuestGate'
 import { getWallpaper, getWallpaperConfig, subscribeToUserWallpaper } from './utils/wallpaperStorage'
 
 // Secondary / public route-level code splitting
@@ -115,16 +116,53 @@ function AnimatedRoutes() {
           {/* Old /login redirect */}
           <Route path="/login" element={<Navigate to="/signin" replace />} />
 
-          {/* Main app — requires auth */}
-          <Route path="/" element={<RequireAuth><Stopwatch userName={userName} /></RequireAuth>} />
-          <Route path="/history" element={<RequireAuth><History userName={userName} /></RequireAuth>} />
-          <Route path="/history/:date" element={<RequireAuth><HistoryDetail userName={userName} /></RequireAuth>} />
-          <Route path="/plan" element={<RequireAuth><Plan userName={userName} /></RequireAuth>} />
-          <Route path="/planner" element={<RequireAuth><DayPlanner userName={userName} /></RequireAuth>} />
-          <Route path="/planner/:date" element={<RequireAuth><DayPlanner userName={userName} /></RequireAuth>} />
-          <Route path="/syllabus" element={<RequireAuth><Syllabus userName={userName} /></RequireAuth>} />
-          <Route path="/analytics" element={<RequireAuth><Analytics userName={userName} /></RequireAuth>} />
-          <Route path="/profile" element={<RequireAuth><Profile userName={userName} /></RequireAuth>} />
+          {/* Main app — Stopwatch and DayPlanner accessible to all (Guest Explorer mode) */}
+          <Route path="/" element={<Stopwatch userName={userName} />} />
+          <Route path="/planner" element={<DayPlanner userName={userName} />} />
+          <Route path="/planner/:date" element={<DayPlanner userName={userName} />} />
+          <Route path="/syllabus" element={<Syllabus userName={userName} />} />
+
+          {/* Personal Account features — protected with engaging GuestGate */}
+          <Route
+            path="/history"
+            element={
+              <GuestGate feature="history" isAuthenticated={Boolean(session)}>
+                <History userName={userName} />
+              </GuestGate>
+            }
+          />
+          <Route
+            path="/history/:date"
+            element={
+              <GuestGate feature="history" isAuthenticated={Boolean(session)}>
+                <HistoryDetail userName={userName} />
+              </GuestGate>
+            }
+          />
+          <Route
+            path="/plan"
+            element={
+              <GuestGate feature="plan" isAuthenticated={Boolean(session)}>
+                <Plan userName={userName} />
+              </GuestGate>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <GuestGate feature="analytics" isAuthenticated={Boolean(session)}>
+                <Analytics userName={userName} />
+              </GuestGate>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <GuestGate feature="profile" isAuthenticated={Boolean(session)}>
+                <Profile userName={userName} />
+              </GuestGate>
+            }
+          />
 
           {/* Watch — public (no auth required to watch a partner) */}
           <Route path="/watch" element={<WatchSearch userName={userName} />} />
@@ -134,7 +172,7 @@ function AnimatedRoutes() {
           <Route path="/partner/:partnerName" element={<PartnerHistory />} />
 
           {/* Catch-all */}
-          <Route path="*" element={<Navigate to={session ? '/' : '/welcome'} replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </div>
