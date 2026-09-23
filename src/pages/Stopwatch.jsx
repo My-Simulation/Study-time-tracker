@@ -78,7 +78,16 @@ export default function Stopwatch({ userName }) {
       displayName: s?.displayName || userName,
     }
   })
-  const pomoAlertFiredRef = useRef(false)
+  // Prevent background scrolling when mobile apps sheet is open
+  useEffect(() => {
+    if (showMobileMenu) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = prev
+      }
+    }
+  }, [showMobileMenu])
 
   // Sync wallpaper when userName switches or when updated locally/cloud
   useEffect(() => {
@@ -684,52 +693,57 @@ export default function Stopwatch({ userName }) {
         <div className="order-1 lg:order-1 lg:col-span-7 xl:col-span-7 flex flex-col gap-3">
 
           {/* Focus Mode & Visuals Toolbar */}
-          <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-[#14141c]/90 backdrop-blur-md border border-[#2a2a3e] shadow-sm">
+          <div className="flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl bg-[#14141c]/90 backdrop-blur-md border border-[#2a2a3e] shadow-sm">
             {/* Mode Switcher: Stopwatch vs Pomodoro */}
-            <div className="inline-flex p-0.5 rounded-xl bg-[#1c1c26] border border-[#2d2d3e]">
+            <div className="inline-flex p-0.5 rounded-xl bg-[#1c1c26] border border-[#2d2d3e] flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setTimerMode('stopwatch')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   timerMode === 'stopwatch'
                     ? 'bg-purple-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                ⏱️ Stopwatch
+                <span>⏱️</span>
+                <span className="hidden sm:inline ml-1">Stopwatch</span>
+                <span className="sm:hidden ml-0.5 text-[11px]">Watch</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTimerMode('pomodoro')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`px-2 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center cursor-pointer ${
                   timerMode === 'pomodoro'
                     ? 'bg-teal-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                🍅 Pomodoro
+                <span>🍅</span>
+                <span className="hidden sm:inline ml-1">Pomodoro</span>
+                <span className="sm:hidden ml-0.5 text-[11px]">Pomo</span>
               </button>
             </div>
 
             {/* Quick Focus Tools: Wallpaper & Zen Fullscreen */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setShowWallpaperModal(true)}
                 title="Choose Focus Background Wallpaper"
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-gray-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm active:scale-95"
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-gray-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm active:scale-95"
               >
                 <span>🎨</span>
-                <span className="text-[11px] font-semibold">Wallpaper</span>
+                <span className="hidden md:inline text-[11px] font-semibold">Wallpaper</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsZenMode(true)}
                 title="Zen Fullscreen Mode (Press F)"
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-gray-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm active:scale-95"
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-gray-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm active:scale-95"
               >
                 <span>⛶</span>
-                <span className="text-[11px] font-semibold">Fullscreen</span>
+                <span className="hidden md:inline text-[11px] font-semibold">Fullscreen</span>
+                <span className="md:hidden text-[11px] font-semibold">Zen</span>
               </button>
             </div>
           </div>
@@ -1182,7 +1196,8 @@ export default function Stopwatch({ userName }) {
                 className="px-3 sm:px-3.5 py-1.5 rounded-full bg-[#1e1e1e]/90 hover:bg-[#2c2c2c] border border-[#333] text-xs font-bold text-gray-300 hover:text-white transition-colors flex items-center gap-1.5 backdrop-blur-sm"
               >
                 <span>✕</span>
-                <span>Exit (Esc / F)</span>
+                <span className="hidden sm:inline">Exit (Esc / F)</span>
+                <span className="sm:hidden">Exit</span>
               </button>
             </div>
           </div>
@@ -1197,7 +1212,7 @@ export default function Stopwatch({ userName }) {
                 <div
                   className="font-black font-mono tracking-tight text-white drop-shadow-2xl text-center select-none w-full tabular-nums whitespace-nowrap"
                   style={{
-                    fontSize: 'clamp(54px, min(18vw, 24vh), 135px)',
+                    fontSize: 'clamp(44px, min(15vw, 20vh), 130px)',
                     lineHeight: 1,
                     fontFamily: '"Roboto Mono", ui-monospace, monospace',
                     letterSpacing: '-0.03em',
@@ -1218,7 +1233,7 @@ export default function Stopwatch({ userName }) {
                   <span
                     className="font-black text-white drop-shadow-2xl tabular-nums"
                     style={{
-                      fontSize: 'clamp(44px, min(14.5vw, 19vh), 120px)',
+                      fontSize: 'clamp(36px, min(12.5vw, 17vh), 110px)',
                       lineHeight: 1,
                       fontFamily: '"Roboto Mono", ui-monospace, monospace',
                       letterSpacing: '-0.03em',
@@ -1230,7 +1245,7 @@ export default function Stopwatch({ userName }) {
                     <span
                       className="font-bold text-purple-300/85 drop-shadow-lg tabular-nums ml-1 sm:ml-2"
                       style={{
-                        fontSize: 'clamp(22px, min(7.2vw, 9.5vh), 58px)',
+                        fontSize: 'clamp(18px, min(6.5vw, 8.5vh), 54px)',
                         lineHeight: 1,
                         fontFamily: '"Roboto Mono", ui-monospace, monospace',
                       }}
@@ -1271,11 +1286,14 @@ export default function Stopwatch({ userName }) {
                   minWidth: '160px',
                 }}
               >
-                {isRunning ? 'Pause (Space)' : 'Start (Space)'}
+                {isRunning ? 'Pause' : 'Start'}
               </button>
             </div>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] text-gray-500 hidden sm:block">
               Press <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">Space</kbd> to Start/Pause · <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">F</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">Esc</kbd> to Exit
+            </p>
+            <p className="text-[11px] text-gray-400 sm:hidden">
+              Tap Exit to return to dashboard
             </p>
           </div>
         </div>
@@ -1283,20 +1301,25 @@ export default function Stopwatch({ userName }) {
 
       {/* ── Mobile Apps & Navigation Sheet (Prevents Top Bar Overlap on Phone) ── */}
       {showMobileMenu && (
-        <div
-          onClick={() => setShowMobileMenu(false)}
-          className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75 backdrop-blur-sm cursor-pointer md:hidden"
-          style={{ animation: 'fadeIn 150ms ease-out' }}
-        >
+        <div className="fixed inset-0 z-50 flex flex-col justify-end md:hidden">
+          {/* Backdrop (tap outside to close) */}
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg mx-auto bg-[#14141c] border-t border-[#2e2e42] rounded-t-3xl p-5 pb-8 shadow-2xl flex flex-col gap-4 text-white cursor-default"
+            onClick={() => setShowMobileMenu(false)}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm cursor-pointer transition-opacity"
+            style={{ animation: 'fadeIn 150ms ease-out' }}
+          />
+
+          {/* Slide-Up Bottom Sheet */}
+          <div
+            className="relative z-10 w-full max-w-lg mx-auto bg-[#14141c] border-t border-[#2e2e42] rounded-t-3xl shadow-2xl flex flex-col max-h-[85vh] max-h-[85dvh] text-white overflow-hidden"
             style={{ animation: 'slideUp 200ms ease-out' }}
           >
             {/* Drawer top handle */}
-            <div className="w-12 h-1.5 rounded-full bg-[#333] mx-auto -mt-1 mb-1" />
+            <div className="pt-3 pb-1 flex justify-center w-full flex-shrink-0">
+              <div className="w-12 h-1.5 rounded-full bg-[#3a3a4e]" />
+            </div>
 
-            <div className="flex items-center justify-between pb-2 border-b border-[#252538]">
+            <div className="flex items-center justify-between px-5 pb-3 border-b border-[#252538] flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-lg">⚡</span>
                 <span className="text-sm font-black text-white">JeetPrep Apps & Tools</span>
@@ -1304,23 +1327,23 @@ export default function Stopwatch({ userName }) {
               <button
                 type="button"
                 onClick={() => setShowMobileMenu(false)}
-                className="w-8 h-8 rounded-full bg-[#20202e] hover:bg-[#2c2c40] text-gray-300 hover:text-white flex items-center justify-center text-sm font-bold cursor-pointer transition-all"
+                className="w-8 h-8 rounded-full bg-[#20202e] hover:bg-[#2c2c40] text-gray-300 hover:text-white flex items-center justify-center text-sm font-bold cursor-pointer transition-all active:scale-95"
               >
                 ✕
               </button>
             </div>
 
-            {/* Grid of Apps */}
-            <div className="grid grid-cols-2 gap-2.5">
+            {/* Scrollable Grid of Apps */}
+            <div className="p-4 overflow-y-auto overscroll-contain flex-1 grid grid-cols-2 gap-2.5 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))]">
               <button
                 type="button"
                 onClick={() => { setShowMobileMenu(false); navigate('/planner') }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
-                <span className="text-2xl p-2 rounded-xl bg-pink-500/15 border border-pink-500/30">🌸</span>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Day Planner</h4>
-                  <p className="text-[10px] text-gray-400">Timetable & goals</p>
+                <span className="text-2xl p-2 rounded-xl bg-pink-500/15 border border-pink-500/30 flex-shrink-0">🌸</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Day Planner</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Timetable & goals</p>
                 </div>
               </button>
 
@@ -1329,10 +1352,10 @@ export default function Stopwatch({ userName }) {
                 onClick={() => { setShowMobileMenu(false); navigate('/syllabus') }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
-                <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30">📚</span>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Syllabus Tracker</h4>
-                  <p className="text-[10px] text-gray-400">Chapters & topics</p>
+                <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 flex-shrink-0">📚</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Syllabus</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Chapters & topics</p>
                 </div>
               </button>
 
@@ -1341,10 +1364,10 @@ export default function Stopwatch({ userName }) {
                 onClick={() => { setShowMobileMenu(false); navigate('/plan') }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
-                <span className="text-2xl p-2 rounded-xl bg-indigo-500/15 border border-indigo-500/30">📅</span>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Weekly Plan</h4>
-                  <p className="text-[10px] text-gray-400">Daily focus goals</p>
+                <span className="text-2xl p-2 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex-shrink-0">📅</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Weekly Plan</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Daily focus goals</p>
                 </div>
               </button>
 
@@ -1353,10 +1376,10 @@ export default function Stopwatch({ userName }) {
                 onClick={() => { setShowMobileMenu(false); navigate('/watch') }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
-                <span className="text-2xl p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30">👥</span>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Watch Partner</h4>
-                  <p className="text-[10px] text-gray-400">Live study room</p>
+                <span className="text-2xl p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex-shrink-0">👥</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Watch Partner</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Live study room</p>
                 </div>
               </button>
 
@@ -1365,10 +1388,10 @@ export default function Stopwatch({ userName }) {
                 onClick={() => { setShowMobileMenu(false); navigate('/analytics') }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
-                <span className="text-2xl p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30">📈</span>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Analytics</h4>
-                  <p className="text-[10px] text-gray-400">Progress charts</p>
+                <span className="text-2xl p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex-shrink-0">📈</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Analytics</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Progress charts</p>
                 </div>
               </button>
 
@@ -1377,10 +1400,10 @@ export default function Stopwatch({ userName }) {
                 onClick={() => { setShowMobileMenu(false); navigate('/history') }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
-                <span className="text-2xl p-2 rounded-xl bg-amber-500/15 border border-amber-500/30">🕒</span>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Study History</h4>
-                  <p className="text-[10px] text-gray-400">Past logs & streaks</p>
+                <span className="text-2xl p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 flex-shrink-0">🕒</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Study History</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Past logs & streaks</p>
                 </div>
               </button>
 
@@ -1389,10 +1412,10 @@ export default function Stopwatch({ userName }) {
                 onClick={() => { setShowMobileMenu(false); togglePictureInPicture() }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
-                <span className="text-2xl p-2 rounded-xl bg-blue-500/15 border border-blue-500/30">🪟</span>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Float Mini Timer</h4>
-                  <p className="text-[10px] text-gray-400">Picture-in-picture</p>
+                <span className="text-2xl p-2 rounded-xl bg-blue-500/15 border border-blue-500/30 flex-shrink-0">🪟</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Float Timer</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Picture-in-picture</p>
                 </div>
               </button>
 
@@ -1401,10 +1424,10 @@ export default function Stopwatch({ userName }) {
                 onClick={() => { setShowMobileMenu(false); setShowWallpaperModal(true) }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
-                <span className="text-2xl p-2 rounded-xl bg-rose-500/15 border border-rose-500/30">🎨</span>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Focus Wallpaper</h4>
-                  <p className="text-[10px] text-gray-400">Background themes</p>
+                <span className="text-2xl p-2 rounded-xl bg-rose-500/15 border border-rose-500/30 flex-shrink-0">🎨</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Focus Themes</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Wallpapers</p>
                 </div>
               </button>
             </div>
