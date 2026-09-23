@@ -64,6 +64,7 @@ export default function Stopwatch({ userName }) {
   const [showAICoach, setShowAICoach] = useState(false)
   const [userAIContext, setUserAIContext] = useState(null)
   const [showWallpaperModal, setShowWallpaperModal] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [wallpaper, setWallpaper] = useState(() => getWallpaper(userName))
   const [wallpaperConfig, setWallpaperConfig] = useState(() => getWallpaperConfig(userName))
   const [streakCount, setStreakCount] = useState(0)
@@ -594,7 +595,7 @@ export default function Stopwatch({ userName }) {
         </div>
 
         {/* Right icons */}
-        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           {/* Kit AI Coach Button */}
           <button
             onClick={async () => {
@@ -616,67 +617,163 @@ export default function Stopwatch({ userName }) {
             }}
             title="Chat with Kit AI"
             aria-label="Kit AI"
-            className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl bg-gradient-to-r from-purple-600/25 to-indigo-600/25 hover:from-purple-600/40 hover:to-indigo-600/40 border border-purple-500/40 text-purple-300 text-xs font-bold transition-all cursor-pointer flex-shrink-0 shadow-sm mr-0.5"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600/25 to-indigo-600/25 hover:from-purple-600/40 hover:to-indigo-600/40 border border-purple-500/40 text-purple-300 text-xs font-bold transition-all cursor-pointer flex-shrink-0 shadow-sm"
           >
             <span>🤖</span>
             <span className="hidden sm:inline">Kit AI</span>
           </button>
-          {/* Day Planner Sheet icon */}
-          <IconButton onClick={() => navigate('/planner')} title="Daily Study Planner" aria-label="Day Planner">
-            <span className="text-sm sm:text-base leading-none">🌸</span>
-          </IconButton>
-          {/* Syllabus tracker icon */}
-          <IconButton onClick={() => navigate('/syllabus')} title="Syllabus & Topics" aria-label="Syllabus">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-          </IconButton>
-          {/* Plan icon */}
-          <IconButton onClick={() => navigate('/plan')} title="Study Plan" aria-label="Study Plan">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="3" y1="9" x2="21" y2="9" />
-            </svg>
-          </IconButton>
-          {/* Watch partner */}
-          <IconButton onClick={() => navigate('/watch')} title="Watch Partner" aria-label="Watch Partner">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </IconButton>
-          {/* Analytics icon */}
-          <IconButton onClick={() => navigate('/analytics')} title="Study Analytics" aria-label="Study Analytics">
-            <span className="text-sm sm:text-base leading-none">📈</span>
-          </IconButton>
-          {/* History */}
-          <IconButton onClick={() => navigate('/history')} title="Study History" aria-label="History">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-            </svg>
-          </IconButton>
-          {/* Zen / Fullscreen button */}
-          <IconButton onClick={() => setIsZenMode(true)} title="Zen Fullscreen Mode (Press F)" aria-label="Zen Mode">
-            <span className="text-xs sm:text-sm leading-none">⛶</span>
-          </IconButton>
-          {/* Wallpaper Picker button */}
-          <IconButton onClick={() => setShowWallpaperModal(true)} title="Choose Focus Background Wallpaper" aria-label="Wallpaper">
-            <span className="text-xs sm:text-sm leading-none">🎨</span>
-          </IconButton>
-          {/* Floating Mini Stopwatch (PiP) */}
-          <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
-            <span className="text-sm sm:text-base leading-none">🪟</span>
-          </IconButton>
+
+          {/* Desktop Navigation Icons (hidden on mobile to prevent overlap) */}
+          <div className="hidden md:flex items-center gap-0.5 sm:gap-1">
+            {/* Day Planner Sheet icon */}
+            <IconButton onClick={() => navigate('/planner')} title="Daily Study Planner" aria-label="Day Planner">
+              <span className="text-sm sm:text-base leading-none">🌸</span>
+            </IconButton>
+            {/* Syllabus tracker icon */}
+            <IconButton onClick={() => navigate('/syllabus')} title="Syllabus & Topics" aria-label="Syllabus">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            </IconButton>
+            {/* Plan icon */}
+            <IconButton onClick={() => navigate('/plan')} title="Study Plan" aria-label="Study Plan">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="3" y1="9" x2="21" y2="9" />
+              </svg>
+            </IconButton>
+            {/* Watch partner */}
+            <IconButton onClick={() => navigate('/watch')} title="Watch Partner" aria-label="Watch Partner">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </IconButton>
+            {/* Analytics icon */}
+            <IconButton onClick={() => navigate('/analytics')} title="Study Analytics" aria-label="Study Analytics">
+              <span className="text-sm sm:text-base leading-none">📈</span>
+            </IconButton>
+            {/* History */}
+            <IconButton onClick={() => navigate('/history')} title="Study History" aria-label="History">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+              </svg>
+            </IconButton>
+            {/* Floating Mini Stopwatch (PiP) */}
+            <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
+              <span className="text-sm sm:text-base leading-none">🪟</span>
+            </IconButton>
+          </div>
+
+          {/* Mobile All-Apps Trigger Button (Prevents mobile top-bar squishing) */}
+          <button
+            type="button"
+            onClick={() => setShowMobileMenu(true)}
+            className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-gray-200 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer ml-1"
+            title="Open Apps & Tools Menu"
+          >
+            <span className="text-sm">⊞</span>
+            <span>Apps</span>
+          </button>
         </div>
       </div>
 
       {/* ── Main Responsive Content Area (Timer #1 on Mobile, 2 Columns on Desktop) ── */}
-      <div className="relative z-10 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-3 sm:pt-5 pb-10 flex flex-col lg:grid lg:grid-cols-12 lg:gap-6 flex-1">
+      <div className="relative z-10 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-10 flex flex-col lg:grid lg:grid-cols-12 lg:gap-6 flex-1">
         {/* Left Column: Timer & Controls (Always #1 on Mobile) */}
         <div className="order-1 lg:order-1 lg:col-span-7 xl:col-span-7 flex flex-col gap-3">
+
+          {/* Focus Mode & Visuals Toolbar */}
+          <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-[#14141c]/90 backdrop-blur-md border border-[#2a2a3e] shadow-sm">
+            {/* Mode Switcher: Stopwatch vs Pomodoro */}
+            <div className="inline-flex p-0.5 rounded-xl bg-[#1c1c26] border border-[#2d2d3e]">
+              <button
+                type="button"
+                onClick={() => setTimerMode('stopwatch')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  timerMode === 'stopwatch'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                ⏱️ Stopwatch
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimerMode('pomodoro')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                  timerMode === 'pomodoro'
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                🍅 Pomodoro
+              </button>
+            </div>
+
+            {/* Quick Focus Tools: Wallpaper & Zen Fullscreen */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowWallpaperModal(true)}
+                title="Choose Focus Background Wallpaper"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-gray-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <span>🎨</span>
+                <span className="text-[11px] font-semibold">Wallpaper</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsZenMode(true)}
+                title="Zen Fullscreen Mode (Press F)"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-gray-300 hover:text-white text-xs font-medium transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <span>⛶</span>
+                <span className="text-[11px] font-semibold">Fullscreen</span>
+              </button>
+            </div>
+          </div>
+
           {/* Main Stopwatch Timer Card */}
           <div className="card flex flex-col flex-1 overflow-hidden transition-all duration-300 shadow-2xl bg-[#14141a]/95 backdrop-blur-md border border-[#2e2e42]">
             <div ref={captureRef} className="rounded-2xl overflow-hidden bg-[#181822]/95 backdrop-blur-md">
+              {/* Pomodoro countdown bar */}
+              {timerMode === 'pomodoro' && (
+                <div className="px-4 py-2.5 bg-[#101b22] border-b border-teal-500/25 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🍅</span>
+                    <div className="text-left">
+                      <span className="text-xs font-extrabold text-teal-300">
+                        Focus Countdown: {formatPomodoroTime(pomoRemainingSec)}
+                      </span>
+                      <span className="text-[10px] text-gray-400 block">
+                        {pomoMinutes}m target focus block
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPomoMinutes(25)}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        pomoMinutes === 25 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#182632] text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      25m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPomoMinutes(50)}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        pomoMinutes === 50 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#182632] text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      50m
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <StopwatchDisplay displayTime={displayTime} />
 
               {/* Subtle compact timeline pill */}
@@ -1180,6 +1277,137 @@ export default function Stopwatch({ userName }) {
             <p className="text-[11px] text-gray-500">
               Press <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">Space</kbd> to Start/Pause · <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">F</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-[#222] border border-[#333] text-gray-300">Esc</kbd> to Exit
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile Apps & Navigation Sheet (Prevents Top Bar Overlap on Phone) ── */}
+      {showMobileMenu && (
+        <div
+          onClick={() => setShowMobileMenu(false)}
+          className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75 backdrop-blur-sm cursor-pointer md:hidden"
+          style={{ animation: 'fadeIn 150ms ease-out' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg mx-auto bg-[#14141c] border-t border-[#2e2e42] rounded-t-3xl p-5 pb-8 shadow-2xl flex flex-col gap-4 text-white cursor-default"
+            style={{ animation: 'slideUp 200ms ease-out' }}
+          >
+            {/* Drawer top handle */}
+            <div className="w-12 h-1.5 rounded-full bg-[#333] mx-auto -mt-1 mb-1" />
+
+            <div className="flex items-center justify-between pb-2 border-b border-[#252538]">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⚡</span>
+                <span className="text-sm font-black text-white">JeetPrep Apps & Tools</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMobileMenu(false)}
+                className="w-8 h-8 rounded-full bg-[#20202e] hover:bg-[#2c2c40] text-gray-300 hover:text-white flex items-center justify-center text-sm font-bold cursor-pointer transition-all"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Grid of Apps */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/planner') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-pink-500/15 border border-pink-500/30">🌸</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Day Planner</h4>
+                  <p className="text-[10px] text-gray-400">Timetable & goals</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/syllabus') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30">📚</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Syllabus Tracker</h4>
+                  <p className="text-[10px] text-gray-400">Chapters & topics</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/plan') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-indigo-500/15 border border-indigo-500/30">📅</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Weekly Plan</h4>
+                  <p className="text-[10px] text-gray-400">Daily focus goals</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/watch') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30">👥</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Watch Partner</h4>
+                  <p className="text-[10px] text-gray-400">Live study room</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/analytics') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30">📈</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Analytics</h4>
+                  <p className="text-[10px] text-gray-400">Progress charts</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/history') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-amber-500/15 border border-amber-500/30">🕒</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Study History</h4>
+                  <p className="text-[10px] text-gray-400">Past logs & streaks</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); togglePictureInPicture() }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-blue-500/15 border border-blue-500/30">🪟</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Float Mini Timer</h4>
+                  <p className="text-[10px] text-gray-400">Picture-in-picture</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); setShowWallpaperModal(true) }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-rose-500/15 border border-rose-500/30">🎨</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Focus Wallpaper</h4>
+                  <p className="text-[10px] text-gray-400">Background themes</p>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       )}
