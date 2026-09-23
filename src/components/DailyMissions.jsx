@@ -9,13 +9,28 @@ import { getDailyMissions, saveDailyMissions } from '../utils/firestoreHelpers'
 import { todayString } from '../utils/formatTime'
 
 export default function DailyMissions({ userName, date = todayString() }) {
-  const [missions, setMissions] = useState([])
+  const [missions, setMissions] = useState(() => {
+    if (!userName) {
+      try {
+        const raw = localStorage.getItem(`stt_guest_missions_${date}`)
+        if (raw) return JSON.parse(raw)
+      } catch {}
+      return [
+        { id: 'gm_1', text: 'Revise core concepts & solve 20 practice questions', completed: false },
+        { id: 'gm_2', text: 'Hit daily study hours target on timer', completed: false },
+      ]
+    }
+    return []
+  })
   const [newText, setNewText] = useState('')
   const [collapsed, setCollapsed] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(() => Boolean(userName))
 
   useEffect(() => {
-    if (!userName) return
+    if (!userName) {
+      setIsLoading(false)
+      return
+    }
     setIsLoading(true)
     getDailyMissions(userName, date)
       .then((items) => {
@@ -26,7 +41,13 @@ export default function DailyMissions({ userName, date = todayString() }) {
 
   const persist = (updated) => {
     setMissions(updated)
-    saveDailyMissions(userName, date, updated)
+    if (userName) {
+      saveDailyMissions(userName, date, updated)
+    } else {
+      try {
+        localStorage.setItem(`stt_guest_missions_${date}`, JSON.stringify(updated))
+      } catch {}
+    }
   }
 
   const handleToggle = (id) => {

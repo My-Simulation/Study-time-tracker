@@ -15,7 +15,6 @@ import StopwatchDisplay from '../components/StopwatchDisplay'
 import LapTable from '../components/LapTable'
 import SaveModal from '../components/SaveModal'
 import Toast from '../components/Toast'
-import ExamCountdown from '../components/ExamCountdown'
 import DailyMissions from '../components/DailyMissions'
 import ShareCardModal from '../components/ShareCardModal'
 import BackgroundModal from '../components/BackgroundModal'
@@ -656,6 +655,14 @@ export default function Stopwatch({ userName }) {
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
           </IconButton>
+          {/* Zen / Fullscreen button */}
+          <IconButton onClick={() => setIsZenMode(true)} title="Zen Fullscreen Mode (Press F)" aria-label="Zen Mode">
+            <span className="text-xs sm:text-sm leading-none">⛶</span>
+          </IconButton>
+          {/* Wallpaper Picker button */}
+          <IconButton onClick={() => setShowWallpaperModal(true)} title="Choose Focus Background Wallpaper" aria-label="Wallpaper">
+            <span className="text-xs sm:text-sm leading-none">🎨</span>
+          </IconButton>
           {/* Floating Mini Stopwatch (PiP) */}
           <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
             <span className="text-sm sm:text-base leading-none">🪟</span>
@@ -663,133 +670,13 @@ export default function Stopwatch({ userName }) {
         </div>
       </div>
 
-      {/* ── Mode Selector (Stopwatch / Pomodoro), Fullscreen & Wallpaper ── */}
-      <div className="relative z-30 flex items-center justify-center gap-2 px-4 pt-3 pb-2 max-w-7xl mx-auto w-full">
-        <div className="inline-flex p-0.5 rounded-full bg-[#181818] border border-[#2a2a2a] shadow-inner">
-          <button
-            onClick={() => setTimerMode('stopwatch')}
-            className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
-              timerMode === 'stopwatch'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            ⏱️ Stopwatch
-          </button>
-          <button
-            onClick={() => setTimerMode('pomodoro')}
-            className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 ${
-              timerMode === 'pomodoro'
-                ? 'bg-teal-600 text-white shadow-sm'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            🍅 Pomodoro
-          </button>
-        </div>
-
-        {/* Zen / Fullscreen Mode button */}
-        <button
-          onClick={() => setIsZenMode(true)}
-          title="Zen Fullscreen Mode (Press F)"
-          className="p-1.5 rounded-full bg-[#181818] hover:bg-[#252525] border border-[#2a2a2a] text-gray-300 hover:text-white transition-all text-xs flex items-center justify-center"
-        >
-          <span className="text-sm">⛶</span>
-        </button>
-
-        {/* Wallpaper Picker button */}
-        <button
-          onClick={() => setShowWallpaperModal(true)}
-          title="Choose Focus Background Wallpaper"
-          className="px-2.5 py-1.5 rounded-full bg-[#181818] hover:bg-[#252525] border border-[#2a2a2a] text-gray-300 hover:text-white transition-all text-xs flex items-center justify-center gap-1.5"
-        >
-          <span className="text-xs">🎨</span>
-          <span className="text-[11px] font-semibold hidden sm:inline">Wallpaper</span>
-        </button>
-      </div>
-
-      {/* ── Main Responsive Content Area (2 Columns on Laptop / Desktop, Stacked on Mobile) ── */}
-      <div className="relative z-10 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pb-10 flex flex-col lg:grid lg:grid-cols-12 lg:gap-6 flex-1">
-        {/* Left Column: Timer, Topic Tag & Control Buttons (lg:col-span-7 xl:col-span-7) */}
-        <div className="order-2 lg:order-1 lg:col-span-7 xl:col-span-7 flex flex-col gap-3">
-          {/* Active Topic Tagging */}
-          {syllabus.length > 0 && (
-            <div className="card px-3.5 py-2 flex items-center justify-between text-xs bg-[#16161e]/90 backdrop-blur-md border border-[#2d2d40] shadow-md">
-              <span className="text-gray-400 font-medium text-[11px] flex items-center gap-1">
-                <span>🏷️</span> Topic Tag:
-              </span>
-              <div className="flex items-center gap-1.5 overflow-x-auto max-w-[80%]">
-                <select
-                  value={activeSubject}
-                  onChange={(e) => {
-                    setActiveSubject(e.target.value)
-                    setActiveTopic('')
-                  }}
-                  className="rounded-lg bg-[#141414] border border-[#2a2a2a] text-white text-[11px] px-2 py-1 outline-none focus:border-purple-500"
-                >
-                  <option value="">Select Subject</option>
-                  {syllabus.map((s) => (
-                    <option key={s.id} value={s.name}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                {activeSubject && (
-                  <select
-                    value={activeTopic}
-                    onChange={(e) => setActiveTopic(e.target.value)}
-                    className="rounded-lg bg-[#141414] border border-[#2a2a2a] text-white text-[11px] px-2 py-1 outline-none focus:border-purple-500 max-w-[150px] truncate"
-                  >
-                    <option value="">Select Topic</option>
-                    {(syllabus.find((s) => s.name === activeSubject)?.topics || []).map((t) => (
-                      <option key={t.id} value={t.name}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            </div>
-          )}
-
+      {/* ── Main Responsive Content Area (Timer #1 on Mobile, 2 Columns on Desktop) ── */}
+      <div className="relative z-10 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-3 sm:pt-5 pb-10 flex flex-col lg:grid lg:grid-cols-12 lg:gap-6 flex-1">
+        {/* Left Column: Timer & Controls (Always #1 on Mobile) */}
+        <div className="order-1 lg:order-1 lg:col-span-7 xl:col-span-7 flex flex-col gap-3">
           {/* Main Stopwatch Timer Card */}
           <div className="card flex flex-col flex-1 overflow-hidden transition-all duration-300 shadow-2xl bg-[#14141a]/95 backdrop-blur-md border border-[#2e2e42]">
             <div ref={captureRef} className="rounded-2xl overflow-hidden bg-[#181822]/95 backdrop-blur-md">
-              {/* Pomodoro countdown bar */}
-              {timerMode === 'pomodoro' && (
-                <div className="px-4 py-2.5 bg-[#141b24] border-b border-[#223344] flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">🍅</span>
-                    <div className="text-left">
-                      <span className="text-xs font-extrabold text-teal-300">
-                        Focus Countdown: {formatPomodoroTime(pomoRemainingSec)}
-                      </span>
-                      <span className="text-[10px] text-gray-400 block">
-                        {pomoMinutes}m target focus block
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => setPomoMinutes(25)}
-                      className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
-                        pomoMinutes === 25 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#222] text-gray-300'
-                      }`}
-                    >
-                      25m
-                    </button>
-                    <button
-                      onClick={() => setPomoMinutes(50)}
-                      className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
-                        pomoMinutes === 50 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#222] text-gray-300'
-                      }`}
-                    >
-                      50m
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <StopwatchDisplay displayTime={displayTime} />
 
               {/* Subtle compact timeline pill */}
@@ -801,11 +688,6 @@ export default function Stopwatch({ userName }) {
                   baseElapsed={elapsed}
                   laps={laps}
                 />
-              </div>
-
-              {laps.length > 0 && <div className="border-t border-[#2a2a2a]" />}
-              <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
-                <LapTable laps={laps} />
               </div>
             </div>
 
@@ -885,11 +767,6 @@ export default function Stopwatch({ userName }) {
                   <span className="text-xs font-semibold">{hasTime && !isTodayRest ? 'Share' : 'Share Focus Card'}</span>
                 </button>
               </div>
-              {isRunning && (
-                <button onClick={lap} className="pill-btn w-full" style={{ background: '#3b82f6', color: 'white' }}>
-                  Lap
-                </button>
-              )}
               <div className="flex gap-3">
                 <button
                   onClick={reset}
@@ -941,64 +818,8 @@ export default function Stopwatch({ userName }) {
           </div>
         </div>
 
-        {/* Right Column: Day Plan, Exam Goals, Progress & Daily Missions (lg:col-span-5 xl:col-span-5) */}
-        <div className="order-1 lg:order-2 lg:col-span-5 xl:col-span-5 flex flex-col gap-3">
-          {/* Direct One-Tap Notification Permission Banner */}
-          {notifPermission === 'default' && (
-            <div
-              onClick={handleEnableNotification}
-              className="p-3 rounded-2xl flex items-center justify-between gap-3 border border-amber-500/40 bg-amber-500/10 cursor-pointer hover:bg-amber-500/20 transition-all shadow-md btn-press backdrop-blur-md"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-xl flex-shrink-0">🔔</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-amber-200 truncate">Enable Lock Screen & Notification Timer</p>
-                  <p className="text-[10px] text-gray-300 mt-0.5 truncate">Tap to show running stopwatch on top of your screen</p>
-                </div>
-              </div>
-              <span className="text-xs font-bold text-black bg-amber-400 px-3 py-1 rounded-full flex-shrink-0 shadow-sm">
-                Turn On
-              </span>
-            </div>
-          )}
-
-          {/* Day Study Planner Sheet Banner */}
-          <div
-            onClick={() => navigate('/planner')}
-            className="p-3.5 rounded-2xl flex items-center justify-between gap-3 border border-pink-500/40 cursor-pointer hover:border-pink-500/60 transition-all btn-press shadow-lg backdrop-blur-md"
-            style={{
-              background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.22) 0%, rgba(168, 85, 247, 0.16) 100%)',
-            }}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-xl flex-shrink-0">🌸</span>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-pink-300 uppercase tracking-wider whitespace-nowrap">
-                    DAY {dayNum} PLAN
-                  </span>
-                  {dayPlan?.goals?.[0] && (
-                    <span className="text-[11px] text-gray-200 font-medium truncate">
-                      · {dayPlan.goals[0]}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-gray-300 mt-0.5 truncate">
-                  {dayPlan?.rows?.length
-                    ? `${dayPlan.rows.filter((r) => r.done).length}/${dayPlan.rows.length} topics done today`
-                    : 'Open today’s planner sheet & set your top goals'}
-                </p>
-              </div>
-            </div>
-
-            <span className="text-xs font-bold text-pink-200 bg-pink-500/30 border border-pink-500/50 px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0">
-              Open Sheet →
-            </span>
-          </div>
-
-          {/* Exam D-Day Countdown Widget */}
-          <ExamCountdown userName={userName} totalStudiedSeconds={todayStudied + totalSeconds} />
-
+        {/* Right Column: Goal Progress & To-Do Missions (lg:col-span-5 xl:col-span-5) */}
+        <div className="order-2 lg:order-2 lg:col-span-5 xl:col-span-5 flex flex-col gap-3">
           {/* Daily Goal Progress Bar */}
           {goalProgress && (
             <div>

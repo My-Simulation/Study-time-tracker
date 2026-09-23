@@ -25,6 +25,7 @@ import { todayString, formatHoursMinutes, formatTargetHoursText, parseHoursInput
 import AITimeTableModal from '../components/AITimeTableModal'
 import AICoachDrawer from '../components/AICoachDrawer'
 import AuthModal from '../components/AuthModal'
+import ExamCountdown from '../components/ExamCountdown'
 import { buildUserAIContext } from '../utils/aiService'
 
 const TARGET_HOURS_OPTIONS = [
@@ -703,6 +704,9 @@ export default function DayPlanner({ userName }) {
       </div>
 
       <div className="flex-1 flex flex-col px-3 pb-24 sm:pb-16 max-w-4xl mx-auto w-full gap-4">
+        {/* Exam D-Day Countdown Widget */}
+        <ExamCountdown userName={userName} totalStudiedSeconds={actualSeconds} />
+
         {/* ── Main Planner Sheet Container ── */}
         <div
           className="rounded-3xl p-4 sm:p-7 border border-[#2a2a2a] flex flex-col gap-5 relative shadow-2xl overflow-hidden"
