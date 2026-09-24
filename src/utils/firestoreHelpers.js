@@ -569,6 +569,9 @@ export async function saveSession({
   topic = '',
   reflectionTag = '',
   resetLiveTimer = false,
+  timeline = [],
+  chunks = [],
+  chunkCount = 0,
 }) {
   const localDate = toLocalDateStr(date)
   const settings = await getUserSettings(userName)
@@ -584,6 +587,17 @@ export async function saveSession({
     laps,
     screenshotUrl,
     createdAt: serverTimestamp(),
+  }
+
+  // Save session chunks & timeline
+  if (Array.isArray(chunks) && chunks.length > 0) {
+    sessionData.chunks = chunks
+    sessionData.chunkCount = chunks.filter((it) => it.type === 'chunk').length || chunks.length
+  } else if (chunkCount) {
+    sessionData.chunkCount = Number(chunkCount)
+  }
+  if (Array.isArray(timeline) && timeline.length > 0) {
+    sessionData.timeline = timeline
   }
 
   // Add optional outcome & target tracking fields if provided
@@ -623,6 +637,8 @@ export async function saveSession({
           action: 'save_reset',
           resetAtMs: now,
           lastSavedAtMs: now,
+          timeline: [],
+          lastSessionTimeline: timeline || [],
         }).catch(() => {})
       }
       if (typeof window !== 'undefined') {
@@ -646,6 +662,8 @@ export async function saveSession({
       action: 'save_reset',
       resetAtMs: now,
       lastSavedAtMs: now,
+      timeline: [],
+      lastSessionTimeline: timeline || [],
     }).catch(() => {})
   }
   if (typeof window !== 'undefined') {

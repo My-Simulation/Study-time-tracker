@@ -9,9 +9,10 @@
  *  - Subject / Topic tagging
  */
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { captureAndUploadScreenshot, saveSession, getSyllabus, getUserSettings, isRestDay } from '../utils/firestoreHelpers'
 import { todayString } from '../utils/formatTime'
+import { parseTimeline } from './SessionTimeline'
 
 const REFLECTION_TAGS = [
   '🔥 Deep Focus',
@@ -32,6 +33,7 @@ export default function SaveModal({
   displayTime,
   totalSeconds,
   laps,
+  timeline = [],
   userName,
   initialSubject = '',
   initialTopic = '',
@@ -55,6 +57,11 @@ export default function SaveModal({
   const [settings, setSettings] = useState(null)
 
   const isSelectedDateRest = isRestDay(selectedDate, settings)
+
+  // Parse session chunks & timeline events for saving
+  const { items: sessionChunks, chunkCount } = useMemo(() => {
+    return parseTimeline(timeline, false, null, (totalSeconds || 0) * 1000, laps)
+  }, [timeline, totalSeconds, laps])
 
   // Reset state when modal opens
   useEffect(() => {
@@ -110,18 +117,22 @@ export default function SaveModal({
 
       // 2. Save to Firestore
       setSavingStep('firestore')
+      const validChunks = sessionChunks.filter((it) => it.type === 'chunk' || it.type === 'break')
       await saveSession({
         userName,
         date: selectedDate,
         totalTime: displayTime,
         totalSeconds,
-        laps: laps.map(({ lapNo, split, total, splitMs, totalMs }) => ({
+        laps: (laps || []).map(({ lapNo, split, total, splitMs, totalMs }) => ({
           lapNo,
           split,
           total,
           splitMs: splitMs || 0,
           totalMs: totalMs || 0,
         })),
+        timeline: Array.isArray(timeline) ? timeline : [],
+        chunks: validChunks,
+        chunkCount: chunkCount || validChunks.filter((it) => it.type === 'chunk').length || 0,
         screenshotUrl,
         focusScore: Number(focusScore) || 0,
         outputCount: outputCount !== '' ? Number(outputCount) : null,
@@ -179,11 +190,21 @@ export default function SaveModal({
         </div>
 
         {/* Session preview */}
-        <div className="flex items-center gap-3 rounded-xl bg-[#111] border border-[#2a2a2a] px-3.5 py-2.5">
-          <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Total Time</div>
-          <div className="font-mono tabular-nums text-white font-bold ml-auto text-base">
-            {displayTime}
+        <div className="flex flex-col gap-1.5 rounded-xl bg-[#111] border border-[#2a2a2a] px-3.5 py-2.5">
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Total Time</div>
+            <div className="font-mono tabular-nums text-white font-bold text-base">
+              {displayTime}
+            </div>
           </div>
+          {chunkCount > 0 && (
+            <div className="flex items-center justify-between text-[11px] text-purple-300 border-t border-[#222] pt-1.5">
+              <span>🕒 Session Chunks:</span>
+              <span className="font-semibold bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 rounded-full">
+                {chunkCount} {chunkCount === 1 ? 'chunk' : 'chunks'} included
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Date picker */}

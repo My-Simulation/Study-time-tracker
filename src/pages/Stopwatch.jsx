@@ -1098,6 +1098,7 @@ export default function Stopwatch({ userName }) {
         displayTime={displayTime}
         totalSeconds={totalSeconds}
         laps={laps}
+        timeline={timeline}
         userName={userName}
         initialSubject={activeSubject}
         initialTopic={activeTopic}

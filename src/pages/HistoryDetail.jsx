@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getSessionsByDate } from '../utils/firestoreHelpers'
 import { formatDateDisplay } from '../utils/formatTime'
 import { ReadOnlyLapTable } from '../components/LapTable'
+import SessionTimeline from '../components/SessionTimeline'
 import { clearSession } from '../utils/auth'
 
 export default function HistoryDetail({ userName }) {
@@ -154,6 +155,18 @@ function SessionCard({ session, index }) {
         {session.laps && session.laps.length > 0 && (
           <div className="border-t border-[#2a2a2a]">
             <ReadOnlyLapTable laps={session.laps} />
+          </div>
+        )}
+
+        {/* Session Chunks & Breaks */}
+        {((session.timeline && session.timeline.length > 0) || (session.chunks && session.chunks.length > 0)) && (
+          <div className="border-t border-[#2a2a2a] p-3">
+            <SessionTimeline
+              timeline={session.timeline || []}
+              laps={session.laps || []}
+              baseElapsed={(session.totalSeconds || 0) * 1000}
+              label="Study Chunks & Breaks"
+            />
           </div>
         )}
       </div>
