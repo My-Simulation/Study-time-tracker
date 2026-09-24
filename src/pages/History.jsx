@@ -16,6 +16,7 @@ import {
   getUserSettings, isRestDay,
 } from '../utils/firestoreHelpers'
 import { formatDateDisplay, formatHoursMinutes, todayString, getLocalWeekdayId } from '../utils/formatTime'
+import StudyTrendGraph from '../components/StudyTrendGraph'
 import { clearSession } from '../utils/auth'
 
 export default function History({ userName }) {
@@ -211,8 +212,13 @@ export default function History({ userName }) {
               <StatCard label="⭐ Best Streak" value={`${longestStreak} day${longestStreak !== 1 ? 's' : ''}`} />
             </div>
 
-            {/* 7-day chart */}
-            <WeeklyChart data={last7} />
+            {/* Day-by-Day Study Hours & Goal Trend Graph */}
+            <StudyTrendGraph
+              allSessions={rawSessions}
+              weeklyPlan={weeklyPlan}
+              dayPlanners={dayPlanners}
+              settings={settings}
+            />
 
             {/* Partner search */}
             <div className="card p-4 flex flex-col gap-3">

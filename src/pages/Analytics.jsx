@@ -22,6 +22,7 @@ import {
   isRestDay,
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
+import StudyTrendGraph from '../components/StudyTrendGraph'
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -530,6 +531,16 @@ export default function Analytics({ userName }) {
             </div>
           </div>
         </div>
+
+        {/* ── Day-by-Day Study Hours & Goal Trend Graph ── */}
+        <StudyTrendGraph
+          allSessions={allSessions}
+          weeklyPlan={weeklyPlan}
+          dayPlanners={dayPlanners}
+          settings={settings}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+        />
 
         {/* ── 3 Secondary Visual Cards (Daily Avg, Goal Achievement, Best Streak) ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
