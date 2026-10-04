@@ -5,8 +5,8 @@
  */
 
 import { collection, getDocs } from 'firebase/firestore'
-import { db } from '../firebase'
-import { toLocalDateStr } from './formatTime'
+import { db } from '../firebase.js'
+import { toLocalDateStr } from './formatTime.js'
 
 // Deterministic hash code from string
 function hashString(str = '') {
