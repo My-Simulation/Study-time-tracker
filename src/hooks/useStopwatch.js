@@ -18,6 +18,7 @@ export function useStopwatch(userName) {
   const deviceIdRef = useRef(
     `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   )
+  const isControllerRef = useRef(false)
   const lastLocalActionRef = useRef(0)
   const lastLocalActionType = useRef('')
 
@@ -167,19 +168,28 @@ export function useStopwatch(userName) {
       // Ignore echoes from this same device tab/session unless waking up directly
       if (!isDirectFetch && remote.deviceId && remote.deviceId === deviceIdRef.current) return
 
+      // If remote update came from another device, this device acts as a follower/mirror
+      if (remote.deviceId && remote.deviceId !== deviceIdRef.current) {
+        isControllerRef.current = false
+      }
+
       const remoteUpdated = Number(remote.updatedAtMs) || 0
       const remoteResetAt = Number(remote.resetAtMs) || 0
       const remoteLastSavedAt = Number(remote.lastSavedAtMs) || 0
       const localLastAction = lastLocalActionRef.current
-      const localStart = startTimestampRef.current
 
-      // Check if remote state represents an authoritative Reset or Save
+      const remoteRunning = Boolean(remote.isRunning)
+      const remoteStart = remote.startedAtMs || remote.startTimestamp || null
+      const remoteBase = Number(remote.baseElapsed) || 0
+      const remoteLaps = Array.isArray(remote.laps) ? remote.laps : []
+
+      // Check if remote state represents an authoritative Reset or Save.
+      // A reset CANNOT occur if remote is actively running!
       const isRemoteReset =
-        remote.action === 'reset' ||
-        remote.action === 'save_reset' ||
-        (!remote.isRunning && Number(remote.baseElapsed || 0) === 0) ||
-        (Boolean(localStart) && remoteResetAt > 0 && remoteResetAt >= localStart - 500) ||
-        (Boolean(localStart) && remoteLastSavedAt > 0 && remoteLastSavedAt >= localStart - 500)
+        !remoteRunning &&
+        (remote.action === 'reset' ||
+          remote.action === 'save_reset' ||
+          remoteBase === 0)
 
       if (isRemoteReset) {
         // Only ignore if user explicitly clicked "Start" locally strictly AFTER the remote reset/save
@@ -223,11 +233,6 @@ export function useStopwatch(userName) {
         timelineRef.current = remote.timeline
       }
 
-      const remoteRunning = Boolean(remote.isRunning)
-      const remoteStart = remote.startedAtMs || remote.startTimestamp || null
-      const remoteBase = Number(remote.baseElapsed) || 0
-      const remoteLaps = Array.isArray(remote.laps) ? remote.laps : []
-
       if (remoteRunning && remoteStart) {
         startTimestampRef.current = remoteStart
         baseElapsedRef.current = remoteBase
@@ -251,7 +256,7 @@ export function useStopwatch(userName) {
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
         rafRef.current = requestAnimationFrame(tick)
       } else {
-        // Remote device paused
+        // Remote device paused / stopped
         if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
         startTimestampRef.current = null
@@ -283,6 +288,9 @@ export function useStopwatch(userName) {
 
     if (isRunning && startTimestampRef.current) {
       heartbeatRef.current = setInterval(async () => {
+        // ONLY the device that initiated the local timer broadcasts heartbeats!
+        // Secondary devices viewing the session mirror state passively and NEVER broadcast heartbeats.
+        if (!isControllerRef.current) return
         if (!startTimestampRef.current) return
 
         // 1. ALWAYS verify remote state first, even if backgrounded!
@@ -334,6 +342,7 @@ export function useStopwatch(userName) {
   // ── Start ─────────────────────────────────────────────────────────────────
   const start = useCallback(() => {
     if (isRunning) return
+    isControllerRef.current = true
     const now = Date.now()
     lastLocalActionRef.current = now
     lastLocalActionType.current = 'start'
@@ -381,6 +390,7 @@ export function useStopwatch(userName) {
   // ── Stop (pause) ──────────────────────────────────────────────────────────
   const stop = useCallback(() => {
     if (!isRunning) return
+    isControllerRef.current = true
     const now = Date.now()
     lastLocalActionRef.current = now
     lastLocalActionType.current = 'stop'
@@ -427,6 +437,7 @@ export function useStopwatch(userName) {
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
+    isControllerRef.current = true
     const now = Date.now()
     lastLocalActionRef.current = now
     lastLocalActionType.current = 'reset'
@@ -470,6 +481,7 @@ export function useStopwatch(userName) {
   // ── Lap ───────────────────────────────────────────────────────────────────
   const lap = useCallback(() => {
     if (!isRunning || !startTimestampRef.current) return
+    isControllerRef.current = true
     const now = Date.now()
     lastLocalActionRef.current = now
     lastLocalActionType.current = 'lap'
