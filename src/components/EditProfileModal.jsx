@@ -36,6 +36,7 @@ export default function EditProfileModal({
   const [username, setUsername] = useState(currentUser || '')
   const [avatarColor, setAvatarColor] = useState(userData?.avatarColor || '#7c3aed')
   const [photoUrl, setPhotoUrl] = useState(userData?.photoUrl || '')
+  const [leaderboardAlias, setLeaderboardAlias] = useState(userData?.leaderboardAlias || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -123,6 +124,7 @@ export default function EditProfileModal({
         displayName: trimmedDisplay || activeUsername,
         avatarColor,
         photoUrl,
+        leaderboardAlias: leaderboardAlias.trim(),
       })
 
       // 4. Update session storage
@@ -131,6 +133,7 @@ export default function EditProfileModal({
         displayName: trimmedDisplay || activeUsername,
         avatarColor,
         photoUrl,
+        leaderboardAlias: leaderboardAlias.trim(),
       })
 
       setSuccess('Profile updated successfully! ✅')
@@ -271,6 +274,28 @@ export default function EditProfileModal({
             {username.trim() && username.trim().length < 4 && (
               <p className="text-[10px] text-amber-400">Username must be at least 4 characters long.</p>
             )}
+          </div>
+
+          {/* Leaderboard Alias (Secret Display Name) */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-gray-300">Leaderboard Alias (Secret Name)</label>
+              <span className="text-[10px] text-purple-400 font-semibold">🔒 100% Privacy</span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🏆</span>
+              <input
+                type="text"
+                value={leaderboardAlias}
+                onChange={(e) => setLeaderboardAlias(e.target.value)}
+                placeholder="e.g. jee, rukku, maaik (Default: Aspirant)"
+                maxLength={25}
+                className="w-full rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-white text-sm pl-9 pr-3.5 py-2.5 outline-none focus:border-purple-500 transition-colors"
+              />
+            </div>
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+              Leaderboard par aapka real username hide rahega aur yeh secret alias display hoga. Agar blank chodenge toh default <span className="text-gray-400">Aspirant #...</span> show hoga.
+            </p>
           </div>
 
           {/* Error Message */}

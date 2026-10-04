@@ -45,6 +45,7 @@ export function saveSession(username, userDoc) {
     displayName: userDoc.displayName || username,
     avatarColor: userDoc.avatarColor || '#7c3aed',
     photoUrl: userDoc.photoUrl || '',
+    leaderboardAlias: userDoc.leaderboardAlias || '',
     savedAt: Date.now(),
     expiresAt: Date.now() + SESSION_DURATION_MS,
   }

@@ -39,37 +39,41 @@ const COLORS = [
 
 /**
  * Returns an anonymous alias and avatar for any user.
- * If the user matches current logged-in user, identifies as "You (Aap)".
+ * If customAlias is provided (e.g., 'jee', 'rukku', 'maaik'), it is used.
+ * Otherwise, falls back to 'Aspirant #<num>'.
+ * If the user matches current logged-in user, appends '(You)'.
  */
-export function generateAnonymousIdentity(username = '', currentUsername = '') {
+export function generateAnonymousIdentity(username = '', currentUsername = '', customAlias = '') {
   const isSelf = currentUsername && username.toLowerCase() === currentUsername.toLowerCase()
-  if (isSelf) {
-    return {
-      isCurrentUser: true,
-      displayName: 'You (Aap)',
-      codename: 'You',
-      tag: '⭐',
-      icon: '🌟',
-      color: '#8b5cf6',
-      initials: 'YOU',
-    }
-  }
-
   const hash = hashString(username.toLowerCase())
-  const prefix = PREFIXES[hash % PREFIXES.length]
-  const title = TITLES[(hash >> 3) % TITLES.length]
   const num = (hash % 89) + 11 // 2-digit number 11-99
   const icon = ICONS[hash % ICONS.length]
   const color = COLORS[hash % COLORS.length]
 
+  const cleanAlias = (customAlias || '').trim()
+  const baseName = cleanAlias || `Aspirant #${num}`
+  const initials = (cleanAlias ? cleanAlias.slice(0, 2) : 'AS').toUpperCase()
+
+  if (isSelf) {
+    return {
+      isCurrentUser: true,
+      displayName: cleanAlias ? `${cleanAlias} (You)` : `Aspirant #${num} (You)`,
+      codename: baseName,
+      tag: '⭐',
+      icon: '🌟',
+      color: '#8b5cf6',
+      initials,
+    }
+  }
+
   return {
     isCurrentUser: false,
-    displayName: `${prefix} ${title} #${num}`,
-    codename: `${prefix} ${title}`,
+    displayName: baseName,
+    codename: baseName,
     tag: `#${num}`,
     icon,
     color,
-    initials: `${prefix[0]}${title[0]}`,
+    initials,
   }
 }
 
@@ -137,12 +141,19 @@ export async function fetchLeaderboardStats(currentUsername = '') {
   ])
 
   const userMap = new Map()
+  const aliasMap = new Map()
 
   // Initialize known users
   userSnap.forEach((doc) => {
     const u = doc.id.toLowerCase()
+    const data = doc.data()
+    const alias = data?.leaderboardAlias?.trim() || ''
+    if (alias) {
+      aliasMap.set(u, alias)
+    }
     userMap.set(u, {
       username: u,
+      leaderboardAlias: alias,
       todaySeconds: 0,
       thisWeekSeconds: 0,
       allTimeSeconds: 0,
@@ -160,6 +171,7 @@ export async function fetchLeaderboardStats(currentUsername = '') {
     if (!userMap.has(u)) {
       userMap.set(u, {
         username: u,
+        leaderboardAlias: aliasMap.get(u) || '',
         todaySeconds: 0,
         thisWeekSeconds: 0,
         allTimeSeconds: 0,
@@ -214,7 +226,8 @@ export async function fetchLeaderboardStats(currentUsername = '') {
     .map((st) => {
       const activeDays = Math.max(1, st.activeDates.size)
       const dailyAvgSec = Math.round(st.allTimeSeconds / activeDays)
-      const identity = generateAnonymousIdentity(st.username, currentUsername)
+      const alias = st.leaderboardAlias || aliasMap.get(st.username) || ''
+      const identity = generateAnonymousIdentity(st.username, currentUsername, alias)
       const tier = getStudyTier(dailyAvgSec)
 
       return {

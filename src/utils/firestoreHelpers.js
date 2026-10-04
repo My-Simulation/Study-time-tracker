@@ -235,17 +235,18 @@ export async function resetUserPassword(username, newPassword) {
 }
 
 /**
- * Updates editable profile fields (displayName, avatarColor, photoUrl).
+ * Updates editable profile fields (displayName, avatarColor, photoUrl, leaderboardAlias).
  */
-export async function updateUserProfile(username, { displayName, avatarColor, photoUrl }) {
+export async function updateUserProfile(username, { displayName, avatarColor, photoUrl, leaderboardAlias }) {
   const lowerUsername = username.trim().toLowerCase()
   const payload = {}
   if (displayName !== undefined) payload.displayName = displayName.trim()
   if (avatarColor !== undefined) payload.avatarColor = avatarColor
   if (photoUrl !== undefined) payload.photoUrl = photoUrl
+  if (leaderboardAlias !== undefined) payload.leaderboardAlias = leaderboardAlias.trim()
 
   await updateDoc(doc(db, 'users', lowerUsername), payload)
-  return await getUserDoc(lowerUsername)
+  return await getUserDoc(lowerUsername, true)
 }
 
 /**

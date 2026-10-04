@@ -538,6 +538,11 @@ export default function Profile({ userName }) {
                   {userData?.displayName || userName}
                 </h2>
                 <span className="text-xs font-mono text-gray-400">@{userName}</span>
+                {userData?.leaderboardAlias && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                    🏆 Alias: {userData.leaderboardAlias}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/15 text-green-400 border border-green-500/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
                   Active
