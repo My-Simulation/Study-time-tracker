@@ -25,6 +25,7 @@ const Syllabus = lazy(() => import('./pages/Syllabus'))
 const WatchPartner = lazy(() => import('./pages/WatchPartner'))
 const PartnerHistory = lazy(() => import('./pages/PartnerHistory'))
 const WatchSearch = lazy(() => import('./pages/WatchPartner').then(m => ({ default: m.WatchSearch })))
+const Leaderboard = lazy(() => import('./pages/Leaderboard'))
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -176,6 +177,9 @@ function AnimatedRoutes() {
 
           {/* Partner history — public */}
           <Route path="/partner/:partnerName" element={<PartnerHistory />} />
+
+          {/* Anonymous Leaderboard */}
+          <Route path="/leaderboard" element={<Leaderboard />} />
 
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />

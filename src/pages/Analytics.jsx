@@ -356,6 +356,15 @@ export default function Analytics({ userName }) {
               </option>
             ))}
           </select>
+
+          <button
+            onClick={() => navigate('/leaderboard')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/40 text-purple-200 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+            title="Anonymous Leaderboard"
+          >
+            <span>🏆</span>
+            <span className="hidden sm:inline">Leaderboard</span>
+          </button>
         </div>
       </div>
 
