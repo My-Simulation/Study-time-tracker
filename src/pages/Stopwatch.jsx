@@ -266,17 +266,10 @@ export default function Stopwatch({ userName }) {
       // Check if current stopwatch session was already saved in todaySessions (on laptop or any device)
       if (elapsedRef.current > 0 && todaySessions.length > 0) {
         const currentSec = Math.floor(elapsedRef.current / 1000)
-        // 1. Direct elapsed time match
+        // Only auto-reset if current timer seconds exactly match a session already saved today
         const exactMatch = todaySessions.some((s) => Math.abs((s.totalSeconds || 0) - currentSec) <= 4)
 
-        // 2. Created-at match: was a session logged while this timer was running?
-        const timerStartedApproxMs = Date.now() - elapsedRef.current
-        const sessionSavedDuringThisRun = todaySessions.some((s) => {
-          const createdAtMs = s.createdAt?.seconds ? s.createdAt.seconds * 1000 : 0
-          return createdAtMs > 0 && createdAtMs >= timerStartedApproxMs - 60000
-        })
-
-        if (exactMatch || sessionSavedDuringThisRun) {
+        if (exactMatch) {
           resetRef.current()
         }
       }
