@@ -866,37 +866,69 @@ export default function Doubts() {
               })}
             </div>
 
-            {/* Payment Details */}
-            <div className="p-3.5 rounded-2xl bg-[#181829] border border-[#2b2b3f] flex flex-col items-center text-center gap-2">
-              <span className="text-xs font-bold text-purple-300">Scan & Pay via any UPI App</span>
-              
-              {/* Dynamic QR Code */}
-              <div className="w-36 h-36 bg-white p-2 rounded-xl shadow-md flex items-center justify-center">
+            {/* Payment Details with Verified Jeetesh Sharma QR */}
+            <div className="p-4 rounded-2xl bg-[#181829] border border-[#2b2b3f] flex flex-col items-center text-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                <span>Paying to:</span>
+                <span className="text-purple-300 font-extrabold">Jeetesh Sharma</span>
+                <span className="w-3.5 h-3.5 rounded-full bg-blue-500 text-white text-[9px] flex items-center justify-center font-bold">✓</span>
+              </div>
+
+              {/* Authentic Paytm / HDFC QR Code Card */}
+              <div className="w-48 bg-white p-2.5 rounded-2xl shadow-xl flex flex-col items-center">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
-                    `upi://pay?pa=bandar@upi&pn=StudyTrackerMentor&am=${selectedPack.price}&cu=INR`
-                  )}`}
-                  alt="UPI QR"
-                  className="w-full h-full object-contain"
+                  src="/upi-qr.png"
+                  alt="Jeetesh Sharma UPI QR"
+                  className="w-full h-auto object-contain rounded-xl"
+                  onError={(e) => {
+                    // Fallback to dynamic generated QR if local image fails
+                    e.currentTarget.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
+                      `upi://pay?pa=9602440914@pthdfc&pn=Jeetesh%20Sharma&am=${selectedPack.price}&cu=INR`
+                    )}`
+                  }}
                 />
               </div>
 
-              <div className="text-[11px] text-gray-300">
-                Amount: <b className="text-amber-300 font-mono text-sm">₹{selectedPack.price}</b>
+              {/* UPI ID + 1-Click Copy */}
+              <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-[#12121e] border border-[#27273e] text-xs">
+                <div className="text-left">
+                  <span className="text-[10px] text-gray-500 block">UPI ID:</span>
+                  <span className="font-mono font-bold text-amber-300 text-xs select-all">9602440914@pthdfc</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText('9602440914@pthdfc')
+                    showToast('UPI ID copied to clipboard! 📋')
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-[11px] font-bold transition-all cursor-pointer"
+                >
+                  Copy
+                </button>
               </div>
-              <p className="text-[10px] text-gray-500">
-                Pay using GPay, PhonePe, Paytm ya koi bhi UPI app.
+
+              {/* Direct UPI Intent Link on Mobile */}
+              <a
+                href={`upi://pay?pa=9602440914@pthdfc&pn=Jeetesh%20Sharma&am=${selectedPack.price}&cu=INR`}
+                className="w-full py-2.5 rounded-xl bg-[#25253e] hover:bg-[#323254] border border-[#3f3f62] text-xs font-bold text-white flex items-center justify-center gap-2 transition-all shadow-sm"
+              >
+                <span>📱</span>
+                <span>Open in GPay / PhonePe / Paytm (₹{selectedPack.price})</span>
+              </a>
+
+              <p className="text-[10px] text-gray-400">
+                Payment karne ke baad neeche <b>Confirm & Activate</b> par click karein.
               </p>
             </div>
 
             {/* Instant Activate Button */}
             <button
               onClick={handleConfirmPayment}
-              className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md flex items-center justify-center gap-1.5"
+              className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
               style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
             >
               <span>✓</span>
-              <span>Confirm & Activate {selectedPack.count} Doubt Token(s)</span>
+              <span>I have Paid ₹{selectedPack.price} — Activate {selectedPack.count} Token(s)</span>
             </button>
           </div>
         </div>
