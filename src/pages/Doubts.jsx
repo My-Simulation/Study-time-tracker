@@ -69,6 +69,7 @@ export default function Doubts() {
   // Modals & UI States
   const [showAskModal, setShowAskModal] = useState(false)
   const [showPayModal, setShowPayModal] = useState(false)
+  const [payModalStep, setPayModalStep] = useState(1) // 1: Select Pack & QR, 2: Enter UTR
   const [selectedPack, setSelectedPack] = useState(PRICING_PACKS[1])
   const [imagePreviewModal, setImagePreviewModal] = useState(null)
 
@@ -76,6 +77,27 @@ export default function Doubts() {
   const [enteredUtr, setEnteredUtr] = useState('')
   const [isVerifyingUtr, setIsVerifyingUtr] = useState(false)
   const [utrError, setUtrError] = useState('')
+
+  // Clipboard paste helper for UTR
+  const handlePasteUtr = async () => {
+    try {
+      if (!navigator.clipboard?.readText) {
+        showToast('Please paste manually.')
+        return
+      }
+      const text = await navigator.clipboard.readText()
+      const digitsOnly = (text || '').replace(/\D/g, '').slice(0, 12)
+      if (digitsOnly) {
+        setEnteredUtr(digitsOnly)
+        setUtrError('')
+        showToast('Pasted from clipboard! 📋')
+      } else {
+        setUtrError('Clipboard does not contain numbers.')
+      }
+    } catch {
+      showToast('Could not access clipboard. Paste manually.')
+    }
+  }
 
   // Admin Payments State
   const [paymentRecords, setPaymentRecords] = useState([])
@@ -169,6 +191,13 @@ export default function Doubts() {
     }
   }
 
+  // Open Payment Modal
+  const handleOpenPayModal = () => {
+    setPayModalStep(1)
+    setUtrError('')
+    setShowPayModal(true)
+  }
+
   // Submit Doubt Click
   const handleOpenAskModal = () => {
     if (!userName) {
@@ -176,7 +205,7 @@ export default function Doubts() {
       return
     }
     if (!balance.canAskDoubt) {
-      setShowPayModal(true)
+      handleOpenPayModal()
       return
     }
     setSubmitError('')
@@ -381,7 +410,7 @@ export default function Doubts() {
 
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
-                  onClick={() => setShowPayModal(true)}
+                  onClick={handleOpenPayModal}
                   className="px-3 py-2 rounded-xl text-xs font-bold bg-[#222234] hover:bg-[#2c2c42] border border-[#383854] text-purple-300 transition-all flex items-center gap-1.5"
                 >
                   <span>💳</span>
@@ -441,13 +470,18 @@ export default function Doubts() {
                             {doubt.subject || 'General'}
                           </span>
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border flex items-center gap-1 ${
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border flex items-center gap-1.5 ${
                               isSolved
                                 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                                 : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                             }`}
                           >
-                            {isSolved ? '✅ Solved by Mentor' : '🕒 In Review / Solving...'}
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isSolved ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'
+                              }`}
+                            />
+                            <span>{isSolved ? 'Solved by Mentor' : 'Mentor Solving...'}</span>
                           </span>
                         </div>
 
@@ -999,146 +1033,249 @@ export default function Doubts() {
 
       {/* ── MODAL: Top-up / Payment Pack ── */}
       {showPayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[#14141f] border border-[#2b2b3f] rounded-3xl max-w-md w-full p-6 flex flex-col gap-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">💳</span>
-                <h3 className="text-base font-bold text-white">Mentor Doubt Packs</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-[#131320] border border-[#2c2c42] rounded-3xl max-w-md w-full p-5 sm:p-6 flex flex-col gap-4 shadow-2xl overflow-hidden max-h-[95vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1 border-b border-[#232336]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-lg">
+                  💎
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-white">Mentor Doubt Tokens</h3>
+                  <p className="text-[10px] text-gray-400">Step-by-step physical solutions</p>
+                </div>
               </div>
               <button
                 onClick={() => setShowPayModal(false)}
-                className="w-7 h-7 rounded-full bg-[#202030] text-gray-400 hover:text-white flex items-center justify-center text-xs"
+                className="w-7 h-7 rounded-full bg-[#1e1e2f] hover:bg-[#28283e] text-gray-400 hover:text-white flex items-center justify-center text-xs transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-gray-400">
-              Personal, verified handwritten solutions from Mentor. Select a pack to activate tokens:
-            </p>
-
-            {/* Pack selector */}
-            <div className="flex flex-col gap-2.5">
-              {PRICING_PACKS.map((pack) => {
-                const isSelected = selectedPack.id === pack.id
-                return (
-                  <div
-                    key={pack.id}
-                    onClick={() => setSelectedPack(pack)}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                      isSelected
-                        ? 'bg-purple-950/40 border-purple-500 shadow-md ring-1 ring-purple-500/50'
-                        : 'bg-[#181827] border-[#29293e] hover:border-gray-500'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold text-white">{pack.label}</h4>
-                        {pack.badge && (
-                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            {pack.badge}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-gray-400">{pack.desc}</p>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-base font-black text-white font-mono">₹{pack.price}</span>
-                      <span className="text-[10px] text-gray-500 block">one-time</span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* ── STEP 1: Locked Amount QR Code ── */}
-            <div className="p-4 rounded-2xl bg-[#181829] border border-[#2b2b3f] flex flex-col items-center text-center gap-3">
-              <div className="flex items-center justify-between w-full">
-                <span className="text-xs font-bold text-gray-400">Step 1: Scan & Pay</span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                  <span>🔒</span>
-                  <span>Amount Locked: ₹{selectedPack.price}.00</span>
-                </span>
-              </div>
-
-              {/* Dynamic QR with EXACT locked amount encoded inside */}
-              <div className="w-48 bg-white p-2.5 rounded-2xl shadow-2xl flex flex-col items-center border-2 border-purple-500/30">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=6&data=${encodeURIComponent(
-                    generateLockedUpiUri(selectedPack.price, selectedPack.count)
-                  )}`}
-                  alt={`UPI QR Locked ₹${selectedPack.price}`}
-                  className="w-full h-auto object-contain rounded-lg"
-                />
-                <span className="text-[10px] text-gray-700 font-bold mt-1">
-                  Paytm • PhonePe • GPay • BHIM
-                </span>
-              </div>
-
-              {/* Direct UPI Intent Link on Mobile */}
-              <a
-                href={generateLockedUpiUri(selectedPack.price, selectedPack.count)}
-                className="w-full py-2.5 rounded-xl bg-[#25253e] hover:bg-[#323254] border border-[#3f3f62] text-xs font-bold text-white flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+            {/* Stepper Tabs */}
+            <div className="flex rounded-xl bg-[#0c0c16] p-1 border border-[#232338]">
+              <button
+                type="button"
+                onClick={() => setPayModalStep(1)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  payModalStep === 1
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
               >
-                <span>📱</span>
-                <span>Open in UPI App to Pay ₹{selectedPack.price}</span>
-              </a>
+                <span>1. Select & Pay</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPayModalStep(2)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  payModalStep === 2
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <span>2. Enter UTR (Activate)</span>
+                {enteredUtr.length === 12 && (
+                  <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 text-black text-[9px] flex items-center justify-center font-black">
+                    ✓
+                  </span>
+                )}
+              </button>
             </div>
 
-            {/* ── STEP 2: 12-Digit UTR Verification ── */}
-            <form onSubmit={handleVerifyPayment} className="p-4 rounded-2xl bg-[#181829] border border-[#2b2b3f] flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <span>Step 2:</span>
-                  <span>Enter 12-Digit UTR / UPI Ref ID</span>
-                </label>
-                <span className="text-[10px] text-purple-400 font-semibold">Instant Activation</span>
-              </div>
+            {/* STEP 1: Select Pack & Scan QR */}
+            {payModalStep === 1 && (
+              <div className="flex flex-col gap-3.5 animate-fadeIn">
+                {/* 3 Compact Cards */}
+                <div>
+                  <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-2 block">
+                    Choose Pack:
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PRICING_PACKS.map((pack) => {
+                      const isSelected = selectedPack.id === pack.id
+                      return (
+                        <div
+                          key={pack.id}
+                          onClick={() => setSelectedPack(pack)}
+                          className={`relative p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col justify-between ${
+                            isSelected
+                              ? 'bg-purple-950/40 border-purple-500 shadow-md ring-1 ring-purple-500/60'
+                              : 'bg-[#181827] border-[#29293e] hover:border-gray-500'
+                          }`}
+                        >
+                          {pack.badge && (
+                            <span className="text-[8px] font-black px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 mb-1 inline-block truncate">
+                              {pack.badge}
+                            </span>
+                          )}
+                          <div className="my-auto py-1">
+                            <span className="text-base sm:text-lg font-black text-white font-mono block">
+                              ₹{pack.price}
+                            </span>
+                            <span className="text-[11px] font-bold text-purple-300 block">
+                              {pack.count} {pack.count > 1 ? 'Doubts' : 'Doubt'}
+                            </span>
+                          </div>
+                          <span className="text-[9px] text-gray-400 mt-1 block">
+                            ₹{(pack.price / pack.count).toFixed(0)}/doubt
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
 
-              <div className="relative">
-                <input
-                  type="text"
-                  value={enteredUtr}
-                  onChange={(e) => {
-                    setEnteredUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
+                {/* Amount-locked QR Code Card */}
+                <div className="p-3.5 rounded-2xl bg-[#171727] border border-[#2b2b40] flex flex-col items-center text-center gap-2.5 shadow-inner">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-bold text-gray-300">Scan via Any UPI App</span>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                      <span>🔒</span>
+                      <span>Amount Locked: ₹{selectedPack.price}.00</span>
+                    </span>
+                  </div>
+
+                  {/* QR Image */}
+                  <div className="w-36 h-36 bg-white p-2 rounded-2xl shadow-xl flex items-center justify-center border-2 border-purple-500/40">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=4&data=${encodeURIComponent(
+                        generateLockedUpiUri(selectedPack.price, selectedPack.count)
+                      )}`}
+                      alt={`UPI QR Locked ₹${selectedPack.price}`}
+                      className="w-full h-full object-contain rounded-lg"
+                    />
+                  </div>
+
+                  <p className="text-[10px] text-gray-400">
+                    Payee: <b className="text-gray-200">Study Tracker Mentor</b> • Paytm, PhonePe, GPay, BHIM
+                  </p>
+
+                  {/* Open in UPI App Direct Button */}
+                  <a
+                    href={generateLockedUpiUri(selectedPack.price, selectedPack.count)}
+                    className="w-full py-2.5 rounded-xl bg-[#262640] hover:bg-[#323255] border border-[#3e3e62] text-xs font-bold text-white flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                  >
+                    <span>📱</span>
+                    <span>Open in UPI App to Pay ₹{selectedPack.price}</span>
+                  </a>
+                </div>
+
+                {/* Continue to Step 2 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPayModalStep(2)
                     setUtrError('')
                   }}
-                  placeholder="e.g. 428192839182 (12 digits)"
-                  maxLength={12}
-                  className="w-full rounded-xl bg-[#12121e] border border-[#2e2e46] text-amber-300 font-mono text-sm px-3.5 py-2.5 outline-none focus:border-purple-500 transition-colors tracking-wider"
-                />
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-500 font-mono">
-                  {enteredUtr.length}/12
-                </span>
+                  className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+                >
+                  <span>I Have Paid ➔ Enter UTR (Next)</span>
+                </button>
               </div>
+            )}
 
-              <p className="text-[10px] text-gray-400 leading-relaxed">
-                PhonePe, GPay ya Paytm me payment receipt ke neeche <b>12-digit UPI Ref No. / UTR</b> likha hota hai.
-              </p>
-
-              {utrError && (
-                <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-900/50 text-red-300 text-xs">
-                  {utrError}
+            {/* STEP 2: Enter 12-Digit UTR */}
+            {payModalStep === 2 && (
+              <form onSubmit={handleVerifyPayment} className="flex flex-col gap-3.5 animate-fadeIn">
+                {/* Pack Selection Recap */}
+                <div className="p-3 rounded-2xl bg-[#171727] border border-[#2b2b40] flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase block">Selected Pack</span>
+                    <span className="text-xs font-extrabold text-white">
+                      {selectedPack.label} ({selectedPack.count} Doubts) • <b className="text-emerald-400 font-mono">₹{selectedPack.price}</b>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPayModalStep(1)}
+                    className="px-2 py-1 rounded-lg bg-[#252538] hover:bg-[#303046] text-purple-300 text-[10px] font-bold transition-colors cursor-pointer"
+                  >
+                    Change Pack
+                  </button>
                 </div>
-              )}
 
-              {/* Instant Activate Button */}
-              <button
-                type="submit"
-                disabled={isVerifyingUtr || enteredUtr.length !== 12}
-                className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-                style={{
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  opacity: isVerifyingUtr || enteredUtr.length !== 12 ? 0.5 : 1,
-                  cursor: isVerifyingUtr || enteredUtr.length !== 12 ? 'not-allowed' : 'pointer',
-                }}
-              >
-                <span>⚡</span>
-                <span>{isVerifyingUtr ? 'Verifying with Records...' : `Verify & Credit ${selectedPack.count} Token(s)`}</span>
-              </button>
-            </form>
+                {/* UTR Input Section */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>12-Digit UTR / UPI Ref ID:</span>
+                    </label>
+                    <span
+                      className={`text-[10px] font-mono font-bold ${
+                        enteredUtr.length === 12 ? 'text-emerald-400' : 'text-gray-400'
+                      }`}
+                    >
+                      {enteredUtr.length}/12 digits {enteredUtr.length === 12 && '✓'}
+                    </span>
+                  </div>
+
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={enteredUtr}
+                      onChange={(e) => {
+                        setEnteredUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
+                        setUtrError('')
+                      }}
+                      placeholder="e.g. 428192839182"
+                      maxLength={12}
+                      autoFocus
+                      className="w-full rounded-xl bg-[#0e0e18] border border-[#2e2e46] text-amber-300 font-mono text-sm pl-3.5 pr-20 py-2.5 outline-none focus:border-purple-500 transition-colors tracking-widest"
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePasteUtr}
+                      className="absolute right-2 px-2.5 py-1 rounded-lg bg-[#222238] hover:bg-[#2c2c46] text-purple-300 text-[10px] font-bold border border-[#383854] transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <span>📋</span>
+                      <span>Paste</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[10px] text-gray-400 leading-relaxed mt-0.5">
+                    💡 PhonePe, GPay ya Paytm payment receipt me neeche <b>12-digit UPI Ref ID / UTR</b> likha hota hai.
+                  </p>
+                </div>
+
+                {utrError && (
+                  <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-900/50 text-red-300 text-xs">
+                    {utrError}
+                  </div>
+                )}
+
+                {/* Instant Activate Button */}
+                <button
+                  type="submit"
+                  disabled={isVerifyingUtr || enteredUtr.length !== 12}
+                  className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    opacity: isVerifyingUtr || enteredUtr.length !== 12 ? 0.5 : 1,
+                    cursor: isVerifyingUtr || enteredUtr.length !== 12 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <span>⚡</span>
+                  <span>
+                    {isVerifyingUtr
+                      ? 'Verifying with Records...'
+                      : `Verify & Credit ${selectedPack.count} Token(s)`}
+                  </span>
+                </button>
+
+                {/* Back to Step 1 */}
+                <button
+                  type="button"
+                  onClick={() => setPayModalStep(1)}
+                  className="text-center text-[11px] font-bold text-gray-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  ← Back to QR & Pay
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}
