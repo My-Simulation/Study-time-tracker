@@ -29,6 +29,7 @@ const WatchSearch = lazy(() => import('./pages/WatchPartner').then(m => ({ defau
 const Leaderboard = lazy(() => import('./pages/Leaderboard'))
 const Doubts = lazy(() => import('./pages/Doubts'))
 const ExamHub = lazy(() => import('./pages/ExamHub'))
+const Blog = lazy(() => import('./pages/Blog'))
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -189,6 +190,10 @@ function AnimatedRoutes() {
 
           {/* Govt & Entrance Exam Hub */}
           <Route path="/exam-hub" element={<ExamHub />} />
+
+          {/* Study Blog & Guides */}
+          <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:slug" element={<Blog />} />
 
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />

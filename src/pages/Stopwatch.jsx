@@ -667,6 +667,10 @@ export default function Stopwatch({ userName }) {
             <IconButton onClick={() => navigate('/exam-hub')} title="Govt & Entrance Exam Search (Syllabus & PYQs)" aria-label="Exam Hub">
               <span className="text-sm sm:text-base leading-none">🏛️</span>
             </IconButton>
+            {/* Study Blog & Guides */}
+            <IconButton onClick={() => navigate('/blog')} title="JeetPrep Guides & Blog" aria-label="Blog">
+              <span className="text-sm sm:text-base leading-none">📰</span>
+            </IconButton>
             {/* History */}
             <IconButton onClick={() => navigate('/history')} title="Study History" aria-label="History">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1451,6 +1455,18 @@ export default function Stopwatch({ userName }) {
 
               <button
                 type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/blog') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 flex-shrink-0">📰</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Study Blog & Guides</h4>
+                  <p className="text-[10px] text-purple-400 truncate">Tips, timetables & hacks</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => { setShowMobileMenu(false); togglePictureInPicture() }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
@@ -1560,6 +1576,7 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
             <MenuBtn icon="🏆" label="Leaderboard" onClick={() => { navigate('/leaderboard'); setOpen(false) }} />
             <MenuBtn icon="👨‍🏫" label="Mentor Doubt Solver" onClick={() => { navigate('/doubts'); setOpen(false) }} />
             <MenuBtn icon="🏛️" label="Exam Hub (Syllabus & PYQ)" onClick={() => { navigate('/exam-hub'); setOpen(false) }} />
+            <MenuBtn icon="📰" label="Study Blog & Guides" onClick={() => { navigate('/blog'); setOpen(false) }} />
             <MenuBtn icon="📋" label="Weekly Plan" onClick={() => { navigate('/plan'); setOpen(false) }} />
             <MenuBtn icon="👁️" label="Watch Partner" onClick={() => { navigate('/watch'); setOpen(false) }} />
             <MenuBtn icon={copied ? '✓' : '🔗'} label={copied ? 'Copied!' : 'Copy Live Link'} onClick={copyLink} />
