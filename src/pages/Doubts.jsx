@@ -906,8 +906,9 @@ export default function Doubts() {
 
       {/* ── MODAL: Ask a Doubt (Student) ── */}
       {showAskModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[#14141f] border border-[#2b2b3f] rounded-3xl max-w-lg w-full p-6 flex flex-col gap-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-fadeIn">
+          <div className="min-h-full flex items-center justify-center py-4">
+            <div className="bg-[#14141f] border border-[#2b2b3f] rounded-3xl max-w-lg w-full p-5 sm:p-6 flex flex-col gap-4 shadow-2xl my-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-xl">✏️</span>
@@ -1029,12 +1030,14 @@ export default function Doubts() {
             </form>
           </div>
         </div>
+      </div>
       )}
 
       {/* ── MODAL: Top-up / Payment Pack ── */}
       {showPayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-          <div className="bg-[#131320] border border-[#2c2c42] rounded-3xl max-w-md w-full p-5 sm:p-6 flex flex-col gap-4 shadow-2xl overflow-hidden max-h-[95vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-fadeIn">
+          <div className="min-h-full flex items-center justify-center py-4">
+            <div className="bg-[#131320] border border-[#2c2c42] rounded-3xl max-w-md w-full p-4 sm:p-5 flex flex-col gap-3.5 shadow-2xl my-auto">
             {/* Header */}
             <div className="flex items-center justify-between pb-1 border-b border-[#232336]">
               <div className="flex items-center gap-2.5">
@@ -1278,6 +1281,7 @@ export default function Doubts() {
             )}
           </div>
         </div>
+      </div>
       )}
 
       {/* ── MODAL: Image Zoom Preview ── */}
