@@ -35,9 +35,12 @@ export default function GoogleSignInButton({ text = 'Continue with Google', clas
       }
     } catch (err) {
       console.error('Google Sign-In error:', err)
-      // If user closed popup, don't show loud error
       if (err?.code === 'auth/popup-closed-by-user') {
-        // User just closed popup
+        // User closed popup intentionally, no error needed
+      } else if (err?.code === 'auth/unauthorized-domain') {
+        setError(`Please add "${window.location.hostname}" in Firebase Console ➔ Authentication ➔ Settings ➔ Authorized Domains.`)
+      } else if (err?.code === 'auth/popup-blocked') {
+        setError('Popup was blocked by your browser. Please allow popups or open in standard Chrome/Safari browser.')
       } else {
         setError(err?.message || 'Google Sign-In failed. Please try again.')
       }

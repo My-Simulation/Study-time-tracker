@@ -277,13 +277,13 @@ export default function Leaderboard() {
                       >
                         {top1.tier.name}
                       </span>
-                      <p className="text-base font-black text-amber-300 mt-1.5 font-mono">
+                      <p className="text-base font-extrabold text-white mt-1.5 font-mono drop-shadow-sm">
                         {getValueDisplay(top1)}
                       </p>
                     </div>
 
                     {/* Pedestal block */}
-                    <div className="w-full h-16 mt-2 rounded-xl bg-gradient-to-t from-amber-900/40 to-amber-700/30 border border-amber-500/40 flex items-center justify-center text-sm font-black text-amber-300 shadow">
+                    <div className="w-full h-16 mt-2 rounded-xl bg-gradient-to-t from-amber-900/50 to-amber-700/40 border border-amber-400/50 flex items-center justify-center text-sm font-black text-white shadow-md">
                       #1
                     </div>
                   </div>
