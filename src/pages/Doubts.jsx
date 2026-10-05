@@ -16,6 +16,10 @@ import {
   subscribeToAllDoubtsForAdmin,
   solveDoubtByAdmin,
   compressImageFile,
+  generateLockedUpiUri,
+  verifyAndProcessPayment,
+  subscribeToPaymentRecords,
+  revokePaymentByAdmin,
 } from '../utils/doubtHelpers'
 import { getSession } from '../utils/auth'
 
@@ -68,6 +72,15 @@ export default function Doubts() {
   const [selectedPack, setSelectedPack] = useState(PRICING_PACKS[1])
   const [imagePreviewModal, setImagePreviewModal] = useState(null)
 
+  // Payment UTR Verification State
+  const [enteredUtr, setEnteredUtr] = useState('')
+  const [isVerifyingUtr, setIsVerifyingUtr] = useState(false)
+  const [utrError, setUtrError] = useState('')
+
+  // Admin Payments State
+  const [paymentRecords, setPaymentRecords] = useState([])
+  const [adminSubTab, setAdminSubTab] = useState('doubts') // 'doubts' | 'payments'
+
   // Ask Doubt Form State
   const [questionText, setQuestionText] = useState('')
   const [subject, setSubject] = useState(SUBJECT_OPTIONS[0])
@@ -116,13 +129,19 @@ export default function Doubts() {
     return () => unsubscribe()
   }, [userName])
 
-  // Subscribe to Admin incoming doubts queue if admin
+  // Subscribe to Admin incoming doubts and payment records queue if admin
   useEffect(() => {
     if (!isAdmin) return
-    const unsubscribe = subscribeToAllDoubtsForAdmin((list) => {
+    const unsubDoubts = subscribeToAllDoubtsForAdmin((list) => {
       setAdminDoubts(list)
     })
-    return () => unsubscribe()
+    const unsubPayments = subscribeToPaymentRecords((records) => {
+      setPaymentRecords(records)
+    })
+    return () => {
+      unsubDoubts()
+      unsubPayments()
+    }
   }, [isAdmin])
 
   // Handle Question Image Select
@@ -220,16 +239,54 @@ export default function Doubts() {
     }
   }
 
-  // Payment Confirmation (instant activation)
-  const handleConfirmPayment = async () => {
+  // Payment Verification with 12-digit UTR
+  const handleVerifyPayment = async (e) => {
+    e?.preventDefault()
+    setUtrError('')
+    const clean = (enteredUtr || '').trim().replace(/\s+/g, '')
+    if (!clean) {
+      setUtrError('Please enter the 12-digit UTR / UPI Reference Number.')
+      return
+    }
+    if (!/^\d{12}$/.test(clean)) {
+      setUtrError('UTR must be exactly 12 digits (e.g. 428192839182). Check your PhonePe/GPay receipt.')
+      return
+    }
+
+    setIsVerifyingUtr(true)
     try {
-      await addPaidDoubts(userName, selectedPack.count)
+      await verifyAndProcessPayment({
+        userName,
+        displayName: session?.displayName || userName,
+        pack: selectedPack,
+        utr: clean,
+      })
       await refreshBalance()
       setShowPayModal(false)
-      showToast(`🎉 ${selectedPack.count} Doubt Token(s) credited successfully!`)
+      setEnteredUtr('')
+      showToast(`🎉 Verified! ${selectedPack.count} Doubt Token(s) credited successfully!`)
       setShowAskModal(true)
     } catch (err) {
-      alert('Could not activate pack. Please try again.')
+      setUtrError(err.message || 'Payment verification failed.')
+    } finally {
+      setIsVerifyingUtr(false)
+    }
+  }
+
+  // Admin: Revoke fraudulent payment
+  const handleRevokePayment = async (record) => {
+    if (!window.confirm(`Revoke transaction from @${record.userName} (UTR: ${record.utr}) and deduct ${record.packCount} tokens?`)) {
+      return
+    }
+    try {
+      await revokePaymentByAdmin({
+        recordId: record.id,
+        userName: record.userName,
+        tokenCount: record.packCount,
+      })
+      showToast('Payment revoked & tokens deducted! ❌')
+    } catch (err) {
+      alert('Failed to revoke payment.')
     }
   }
 
@@ -467,217 +524,347 @@ export default function Doubts() {
           </>
         )}
 
-        {/* ── ADMIN VIEW (Mentor Queue) ── */}
+        {/* ── ADMIN VIEW (Mentor Queue & Payment Records) ── */}
         {activeTab === 'admin' && isAdmin && (
           <div className="flex flex-col gap-4">
-            <div className="p-4 rounded-2xl bg-[#181829] border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <span>👑</span>
-                  <span>Mentor Doubt Inbox (Admin)</span>
-                </h3>
-                <p className="text-xs text-gray-300 mt-0.5">
-                  View and solve questions submitted by students. Upload your handwritten solution or type steps.
-                </p>
-              </div>
-
-              {/* Filters */}
-              <div className="flex items-center gap-1.5 bg-[#12121e] p-1 rounded-xl border border-[#29293e]">
-                <button
-                  onClick={() => setAdminFilter('pending')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    adminFilter === 'pending' ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Pending ({pendingAdminCount})
-                </button>
-                <button
-                  onClick={() => setAdminFilter('solved')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    adminFilter === 'solved' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Solved
-                </button>
-                <button
-                  onClick={() => setAdminFilter('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    adminFilter === 'all' ? 'bg-[#292942] text-white' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  All ({adminDoubts.length})
-                </button>
-              </div>
+            {/* Admin SubTab Switcher */}
+            <div className="flex items-center gap-2 border-b border-[#252538] pb-2">
+              <button
+                onClick={() => setAdminSubTab('doubts')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  adminSubTab === 'doubts'
+                    ? 'bg-amber-600 text-white shadow'
+                    : 'bg-[#181827] text-gray-400 hover:text-white'
+                }`}
+              >
+                <span>👑 Doubts Queue</span>
+                {pendingAdminCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-black">
+                    {pendingAdminCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setAdminSubTab('payments')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  adminSubTab === 'payments'
+                    ? 'bg-emerald-600 text-white shadow'
+                    : 'bg-[#181827] text-gray-400 hover:text-white'
+                }`}
+              >
+                <span>💰 Payments & UTR Log</span>
+                <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono">
+                  {paymentRecords.length}
+                </span>
+              </button>
             </div>
 
-            {filteredAdminDoubts.length === 0 ? (
-              <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center">
-                <p className="text-sm text-gray-400">No {adminFilter} doubts in the queue.</p>
-              </div>
-            ) : (
+            {/* ── SUB-TAB: PAYMENTS & UTR LOG ── */}
+            {adminSubTab === 'payments' && (
               <div className="flex flex-col gap-4">
-                {filteredAdminDoubts.map((doubt) => {
-                  const isSolved = doubt.status === 'solved'
-                  const isReplying = solvingDoubtId === doubt.id
+                {/* Revenue Stats Banner */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Verified Revenue</span>
+                    <span className="text-xl font-black text-emerald-400 mt-1 font-mono">
+                      ₹{paymentRecords.filter((r) => r.status === 'verified').reduce((sum, r) => sum + (r.amount || 0), 0)}
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Tokens Sold</span>
+                    <span className="text-xl font-black text-amber-300 mt-1 font-mono">
+                      {paymentRecords.filter((r) => r.status === 'verified').reduce((sum, r) => sum + (r.packCount || 0), 0)}
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col col-span-2 sm:col-span-1">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Transactions</span>
+                    <span className="text-xl font-black text-white mt-1 font-mono">
+                      {paymentRecords.length}
+                    </span>
+                  </div>
+                </div>
 
-                  return (
-                    <div
-                      key={doubt.id}
-                      className={`p-4 rounded-2xl border transition-all ${
-                        isSolved ? 'bg-[#141422] border-emerald-500/20' : 'bg-[#181829] border-amber-500/40 shadow-md'
+                {paymentRecords.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center">
+                    <p className="text-xs text-gray-400">No payment transactions recorded yet.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {paymentRecords.map((record) => {
+                      const isVerified = record.status === 'verified'
+                      return (
+                        <div
+                          key={record.id}
+                          className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                            isVerified
+                              ? 'bg-[#151524] border-[#292942]'
+                              : 'bg-red-950/20 border-red-900/30 opacity-70'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-white">@{record.userName}</span>
+                              <span className="text-[10px] text-gray-400">({record.displayName})</span>
+                              <span
+                                className={`px-2 py-0.2 rounded-full text-[10px] font-black border ${
+                                  isVerified
+                                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                    : 'bg-red-500/15 text-red-400 border-red-500/30'
+                                }`}
+                              >
+                                {isVerified ? 'Verified ✓' : 'Revoked ✕'}
+                              </span>
+                            </div>
+
+                            <div className="mt-1 flex items-center gap-3 text-xs flex-wrap">
+                              <span className="text-gray-400 font-mono text-[11px]">
+                                UTR: <b className="text-amber-300 font-bold select-all">{record.utr}</b>
+                              </span>
+                              <span className="text-gray-500">•</span>
+                              <span className="text-gray-300 text-[11px]">{record.packLabel}</span>
+                              <span className="text-gray-500">•</span>
+                              <span className="text-gray-500 text-[10px]">
+                                {record.createdAt ? new Date(record.createdAt).toLocaleString() : ''}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0">
+                            <span className="text-base font-black text-emerald-400 font-mono">
+                              ₹{record.amount}
+                            </span>
+
+                            {isVerified && (
+                              <button
+                                onClick={() => handleRevokePayment(record)}
+                                className="px-2.5 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 text-[11px] font-bold transition-all cursor-pointer"
+                                title="Revoke fake transaction and deduct tokens"
+                              >
+                                Revoke
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── SUB-TAB: DOUBTS QUEUE ── */}
+            {adminSubTab === 'doubts' && (
+              <>
+                <div className="p-4 rounded-2xl bg-[#181829] border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>👑</span>
+                      <span>Mentor Doubt Inbox (Admin)</span>
+                    </h3>
+                    <p className="text-xs text-gray-300 mt-0.5">
+                      View and solve questions submitted by students. Upload your handwritten solution or type steps.
+                    </p>
+                  </div>
+
+                  {/* Filters */}
+                  <div className="flex items-center gap-1.5 bg-[#12121e] p-1 rounded-xl border border-[#29293e]">
+                    <button
+                      onClick={() => setAdminFilter('pending')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        adminFilter === 'pending' ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'
                       }`}
                     >
-                      {/* Top bar with student username */}
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 font-bold text-xs flex items-center justify-center">
-                            {(doubt.userName || 'S')[0].toUpperCase()}
-                          </span>
-                          <span className="text-xs font-bold text-white">@{doubt.userName}</span>
-                          <span className="text-[10px] text-gray-400">({doubt.displayName})</span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#252538] text-purple-300">
-                          {doubt.subject}
-                        </span>
-                      </div>
+                      Pending ({pendingAdminCount})
+                    </button>
+                    <button
+                      onClick={() => setAdminFilter('solved')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        adminFilter === 'solved' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      Solved
+                    </button>
+                    <button
+                      onClick={() => setAdminFilter('all')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        adminFilter === 'all' ? 'bg-[#292942] text-white' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      All ({adminDoubts.length})
+                    </button>
+                  </div>
+                </div>
 
-                      {/* Question */}
-                      {doubt.questionText && (
-                        <p className="text-xs font-medium text-gray-200 mb-2 leading-relaxed whitespace-pre-wrap">
-                          {doubt.questionText}
-                        </p>
-                      )}
+                {filteredAdminDoubts.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center">
+                    <p className="text-sm text-gray-400">No {adminFilter} doubts in the queue.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {filteredAdminDoubts.map((doubt) => {
+                      const isSolved = doubt.status === 'solved'
+                      const isReplying = solvingDoubtId === doubt.id
 
-                      {doubt.imageUrl && (
-                        <div className="mb-3">
-                          <img
-                            src={doubt.imageUrl}
-                            alt="Question"
-                            onClick={() => setImagePreviewModal(doubt.imageUrl)}
-                            className="max-h-56 rounded-xl object-contain bg-black/60 border border-[#303046] cursor-zoom-in"
-                          />
-                          <span className="text-[10px] text-gray-400 mt-1 block">Tap image to zoom full-screen 🔍</span>
-                        </div>
-                      )}
+                      return (
+                        <div
+                          key={doubt.id}
+                          className={`p-4 rounded-2xl border transition-all ${
+                            isSolved ? 'bg-[#141422] border-emerald-500/20' : 'bg-[#181829] border-amber-500/40 shadow-md'
+                          }`}
+                        >
+                          {/* Top bar with student username */}
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-purple-600/30 text-purple-300 font-bold text-xs flex items-center justify-center">
+                                {(doubt.userName || 'S')[0].toUpperCase()}
+                              </span>
+                              <span className="text-xs font-bold text-white">@{doubt.userName}</span>
+                              <span className="text-[10px] text-gray-400">({doubt.displayName})</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#252538] text-purple-300">
+                              {doubt.subject}
+                            </span>
+                          </div>
 
-                      {/* If already solved, show solution */}
-                      {isSolved && !isReplying && (
-                        <div className="mt-3 p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30">
-                          <p className="text-xs font-bold text-emerald-300 mb-1">✅ Solved Solution:</p>
-                          {doubt.solutionText && <p className="text-xs text-gray-200 mb-2">{doubt.solutionText}</p>}
-                          {doubt.solutionImageUrl && (
-                            <img
-                              src={doubt.solutionImageUrl}
-                              alt="Solution"
-                              onClick={() => setImagePreviewModal(doubt.solutionImageUrl)}
-                              className="max-h-48 rounded-xl object-contain bg-black/40 border border-emerald-500/30 cursor-zoom-in"
-                            />
+                          {/* Question */}
+                          {doubt.questionText && (
+                            <p className="text-xs font-medium text-gray-200 mb-2 leading-relaxed whitespace-pre-wrap">
+                              {doubt.questionText}
+                            </p>
                           )}
-                          <button
-                            onClick={() => {
-                              setSolvingDoubtId(doubt.id)
-                              setSolutionText(doubt.solutionText || '')
-                              setSolutionImage(doubt.solutionImageUrl || '')
-                            }}
-                            className="mt-2 text-[11px] text-amber-300 hover:underline block"
-                          >
-                            ✏️ Edit Solution
-                          </button>
-                        </div>
-                      )}
 
-                      {/* If replying / solving */}
-                      {(!isSolved || isReplying) && (
-                        <div className="mt-3 pt-3 border-t border-[#2d2d42]">
-                          {!isReplying ? (
-                            <button
-                              onClick={() => {
-                                setSolvingDoubtId(doubt.id)
-                                setSolutionText('')
-                                setSolutionImage('')
-                              }}
-                              className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow transition-all flex items-center gap-1.5"
-                            >
-                              <span>✏️</span>
-                              <span>Solve This Doubt</span>
-                            </button>
-                          ) : (
-                            <div className="p-3.5 rounded-xl bg-[#12121e] border border-amber-500/40 flex flex-col gap-3">
-                              <h4 className="text-xs font-bold text-amber-300">Submit Solution to @{doubt.userName}:</h4>
-                              
-                              <textarea
-                                value={solutionText}
-                                onChange={(e) => setSolutionText(e.target.value)}
-                                placeholder="Explain steps, key formulas, or final answer here..."
-                                rows={3}
-                                className="w-full rounded-xl bg-[#1a1a28] border border-[#2e2e46] text-white text-xs p-3 outline-none focus:border-amber-500 transition-colors"
+                          {doubt.imageUrl && (
+                            <div className="mb-3">
+                              <img
+                                src={doubt.imageUrl}
+                                alt="Question"
+                                onClick={() => setImagePreviewModal(doubt.imageUrl)}
+                                className="max-h-56 rounded-xl object-contain bg-black/60 border border-[#303046] cursor-zoom-in"
                               />
+                              <span className="text-[10px] text-gray-400 mt-1 block">Tap image to zoom full-screen 🔍</span>
+                            </div>
+                          )}
 
-                              {/* Upload Handwritten Solution Photo */}
-                              <div className="flex flex-col gap-2">
-                                <label className="text-[11px] font-semibold text-gray-300">
-                                  Handwritten Solution Photo (Optional / Recommended):
-                                </label>
-                                <input
-                                  ref={solutionFileInputRef}
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={handleSolutionImageUpload}
-                                  className="hidden"
+                          {/* If already solved, show solution */}
+                          {isSolved && !isReplying && (
+                            <div className="mt-3 p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30">
+                              <p className="text-xs font-bold text-emerald-300 mb-1">✅ Solved Solution:</p>
+                              {doubt.solutionText && <p className="text-xs text-gray-200 mb-2">{doubt.solutionText}</p>}
+                              {doubt.solutionImageUrl && (
+                                <img
+                                  src={doubt.solutionImageUrl}
+                                  alt="Solution"
+                                  onClick={() => setImagePreviewModal(doubt.solutionImageUrl)}
+                                  className="max-h-48 rounded-xl object-contain bg-black/40 border border-emerald-500/30 cursor-zoom-in"
                                 />
+                              )}
+                              <button
+                                onClick={() => {
+                                  setSolvingDoubtId(doubt.id)
+                                  setSolutionText(doubt.solutionText || '')
+                                  setSolutionImage(doubt.solutionImageUrl || '')
+                                }}
+                                className="mt-2 text-[11px] text-amber-300 hover:underline block"
+                              >
+                                ✏️ Edit Solution
+                              </button>
+                            </div>
+                          )}
 
-                                {solutionImage ? (
-                                  <div className="relative inline-block w-fit">
-                                    <img
-                                      src={solutionImage}
-                                      alt="Solution preview"
-                                      className="max-h-40 rounded-xl object-contain border border-amber-500/40"
+                          {/* If replying / solving */}
+                          {(!isSolved || isReplying) && (
+                            <div className="mt-3 pt-3 border-t border-[#2d2d42]">
+                              {!isReplying ? (
+                                <button
+                                  onClick={() => {
+                                    setSolvingDoubtId(doubt.id)
+                                    setSolutionText('')
+                                    setSolutionImage('')
+                                  }}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow transition-all flex items-center gap-1.5"
+                                >
+                                  <span>✏️</span>
+                                  <span>Solve This Doubt</span>
+                                </button>
+                              ) : (
+                                <div className="p-3.5 rounded-xl bg-[#12121e] border border-amber-500/40 flex flex-col gap-3">
+                                  <h4 className="text-xs font-bold text-amber-300">Submit Solution to @{doubt.userName}:</h4>
+                                  
+                                  <textarea
+                                    value={solutionText}
+                                    onChange={(e) => setSolutionText(e.target.value)}
+                                    placeholder="Explain steps, key formulas, or final answer here..."
+                                    rows={3}
+                                    className="w-full rounded-xl bg-[#1a1a28] border border-[#2e2e46] text-white text-xs p-3 outline-none focus:border-amber-500 transition-colors"
+                                  />
+
+                                  {/* Upload Handwritten Solution Photo */}
+                                  <div className="flex flex-col gap-2">
+                                    <label className="text-[11px] font-semibold text-gray-300">
+                                      Handwritten Solution Photo (Optional / Recommended):
+                                    </label>
+                                    <input
+                                      ref={solutionFileInputRef}
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={handleSolutionImageUpload}
+                                      className="hidden"
                                     />
+
+                                    {solutionImage ? (
+                                      <div className="relative inline-block w-fit">
+                                        <img
+                                          src={solutionImage}
+                                          alt="Solution preview"
+                                          className="max-h-40 rounded-xl object-contain border border-amber-500/40"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setSolutionImage('')}
+                                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-600 text-white text-xs flex items-center justify-center shadow"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => solutionFileInputRef.current?.click()}
+                                        className="px-3 py-2 rounded-xl bg-[#232338] hover:bg-[#2c2c44] border border-[#383854] text-xs font-bold text-gray-300 flex items-center gap-2 w-fit transition-all"
+                                      >
+                                        <span>📷</span>
+                                        <span>Upload Notebook Solution Photo</span>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 pt-1">
                                     <button
                                       type="button"
-                                      onClick={() => setSolutionImage('')}
-                                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-600 text-white text-xs flex items-center justify-center shadow"
+                                      onClick={() => setSolvingDoubtId(null)}
+                                      className="px-3 py-2 rounded-xl bg-[#20202e] hover:bg-[#28283a] text-xs font-semibold text-gray-400"
                                     >
-                                      ✕
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isSavingSolution}
+                                      onClick={() => handleAdminSubmitSolution(doubt.id)}
+                                      className="flex-1 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition-all"
+                                    >
+                                      {isSavingSolution ? 'Sending...' : '🚀 Send Solution to Student'}
                                     </button>
                                   </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => solutionFileInputRef.current?.click()}
-                                    className="px-3 py-2 rounded-xl bg-[#232338] hover:bg-[#2c2c44] border border-[#383854] text-xs font-bold text-gray-300 flex items-center gap-2 w-fit transition-all"
-                                  >
-                                    <span>📷</span>
-                                    <span>Upload Notebook Solution Photo</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-2 pt-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setSolvingDoubtId(null)}
-                                  className="px-3 py-2 rounded-xl bg-[#20202e] hover:bg-[#28283a] text-xs font-semibold text-gray-400"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isSavingSolution}
-                                  onClick={() => handleAdminSubmitSolution(doubt.id)}
-                                  className="flex-1 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition-all"
-                                >
-                                  {isSavingSolution ? 'Sending...' : '🚀 Send Solution to Student'}
-                                </button>
-                              </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -866,57 +1053,92 @@ export default function Doubts() {
               })}
             </div>
 
-            {/* Payment Details with Anonymous Mentor QR (No phone number / No photo) */}
+            {/* ── STEP 1: Locked Amount QR Code ── */}
             <div className="p-4 rounded-2xl bg-[#181829] border border-[#2b2b3f] flex flex-col items-center text-center gap-3">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                <span className="text-gray-400">Recipient:</span>
-                <span className="text-purple-300 font-extrabold flex items-center gap-1">
-                  <span>🎓</span>
-                  <span>Study Tracker Mentor</span>
+              <div className="flex items-center justify-between w-full">
+                <span className="text-xs font-bold text-gray-400">Step 1: Scan & Pay</span>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <span>🔒</span>
+                  <span>Amount Locked: ₹{selectedPack.price}.00</span>
                 </span>
-                <span className="w-3.5 h-3.5 rounded-full bg-blue-500 text-white text-[9px] flex items-center justify-center font-bold">✓</span>
               </div>
 
-              {/* Pure Anonymous QR Code Card (No personal details) */}
-              <div className="w-48 bg-white p-3 rounded-2xl shadow-2xl flex flex-col items-center border-2 border-purple-500/20">
+              {/* Dynamic QR with EXACT locked amount encoded inside */}
+              <div className="w-48 bg-white p-2.5 rounded-2xl shadow-2xl flex flex-col items-center border-2 border-purple-500/30">
                 <img
-                  src="/mentor-qr.png"
-                  alt="Mentor UPI QR Code"
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=6&data=${encodeURIComponent(
+                    generateLockedUpiUri(selectedPack.price, selectedPack.count)
+                  )}`}
+                  alt={`UPI QR Locked ₹${selectedPack.price}`}
                   className="w-full h-auto object-contain rounded-lg"
                 />
-              </div>
-
-              {/* Supported payment badges */}
-              <div className="flex items-center gap-2 text-[10px] text-gray-400 font-semibold">
-                <span className="px-2 py-0.5 rounded-md bg-[#12121e] border border-[#2a2a3e]">Paytm</span>
-                <span className="px-2 py-0.5 rounded-md bg-[#12121e] border border-[#2a2a3e]">PhonePe</span>
-                <span className="px-2 py-0.5 rounded-md bg-[#12121e] border border-[#2a2a3e]">GPay</span>
-                <span className="px-2 py-0.5 rounded-md bg-[#12121e] border border-[#2a2a3e]">BHIM UPI</span>
+                <span className="text-[10px] text-gray-700 font-bold mt-1">
+                  Paytm • PhonePe • GPay • BHIM
+                </span>
               </div>
 
               {/* Direct UPI Intent Link on Mobile */}
               <a
-                href={`upi://pay?pa=9602440914@pthdfc&pn=Study%20Mentor&am=${selectedPack.price}&cu=INR`}
+                href={generateLockedUpiUri(selectedPack.price, selectedPack.count)}
                 className="w-full py-2.5 rounded-xl bg-[#25253e] hover:bg-[#323254] border border-[#3f3f62] text-xs font-bold text-white flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
               >
                 <span>📱</span>
                 <span>Open in UPI App to Pay ₹{selectedPack.price}</span>
               </a>
-
-              <p className="text-[10px] text-gray-400">
-                Kisi bhi UPI app se QR scan karke pay karein, fir neeche <b>Confirm & Activate</b> dabayein.
-              </p>
             </div>
 
-            {/* Instant Activate Button */}
-            <button
-              onClick={handleConfirmPayment}
-              className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
-              style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-            >
-              <span>✓</span>
-              <span>I have Paid ₹{selectedPack.price} — Activate {selectedPack.count} Token(s)</span>
-            </button>
+            {/* ── STEP 2: 12-Digit UTR Verification ── */}
+            <form onSubmit={handleVerifyPayment} className="p-4 rounded-2xl bg-[#181829] border border-[#2b2b3f] flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>Step 2:</span>
+                  <span>Enter 12-Digit UTR / UPI Ref ID</span>
+                </label>
+                <span className="text-[10px] text-purple-400 font-semibold">Instant Activation</span>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  value={enteredUtr}
+                  onChange={(e) => {
+                    setEnteredUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
+                    setUtrError('')
+                  }}
+                  placeholder="e.g. 428192839182 (12 digits)"
+                  maxLength={12}
+                  className="w-full rounded-xl bg-[#12121e] border border-[#2e2e46] text-amber-300 font-mono text-sm px-3.5 py-2.5 outline-none focus:border-purple-500 transition-colors tracking-wider"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-500 font-mono">
+                  {enteredUtr.length}/12
+                </span>
+              </div>
+
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                PhonePe, GPay ya Paytm me payment receipt ke neeche <b>12-digit UPI Ref No. / UTR</b> likha hota hai.
+              </p>
+
+              {utrError && (
+                <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-900/50 text-red-300 text-xs">
+                  {utrError}
+                </div>
+              )}
+
+              {/* Instant Activate Button */}
+              <button
+                type="submit"
+                disabled={isVerifyingUtr || enteredUtr.length !== 12}
+                className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                style={{
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  opacity: isVerifyingUtr || enteredUtr.length !== 12 ? 0.5 : 1,
+                  cursor: isVerifyingUtr || enteredUtr.length !== 12 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <span>⚡</span>
+                <span>{isVerifyingUtr ? 'Verifying with Records...' : `Verify & Credit ${selectedPack.count} Token(s)`}</span>
+              </button>
+            </form>
           </div>
         </div>
       )}

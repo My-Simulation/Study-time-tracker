@@ -225,3 +225,106 @@ export function compressImageFile(file, maxWidth = 900, quality = 0.8) {
     reader.readAsDataURL(file)
   })
 }
+
+export const MENTOR_UPI_ID = '9602440914@pthdfc'
+export const MENTOR_PAYEE_NAME = 'Study Mentor'
+
+/**
+ * Generates an amount-locked UPI URI.
+ * Payer cannot edit the amount in PhonePe, GPay, or Paytm.
+ */
+export function generateLockedUpiUri(amount, packCount = 1) {
+  const formattedAmt = Number(amount).toFixed(2)
+  const note = `DoubtPack_${packCount}Tokens`
+  return `upi://pay?pa=${MENTOR_UPI_ID}&pn=${encodeURIComponent(MENTOR_PAYEE_NAME)}&am=${formattedAmt}&cu=INR&tn=${note}&mc=0000`
+}
+
+/**
+ * Verifies a 12-digit UPI UTR number and credits doubt tokens.
+ * Enforces:
+ * 1. Exactly 12 digits (valid standard Indian UPI UTR format).
+ * 2. Duplicate prevention (the same UTR cannot be claimed twice).
+ */
+export async function verifyAndProcessPayment({ userName, displayName, pack, utr }) {
+  if (!userName) throw new Error('You must be logged in to buy tokens.')
+  const cleanUtr = String(utr || '').trim().replace(/\s+/g, '')
+
+  // 1. Validate 12-digit format
+  if (!/^\d{12}$/.test(cleanUtr)) {
+    throw new Error('Invalid UTR! Please enter the exact 12-digit UPI Reference / UTR Number from your payment receipt.')
+  }
+
+  // 2. Check for duplicate UTR usage in Firestore
+  const dupQuery = query(
+    collection(db, 'paymentRecords'),
+    where('utr', '==', cleanUtr)
+  )
+  const dupSnap = await getDocs(dupQuery)
+  if (!dupSnap.empty) {
+    throw new Error('This UTR / Transaction ID has already been redeemed! Each transaction can only be used once.')
+  }
+
+  // 3. Add to paymentRecords
+  const recordPayload = {
+    userName: userName.toLowerCase().trim(),
+    displayName: displayName || userName,
+    packId: pack.id,
+    packLabel: pack.label,
+    packCount: pack.count,
+    amount: pack.price,
+    utr: cleanUtr,
+    status: 'verified', // 'verified' | 'revoked'
+    createdAt: new Date().toISOString(),
+    createdAtTimestamp: serverTimestamp(),
+  }
+
+  const recordRef = await addDoc(collection(db, 'paymentRecords'), recordPayload)
+
+  // 4. Credit tokens to user document
+  const newBalance = await addPaidDoubts(userName, pack.count)
+
+  return {
+    recordId: recordRef.id,
+    newBalance,
+    utr: cleanUtr,
+  }
+}
+
+/**
+ * Real-time listener for Admin to inspect all incoming payment records.
+ */
+export function subscribeToPaymentRecords(callback) {
+  const q = collection(db, 'paymentRecords')
+  return onSnapshot(q, (snapshot) => {
+    const records = []
+    snapshot.forEach((doc) => {
+      records.push({ id: doc.id, ...doc.data() })
+    })
+    // Sort descending by date
+    records.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    callback(records)
+  })
+}
+
+/**
+ * Admin revokes a fraudulent/fake payment record and deducts the credited tokens.
+ */
+export async function revokePaymentByAdmin({ recordId, userName, tokenCount }) {
+  if (!recordId) throw new Error('Missing record ID')
+  const recordRef = doc(db, 'paymentRecords', recordId)
+  await updateDoc(recordRef, {
+    status: 'revoked',
+    revokedAt: new Date().toISOString(),
+  })
+
+  // Deduct tokens from user
+  const userRef = doc(db, 'users', userName.toLowerCase().trim())
+  const userSnap = await getDoc(userRef)
+  if (userSnap.exists()) {
+    const current = Number(userSnap.data()?.paidDoubtsBalance) || 0
+    const updated = Math.max(0, current - tokenCount)
+    await updateDoc(userRef, { paidDoubtsBalance: updated })
+  }
+
+  return { success: true }
+}
