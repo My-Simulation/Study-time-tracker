@@ -666,6 +666,14 @@ export default function Stopwatch({ userName }) {
             <IconButton onClick={() => navigate('/leaderboard')} title="Anonymous Study Leaderboard" aria-label="Leaderboard">
               <span className="text-sm sm:text-base leading-none">🏆</span>
             </IconButton>
+            {/* Mentor Doubt Solver */}
+            <IconButton onClick={() => navigate('/doubts')} title="Mentor Doubt Solver (1st Free)" aria-label="Doubts">
+              <span className="text-sm sm:text-base leading-none">👨‍🏫</span>
+            </IconButton>
+            {/* Exam Hub Search */}
+            <IconButton onClick={() => navigate('/exam-hub')} title="Govt & Entrance Exam Search (Syllabus & PYQs)" aria-label="Exam Hub">
+              <span className="text-sm sm:text-base leading-none">🏛️</span>
+            </IconButton>
             {/* History */}
             <IconButton onClick={() => navigate('/history')} title="Study History" aria-label="History">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1426,6 +1434,30 @@ export default function Stopwatch({ userName }) {
 
               <button
                 type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/doubts') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex-shrink-0">👨‍🏫</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Doubt Solver</h4>
+                  <p className="text-[10px] text-emerald-400 truncate">1st Free • Mentor handwritten</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); navigate('/exam-hub') }}
+                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-blue-500/15 border border-blue-500/30 flex-shrink-0">🏛️</span>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">Exam Hub Search</h4>
+                  <p className="text-[10px] text-gray-400 truncate">Syllabus & Real PYQs</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => { setShowMobileMenu(false); togglePictureInPicture() }}
                 className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
               >
@@ -1533,6 +1565,8 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
             <MenuBtn icon="🎨" label="Change Wallpaper" onClick={() => { onOpenWallpaper?.(); setOpen(false) }} />
             <MenuBtn icon="📈" label="Study Analytics" onClick={() => { navigate('/analytics'); setOpen(false) }} />
             <MenuBtn icon="🏆" label="Leaderboard" onClick={() => { navigate('/leaderboard'); setOpen(false) }} />
+            <MenuBtn icon="👨‍🏫" label="Mentor Doubt Solver" onClick={() => { navigate('/doubts'); setOpen(false) }} />
+            <MenuBtn icon="🏛️" label="Exam Hub (Syllabus & PYQ)" onClick={() => { navigate('/exam-hub'); setOpen(false) }} />
             <MenuBtn icon="📋" label="Weekly Plan" onClick={() => { navigate('/plan'); setOpen(false) }} />
             <MenuBtn icon="👁️" label="Watch Partner" onClick={() => { navigate('/watch'); setOpen(false) }} />
             <MenuBtn icon={copied ? '✓' : '🔗'} label={copied ? 'Copied!' : 'Copy Live Link'} onClick={copyLink} />

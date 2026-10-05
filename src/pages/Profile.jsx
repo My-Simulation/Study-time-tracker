@@ -1203,6 +1203,20 @@ export default function Profile({ userName }) {
             <span className="text-xl">📜</span>
             <span className="text-xs font-bold text-white">History</span>
           </button>
+          <button
+            onClick={() => navigate('/doubts')}
+            className="p-3.5 rounded-xl bg-[#141414] border border-[#252525] hover:border-emerald-500/50 flex flex-col items-center gap-1 text-center transition-all"
+          >
+            <span className="text-xl">👨‍🏫</span>
+            <span className="text-xs font-bold text-white">Doubt Solver</span>
+          </button>
+          <button
+            onClick={() => navigate('/exam-hub')}
+            className="p-3.5 rounded-xl bg-[#141414] border border-[#252525] hover:border-blue-500/50 flex flex-col items-center gap-1 text-center transition-all"
+          >
+            <span className="text-xl">🏛️</span>
+            <span className="text-xs font-bold text-white">Exam Hub</span>
+          </button>
         </div>
       </div>
 
