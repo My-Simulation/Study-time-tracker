@@ -18,6 +18,7 @@ import SignUp from './pages/SignUp'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
 import GuestGate from './components/GuestGate'
 import { getWallpaper, getWallpaperConfig, subscribeToUserWallpaper } from './utils/wallpaperStorage'
+import { trackVisitor } from './utils/visitorTracker'
 
 // Secondary / public route-level code splitting
 const HistoryDetail = lazy(() => import('./pages/HistoryDetail'))
@@ -205,6 +206,7 @@ export default function App() {
   const wallpaperConfig = getWallpaperConfig(userName)
 
   useEffect(() => {
+    trackVisitor()
     const handler = () => setTick((t) => t + 1)
     window.addEventListener('storage', handler)
     window.addEventListener('study_wallpaper_changed', handler)

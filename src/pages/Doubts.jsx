@@ -22,6 +22,7 @@ import {
   revokePaymentByAdmin,
 } from '../utils/doubtHelpers'
 import { getSession } from '../utils/auth'
+import { subscribeToVisitorLogs } from '../utils/visitorTracker'
 
 const SUBJECT_OPTIONS = [
   'Mathematics',
@@ -99,9 +100,10 @@ export default function Doubts() {
     }
   }
 
-  // Admin Payments State
+  // Admin State (Payments & Visitor Logs)
   const [paymentRecords, setPaymentRecords] = useState([])
-  const [adminSubTab, setAdminSubTab] = useState('doubts') // 'doubts' | 'payments'
+  const [visitorLogs, setVisitorLogs] = useState([])
+  const [adminSubTab, setAdminSubTab] = useState('doubts') // 'doubts' | 'payments' | 'visitors'
 
   // Ask Doubt Form State
   const [questionText, setQuestionText] = useState('')
@@ -151,7 +153,7 @@ export default function Doubts() {
     return () => unsubscribe()
   }, [userName])
 
-  // Subscribe to Admin incoming doubts and payment records queue if admin
+  // Subscribe to Admin incoming doubts, payments, and live visitor logs
   useEffect(() => {
     if (!isAdmin) return
     const unsubDoubts = subscribeToAllDoubtsForAdmin((list) => {
@@ -160,9 +162,13 @@ export default function Doubts() {
     const unsubPayments = subscribeToPaymentRecords((records) => {
       setPaymentRecords(records)
     })
+    const unsubVisitors = subscribeToVisitorLogs((logs) => {
+      setVisitorLogs(logs)
+    })
     return () => {
       unsubDoubts()
       unsubPayments()
+      unsubVisitors()
     }
   }, [isAdmin])
 
@@ -586,9 +592,22 @@ export default function Doubts() {
                     : 'bg-[#181827] text-gray-400 hover:text-white'
                 }`}
               >
-                <span>💰 Payments & UTR Log</span>
+                <span>💰 Payments & UTR</span>
                 <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono">
                   {paymentRecords.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setAdminSubTab('visitors')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  adminSubTab === 'visitors'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'bg-[#181827] text-gray-400 hover:text-white'
+                }`}
+              >
+                <span>👁️ Live Visitors</span>
+                <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono">
+                  {visitorLogs.length}
                 </span>
               </button>
             </div>
@@ -681,6 +700,119 @@ export default function Doubts() {
                         </div>
                       )
                     })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── SUB-TAB: LIVE VISITORS & GEOLOCATION LOG ── */}
+            {adminSubTab === 'visitors' && (
+              <div className="flex flex-col gap-4">
+                {/* Metric Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Tracked Visits</span>
+                    <span className="text-xl font-black text-purple-400 mt-1 font-mono">
+                      {visitorLogs.length}
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Visits Today</span>
+                    <span className="text-xl font-black text-emerald-400 mt-1 font-mono">
+                      {
+                        visitorLogs.filter((v) => {
+                          const d = new Date(v.timestamp || 0)
+                          const today = new Date()
+                          return d.toDateString() === today.toDateString()
+                        }).length
+                      }
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Unique Cities</span>
+                    <span className="text-xl font-black text-amber-300 mt-1 font-mono">
+                      {new Set(visitorLogs.map((v) => v.city).filter(Boolean)).size}
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Logged-in Users</span>
+                    <span className="text-xl font-black text-cyan-400 mt-1 font-mono">
+                      {visitorLogs.filter((v) => v.isLoggedIn).length}
+                    </span>
+                  </div>
+                </div>
+
+                {visitorLogs.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center">
+                    <p className="text-xs text-gray-400">
+                      No visitor logs recorded yet. Once users open your link (jeetprep.netlify.app), their real-time location and device info will appear here!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {visitorLogs.map((v) => (
+                      <div
+                        key={v.id}
+                        className="p-3.5 rounded-2xl border bg-[#141422] border-[#292942] hover:border-purple-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div>
+                          {/* Location + Country Flag + Identity */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-base">{v.countryEmoji || '📍'}</span>
+                            <span className="text-xs font-black text-white">
+                              {v.city ? `${v.city}${v.region ? ', ' + v.region : ''}` : 'India'}
+                            </span>
+                            <span className="text-[10px] text-gray-400">({v.country || 'India'})</span>
+                            {v.isLoggedIn ? (
+                              <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                @{v.username}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-gray-800 text-gray-400 border border-gray-700">
+                                Guest Visitor
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Device + Source + ISP + IP */}
+                          <div className="mt-1 flex items-center gap-2.5 text-xs text-gray-400 flex-wrap">
+                            <span className="text-[11px] text-cyan-300 font-medium">
+                              {v.deviceType === 'Mobile' ? '📱' : '💻'} {v.os} • {v.browser}
+                            </span>
+                            <span className="text-gray-600">•</span>
+                            <span className="text-[11px] text-amber-300 font-bold">
+                              Via: {v.source || 'Direct Link'}
+                            </span>
+                            {v.isp && (
+                              <>
+                                <span className="text-gray-600">•</span>
+                                <span className="text-[10px] text-gray-400 truncate max-w-[140px]" title={v.isp}>
+                                  📶 {v.isp}
+                                </span>
+                              </>
+                            )}
+                            {v.ip && (
+                              <>
+                                <span className="text-gray-600">•</span>
+                                <span className="text-[10px] text-gray-400 font-mono">
+                                  IP: {v.ip}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Timestamp */}
+                        <div className="text-right flex-shrink-0">
+                          <span className="text-[11px] text-purple-300 font-mono block">
+                            {v.timestamp ? new Date(v.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                          <span className="text-[10px] text-gray-400 block">
+                            {v.timestamp ? new Date(v.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
