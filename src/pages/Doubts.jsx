@@ -5,7 +5,7 @@
  * - Admin (bandar / jeeteshsharma) can view student doubts in real-time and reply with handwritten photo + text solution.
  */
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   checkIsAdmin,
@@ -333,6 +333,53 @@ export default function Doubts() {
     return true
   })
 
+  // Aggregate visitor logs by unique user/device so the same person is not repeated
+  const groupedVisitors = useMemo(() => {
+    const map = new Map()
+
+    for (const log of visitorLogs) {
+      const isKnownUser = log.isLoggedIn && log.username && log.username !== 'Guest Visitor'
+      const key = isKnownUser
+        ? `user:${log.username.toLowerCase().trim()}`
+        : `guest:${log.visitorId || log.ip || 'anon'}`
+
+      if (!map.has(key)) {
+        map.set(key, {
+          ...log,
+          visitCount: 1,
+          firstSeen: log.timestamp || Date.now(),
+          latestTimestamp: log.timestamp || Date.now(),
+        })
+      } else {
+        const item = map.get(key)
+        item.visitCount += 1
+        if ((log.timestamp || 0) > (item.latestTimestamp || 0)) {
+          item.latestTimestamp = log.timestamp
+          item.city = log.city || item.city
+          item.region = log.region || item.region
+          item.country = log.country || item.country
+          item.countryEmoji = log.countryEmoji || item.countryEmoji
+          item.isp = log.isp || item.isp
+          item.ip = log.ip || item.ip
+          item.deviceType = log.deviceType || item.deviceType
+          item.os = log.os || item.os
+          item.browser = log.browser || item.browser
+          item.source = log.source || item.source
+          if (log.isLoggedIn) {
+            item.isLoggedIn = true
+            item.username = log.username
+            item.displayName = log.displayName || item.displayName
+          }
+        }
+        if ((log.timestamp || 0) < (item.firstSeen || 0)) {
+          item.firstSeen = log.timestamp
+        }
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => (b.latestTimestamp || 0) - (a.latestTimestamp || 0))
+  }, [visitorLogs])
+
   return (
     <div className="min-h-screen bg-[#0d0d12] text-white flex flex-col font-sans pb-28">
       {/* ── Top Bar ── */}
@@ -607,7 +654,7 @@ export default function Doubts() {
               >
                 <span>👁️ Live Visitors</span>
                 <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono">
-                  {visitorLogs.length}
+                  {groupedVisitors.length}
                 </span>
               </button>
             </div>
@@ -711,8 +758,14 @@ export default function Doubts() {
                 {/* Metric Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Tracked Visits</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Unique Visitors</span>
                     <span className="text-xl font-black text-purple-400 mt-1 font-mono">
+                      {groupedVisitors.length}
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Page Hits</span>
+                    <span className="text-xl font-black text-white mt-1 font-mono">
                       {visitorLogs.length}
                     </span>
                   </div>
@@ -734,15 +787,9 @@ export default function Doubts() {
                       {new Set(visitorLogs.map((v) => v.city).filter(Boolean)).size}
                     </span>
                   </div>
-                  <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase">Logged-in Users</span>
-                    <span className="text-xl font-black text-cyan-400 mt-1 font-mono">
-                      {visitorLogs.filter((v) => v.isLoggedIn).length}
-                    </span>
-                  </div>
                 </div>
 
-                {visitorLogs.length === 0 ? (
+                {groupedVisitors.length === 0 ? (
                   <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center">
                     <p className="text-xs text-gray-400">
                       No visitor logs recorded yet. Once users open your link (jeetprep.netlify.app), their real-time location and device info will appear here!
@@ -750,19 +797,20 @@ export default function Doubts() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2.5">
-                    {visitorLogs.map((v) => (
+                    {groupedVisitors.map((v) => (
                       <div
-                        key={v.id}
+                        key={v.id || v.visitorId || v.username}
                         className="p-3.5 rounded-2xl border bg-[#141422] border-[#292942] hover:border-purple-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div>
-                          {/* Location + Country Flag + Identity */}
+                          {/* Location + Country Flag + Identity + Visit Count Pill */}
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-base">{v.countryEmoji || '📍'}</span>
                             <span className="text-xs font-black text-white">
                               {v.city ? `${v.city}${v.region ? ', ' + v.region : ''}` : 'India'}
                             </span>
                             <span className="text-[10px] text-gray-400">({v.country || 'India'})</span>
+
                             {v.isLoggedIn ? (
                               <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                 @{v.username}
@@ -772,6 +820,18 @@ export default function Doubts() {
                                 Guest Visitor
                               </span>
                             )}
+
+                            {/* Prominent Visit Count Badge */}
+                            <span
+                              className={`px-2 py-0.2 rounded-full text-[10px] font-black border flex items-center gap-1 ${
+                                v.visitCount > 1
+                                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                  : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                              }`}
+                            >
+                              <span>{v.visitCount > 1 ? '🔥' : '✨'}</span>
+                              <span>{v.visitCount} {v.visitCount > 1 ? 'Visits' : 'Visit'}</span>
+                            </span>
                           </div>
 
                           {/* Device + Source + ISP + IP */}
@@ -802,13 +862,14 @@ export default function Doubts() {
                           </div>
                         </div>
 
-                        {/* Timestamp */}
+                        {/* Last Active Timestamp */}
                         <div className="text-right flex-shrink-0">
-                          <span className="text-[11px] text-purple-300 font-mono block">
-                            {v.timestamp ? new Date(v.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                          <span className="text-[10px] text-gray-500 font-bold block uppercase">Last Active</span>
+                          <span className="text-[11px] text-purple-300 font-mono font-bold block">
+                            {v.latestTimestamp ? new Date(v.latestTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                           </span>
                           <span className="text-[10px] text-gray-400 block">
-                            {v.timestamp ? new Date(v.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''}
+                            {v.latestTimestamp ? new Date(v.latestTimestamp).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''}
                           </span>
                         </div>
                       </div>
