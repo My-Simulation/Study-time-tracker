@@ -211,12 +211,26 @@ export async function fetchLeaderboardStats(currentUsername = '') {
       liveSec = Math.floor(Number(data.baseElapsed) / 1000)
     }
 
-    // If today's time wasn't already saved in sessions, include liveSec
-    if (liveSec > 0 && stat.todaySeconds === 0) {
-      stat.todaySeconds = liveSec
-      stat.thisWeekSeconds += liveSec
-      stat.allTimeSeconds += liveSec
-      stat.activeDates.add(todayStr)
+    // If live timer has accumulated time not yet saved in sessions, incorporate it
+    if (liveSec > 0) {
+      if (stat.todaySeconds === 0) {
+        stat.todaySeconds = liveSec
+        stat.thisWeekSeconds += liveSec
+        stat.allTimeSeconds += liveSec
+        stat.activeDates.add(todayStr)
+      } else if (data.isRunning) {
+        // If timer is currently running live on top of earlier saved sessions
+        stat.todaySeconds += liveSec
+        stat.thisWeekSeconds += liveSec
+        stat.allTimeSeconds += liveSec
+      } else if (liveSec > stat.todaySeconds) {
+        // If live stopwatch baseElapsed is greater than saved sessions (e.g. paused unsaved work)
+        const diff = liveSec - stat.todaySeconds
+        stat.todaySeconds = liveSec
+        stat.thisWeekSeconds += diff
+        stat.allTimeSeconds += diff
+        stat.activeDates.add(todayStr)
+      }
     }
   })
 
