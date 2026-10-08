@@ -19,7 +19,7 @@ export default function Leaderboard() {
   const session = getSession()
   const currentUsername = session?.username || ''
 
-  const [activeTab, setActiveTab] = useState('today') // 'today' | 'week' | 'average' | 'allTime'
+  const [activeTab, setActiveTab] = useState('today') // 'today' | 'week' | 'streakAvg' | 'average' | 'allTime'
   const [users, setUsers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -55,6 +55,8 @@ export default function Leaderboard() {
       list.sort((a, b) => b.todaySeconds - a.todaySeconds || b.allTimeSeconds - a.allTimeSeconds)
     } else if (activeTab === 'week') {
       list.sort((a, b) => b.thisWeekSeconds - a.thisWeekSeconds || b.allTimeSeconds - a.allTimeSeconds)
+    } else if (activeTab === 'streakAvg') {
+      list.sort((a, b) => b.streakAvgSec - a.streakAvgSec || b.streakDays - a.streakDays || b.allTimeSeconds - a.allTimeSeconds)
     } else if (activeTab === 'average') {
       list.sort((a, b) => b.dailyAvgSec - a.dailyAvgSec || b.allTimeSeconds - a.allTimeSeconds)
     } else {
@@ -77,6 +79,7 @@ export default function Leaderboard() {
     if (higherRank) {
       if (activeTab === 'today') diffSec = higherRank.todaySeconds - entry.todaySeconds
       else if (activeTab === 'week') diffSec = higherRank.thisWeekSeconds - entry.thisWeekSeconds
+      else if (activeTab === 'streakAvg') diffSec = higherRank.streakAvgSec - entry.streakAvgSec
       else if (activeTab === 'average') diffSec = higherRank.dailyAvgSec - entry.dailyAvgSec
       else diffSec = higherRank.allTimeSeconds - entry.allTimeSeconds
     }
@@ -97,6 +100,7 @@ export default function Leaderboard() {
   const getValueDisplay = (user) => {
     if (activeTab === 'today') return formatHoursMins(user.todaySeconds)
     if (activeTab === 'week') return formatHoursMins(user.thisWeekSeconds)
+    if (activeTab === 'streakAvg') return formatAvgHours(user.streakAvgSec)
     if (activeTab === 'average') return formatAvgHours(user.dailyAvgSec)
     return formatHoursMins(user.allTimeSeconds)
   }
@@ -154,10 +158,11 @@ export default function Leaderboard() {
 
       {/* ── Metric Filter Tabs ── */}
       <div className="max-w-2xl w-full mx-auto px-4 mt-4">
-        <div className="grid grid-cols-4 p-1 rounded-2xl bg-[#151522] border border-[#262638] gap-1">
+        <div className="grid grid-cols-5 p-1 rounded-2xl bg-[#151522] border border-[#262638] gap-1">
           {[
             { id: 'today', label: 'Today', icon: '⚡' },
             { id: 'week', label: 'This Week', icon: '📅' },
+            { id: 'streakAvg', label: 'Streak Avg', icon: '🔥' },
             { id: 'average', label: 'Daily Avg', icon: '📊' },
             { id: 'allTime', label: 'All Time', icon: '👑' },
           ].map((tab) => {
@@ -166,7 +171,7 @@ export default function Leaderboard() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-2 px-1 rounded-xl text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
+                className={`py-2 px-1 rounded-xl text-[11px] sm:text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
                   isActive
                     ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/25 scale-[1.02]'
                     : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f1f30]'
@@ -390,9 +395,15 @@ export default function Leaderboard() {
                           >
                             {user.tier.name}
                           </span>
-                          <span className="text-[10px] text-gray-500">
-                            {user.activeDays} {user.activeDays === 1 ? 'day' : 'days'} active
-                          </span>
+                          {activeTab === 'streakAvg' ? (
+                            <span className="text-[10px] text-orange-400 font-bold flex items-center gap-0.5">
+                              <span>🔥</span> {user.streakDays} {user.streakDays === 1 ? 'day' : 'days'} streak
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-gray-500">
+                              {user.activeDays} {user.activeDays === 1 ? 'day' : 'days'} active
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -402,7 +413,7 @@ export default function Leaderboard() {
                           {getValueDisplay(user)}
                         </p>
                         <span className="text-[9px] text-gray-500 uppercase tracking-wider">
-                          {activeTab === 'average' ? 'avg' : 'studied'}
+                          {activeTab === 'streakAvg' ? 'streak avg' : activeTab === 'average' ? 'daily avg' : 'studied'}
                         </span>
                       </div>
                     </div>

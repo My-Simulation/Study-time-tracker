@@ -158,6 +158,7 @@ export async function fetchLeaderboardStats(currentUsername = '') {
       thisWeekSeconds: 0,
       allTimeSeconds: 0,
       activeDates: new Set(),
+      dateSecondsMap: new Map(),
       isLiveNow: false,
     })
   })
@@ -176,6 +177,7 @@ export async function fetchLeaderboardStats(currentUsername = '') {
         thisWeekSeconds: 0,
         allTimeSeconds: 0,
         activeDates: new Set(),
+        dateSecondsMap: new Map(),
         isLiveNow: false,
       })
     }
@@ -186,6 +188,9 @@ export async function fetchLeaderboardStats(currentUsername = '') {
 
     if (s.date) {
       stat.activeDates.add(s.date)
+      if (sec > 0) {
+        stat.dateSecondsMap.set(s.date, (stat.dateSecondsMap.get(s.date) || 0) + sec)
+      }
       if (s.date >= mondayStr) {
         stat.thisWeekSeconds += sec
       }
@@ -218,10 +223,19 @@ export async function fetchLeaderboardStats(currentUsername = '') {
       stat.thisWeekSeconds += diff
       stat.allTimeSeconds += diff
       stat.activeDates.add(todayStr)
+      stat.dateSecondsMap.set(todayStr, liveSec)
     }
   })
 
-  // Generate enriched list with identities & tiers
+  // Helper function to shift YYYY-MM-DD by offset days
+  const shiftDateStr = (dateStr, days) => {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const dt = new Date(y, m - 1, d)
+    dt.setDate(dt.getDate() + days)
+    return toLocalDateStr(dt)
+  }
+
+  // Generate enriched list with identities, streaks, & tiers
   const userList = Array.from(userMap.values())
     .filter((st) => st.allTimeSeconds > 0 || st.todaySeconds > 0 || st.username === currentUsername?.toLowerCase())
     .map((st) => {
@@ -231,10 +245,40 @@ export async function fetchLeaderboardStats(currentUsername = '') {
       const identity = generateAnonymousIdentity(st.username, currentUsername, alias)
       const tier = getStudyTier(dailyAvgSec)
 
+      // ── Current Active Streak & Streak Avg Calculation ──
+      // Walk backwards starting from today (if studied > 0) or yesterday (if studied > 0)
+      let streakDays = 0
+      let streakSeconds = 0
+
+      let checkDate = null
+      if ((st.dateSecondsMap.get(todayStr) || 0) > 0) {
+        checkDate = todayStr
+      } else {
+        const yesterdayStr = shiftDateStr(todayStr, -1)
+        if ((st.dateSecondsMap.get(yesterdayStr) || 0) > 0) {
+          checkDate = yesterdayStr
+        }
+      }
+
+      if (checkDate) {
+        let cur = checkDate
+        let maxDays = 3650
+        while (maxDays-- > 0 && (st.dateSecondsMap.get(cur) || 0) > 0) {
+          streakDays++
+          streakSeconds += st.dateSecondsMap.get(cur)
+          cur = shiftDateStr(cur, -1)
+        }
+      }
+
+      const streakAvgSec = streakDays > 0 ? Math.round(streakSeconds / streakDays) : 0
+
       return {
         ...st,
         activeDays,
         dailyAvgSec,
+        streakDays,
+        streakSeconds,
+        streakAvgSec,
         identity,
         tier,
       }
