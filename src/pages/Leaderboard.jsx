@@ -13,11 +13,33 @@ import {
   formatAvgHours,
 } from '../utils/leaderboardHelpers'
 import { getSession } from '../utils/auth'
+import {
+  getWallpaper,
+  getWallpaperConfig,
+  subscribeToUserWallpaper,
+} from '../utils/wallpaperStorage'
 
 export default function Leaderboard() {
   const navigate = useNavigate()
   const session = getSession()
   const currentUsername = session?.username || ''
+
+  const [wallpaper, setWallpaper] = useState(() => getWallpaper(currentUsername))
+  const [wallpaperConfig, setWallpaperConfig] = useState(() => getWallpaperConfig(currentUsername))
+
+  useEffect(() => {
+    const updateWp = () => {
+      setWallpaper(getWallpaper(currentUsername))
+      setWallpaperConfig(getWallpaperConfig(currentUsername))
+    }
+    updateWp()
+    window.addEventListener('study_wallpaper_changed', updateWp)
+    const unsub = subscribeToUserWallpaper(currentUsername, updateWp)
+    return () => {
+      window.removeEventListener('study_wallpaper_changed', updateWp)
+      if (unsub) unsub()
+    }
+  }, [currentUsername])
 
   const [activeTab, setActiveTab] = useState('today') // 'today' | 'week' | 'streakAvg' | 'average' | 'allTime'
   const [users, setUsers] = useState([])
@@ -112,9 +134,9 @@ export default function Leaderboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0d12] text-white flex flex-col font-sans pb-28">
+    <div className={`min-h-screen ${wallpaper ? 'bg-transparent' : 'bg-[#0d0d12]'} text-white flex flex-col font-sans pb-28`}>
       {/* ── Top Bar ── */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl bg-[#0d0d12]/80 border-b border-[#222232] px-4 py-3.5 flex items-center justify-between">
+      <header className={`sticky top-0 z-30 backdrop-blur-xl ${wallpaper ? 'bg-[#0d0d12]/70 border-b border-[#222232]/80' : 'bg-[#0d0d12]/80 border-b border-[#222232]'} px-4 py-3.5 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/')}
@@ -211,8 +233,10 @@ export default function Leaderboard() {
                     ref={top2.identity.isCurrentUser ? userCardRef : null}
                     className={`flex-1 flex flex-col items-center p-3 rounded-2xl border transition-all ${
                       top2.identity.isCurrentUser
-                        ? 'bg-gradient-to-b from-purple-950/40 to-[#181828] border-purple-500/60 shadow-lg shadow-purple-900/20 ring-1 ring-purple-500/30'
-                        : 'bg-[#151522]/90 border-slate-400/20'
+                        ? 'bg-gradient-to-b from-purple-950/60 to-[#181828]/80 backdrop-blur-md border-purple-500/60 shadow-lg shadow-purple-900/20 ring-1 ring-purple-500/30'
+                        : wallpaper
+                          ? 'bg-[#151522]/75 backdrop-blur-md border-slate-400/20'
+                          : 'bg-[#151522]/90 border-slate-400/20'
                     }`}
                   >
                     <div className="relative mb-2">
@@ -255,8 +279,10 @@ export default function Leaderboard() {
                     ref={top1.identity.isCurrentUser ? userCardRef : null}
                     className={`flex-1 flex flex-col items-center p-3.5 rounded-2xl border relative -mt-4 transition-all ${
                       top1.identity.isCurrentUser
-                        ? 'bg-gradient-to-b from-amber-950/40 via-purple-950/30 to-[#1a1a2c] border-amber-500/60 shadow-xl shadow-amber-900/30 ring-2 ring-amber-500/40'
-                        : 'bg-gradient-to-b from-amber-950/20 to-[#161624] border-amber-500/40 shadow-lg shadow-amber-950/20'
+                        ? 'bg-gradient-to-b from-amber-950/60 via-purple-950/50 to-[#1a1a2c]/80 backdrop-blur-md border-amber-500/60 shadow-xl shadow-amber-900/30 ring-2 ring-amber-500/40'
+                        : wallpaper
+                          ? 'bg-gradient-to-b from-amber-950/40 to-[#161624]/80 backdrop-blur-md border-amber-500/40 shadow-lg shadow-amber-950/20'
+                          : 'bg-gradient-to-b from-amber-950/20 to-[#161624] border-amber-500/40 shadow-lg shadow-amber-950/20'
                     }`}
                   >
                     <div className="absolute -top-3 text-lg animate-bounce">👑</div>
@@ -300,8 +326,10 @@ export default function Leaderboard() {
                     ref={top3.identity.isCurrentUser ? userCardRef : null}
                     className={`flex-1 flex flex-col items-center p-3 rounded-2xl border transition-all ${
                       top3.identity.isCurrentUser
-                        ? 'bg-gradient-to-b from-purple-950/40 to-[#181828] border-purple-500/60 shadow-lg shadow-purple-900/20 ring-1 ring-purple-500/30'
-                        : 'bg-[#151522]/90 border-amber-800/20'
+                        ? 'bg-gradient-to-b from-purple-950/60 to-[#181828]/80 backdrop-blur-md border-purple-500/60 shadow-lg shadow-purple-900/20 ring-1 ring-purple-500/30'
+                        : wallpaper
+                          ? 'bg-[#151522]/75 backdrop-blur-md border-amber-800/20'
+                          : 'bg-[#151522]/90 border-amber-800/20'
                     }`}
                   >
                     <div className="relative mb-2">
@@ -355,8 +383,12 @@ export default function Leaderboard() {
                       ref={isMe ? userCardRef : null}
                       className={`p-3 rounded-2xl border transition-all flex items-center gap-3.5 ${
                         isMe
-                          ? 'bg-gradient-to-r from-purple-950/50 via-[#1e1c2e] to-[#151522] border-purple-500/50 shadow-md shadow-purple-900/20 ring-1 ring-purple-500/30'
-                          : 'bg-[#151522] hover:bg-[#1a1a2b] border-[#252538]'
+                          ? wallpaper
+                            ? 'bg-gradient-to-r from-purple-950/70 via-[#1e1c2e]/70 to-[#151522]/70 backdrop-blur-md border-purple-500/50 shadow-md shadow-purple-900/20 ring-1 ring-purple-500/30'
+                            : 'bg-gradient-to-r from-purple-950/50 via-[#1e1c2e] to-[#151522] border-purple-500/50 shadow-md shadow-purple-900/20 ring-1 ring-purple-500/30'
+                          : wallpaper
+                            ? 'bg-[#151522]/75 backdrop-blur-md hover:bg-[#1a1a2b]/85 border-[#252538]/70'
+                            : 'bg-[#151522] hover:bg-[#1a1a2b] border-[#252538]'
                       }`}
                     >
                       {/* Rank Number */}
