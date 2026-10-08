@@ -59,13 +59,14 @@ function getDeviceInfo() {
   else if (/Linux/i.test(ua)) os = 'Linux'
 
   // Browser detection
-  if (/Chrome|CriOS/i.test(ua) && !/Edg|OPR/i.test(ua)) browser = 'Chrome'
-  else if (/Safari/i.test(ua) && !/Chrome|CriOS/i.test(ua)) browser = 'Safari'
-  else if (/Firefox|FxiOS/i.test(ua)) browser = 'Firefox'
-  else if (/Edg/i.test(ua)) browser = 'Edge'
-  else if (/OPR|Opera/i.test(ua)) browser = 'Opera'
+  // Extract brand/model hint if available in UA
+  let model = ''
+  const androidModelMatch = ua.match(/;\s*([^;)]+)\s+Build\//)
+  if (androidModelMatch) {
+    model = androidModelMatch[1].trim()
+  }
 
-  return { os, deviceType, browser }
+  return { os, deviceType, browser, userAgent: ua, model }
 }
 
 /**
@@ -149,7 +150,7 @@ export async function trackVisitor() {
     const session = getSession()
     const username = session?.username || 'Guest Visitor'
     const displayName = session?.displayName || ''
-    const { os, deviceType, browser } = getDeviceInfo()
+    const { os, deviceType, browser, userAgent, model } = getDeviceInfo()
     const source = getTrafficSource()
     const geo = await fetchGeolocation()
 
@@ -161,6 +162,8 @@ export async function trackVisitor() {
       deviceType,
       os,
       browser,
+      model: model || '',
+      userAgent: userAgent || '',
       source,
       landingPage: window.location.pathname || '/',
       screenResolution: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
