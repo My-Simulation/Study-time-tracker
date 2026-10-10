@@ -147,7 +147,7 @@ export async function fetchLeaderboardStats(currentUsername = '') {
   userSnap.forEach((doc) => {
     const u = doc.id.toLowerCase()
     const data = doc.data()
-    const alias = data?.leaderboardAlias?.trim() || ''
+    const alias = data?.leaderboardAlias?.trim() || (u === 'rajat' ? 'Rajat' : '')
     if (alias) {
       aliasMap.set(u, alias)
     }
