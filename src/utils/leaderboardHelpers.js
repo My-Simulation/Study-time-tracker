@@ -54,6 +54,8 @@ export function generateAnonymousIdentity(username = '', currentUsername = '', c
   const baseName = cleanAlias || `Aspirant #${num}`
   const initials = (cleanAlias ? cleanAlias.slice(0, 2) : 'AS').toUpperCase()
 
+  const isAdminViewer = currentUsername && (currentUsername.toLowerCase() === 'bandar' || currentUsername.toLowerCase() === 'jeeteshsharma')
+
   if (isSelf) {
     return {
       isCurrentUser: true,
@@ -63,6 +65,20 @@ export function generateAnonymousIdentity(username = '', currentUsername = '', c
       icon: '🌟',
       color: '#8b5cf6',
       initials,
+    }
+  }
+
+  // Admin viewer sees the real username alongside any alias
+  if (isAdminViewer) {
+    const adminLabel = cleanAlias ? `${cleanAlias} (@${username})` : `@${username}`
+    return {
+      isCurrentUser: false,
+      displayName: adminLabel,
+      codename: adminLabel,
+      tag: `#${num}`,
+      icon,
+      color,
+      initials: (cleanAlias || username).slice(0, 2).toUpperCase(),
     }
   }
 

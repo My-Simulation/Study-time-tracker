@@ -165,6 +165,11 @@ export default function WatchPartner() {
                   LIVE
                 </span>
               )}
+              {access?.isAdmin && access?.visibility !== 'public' && (
+                <span className="flex items-center gap-1 text-[10px] font-mono text-purple-300 bg-purple-500/10 border border-purple-500/30 px-2 py-0.5 rounded-full">
+                  🔒 {access.visibility} (Admin)
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
               {isLive ? 'Currently studying' : lastSeenText ? `Last seen ${lastSeenText}` : 'Not studying'}

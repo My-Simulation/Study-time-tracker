@@ -19,6 +19,7 @@ export default function PartnerHistory() {
   const [partnerDoc, setPartnerDoc] = useState(null)
   const [partnerSettings, setPartnerSettings] = useState(null)
   const [privacyBlock, setPrivacyBlock] = useState(null)
+  const [accessInfo, setAccessInfo] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -26,6 +27,7 @@ export default function PartnerHistory() {
       setLoading(true)
       setError(null)
       setPrivacyBlock(null)
+      setAccessInfo(null)
       try {
         const session = getSession()
         const viewerName = session?.username || ''
@@ -39,6 +41,7 @@ export default function PartnerHistory() {
         }
 
         const access = checkUserPrivacyAccess(pDoc, viewerName)
+        if (!cancelled) setAccessInfo(access)
         if (pDoc && !access.allowed) {
           if (!cancelled) setPrivacyBlock(access)
           return
@@ -163,6 +166,15 @@ export default function PartnerHistory() {
           </div>
         ) : (
           <>
+            {accessInfo?.isAdmin && accessInfo?.visibility !== 'public' && (
+              <div className="bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs px-3.5 py-2.5 rounded-2xl flex items-center gap-2 mb-1">
+                <span>🔒</span>
+                <span>
+                  This user has set their study history to <b>{accessInfo.visibility}</b>. Visible to you via <b>Admin Access</b>.
+                </span>
+              </div>
+            )}
+
             {/* Stats */}
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="Days Studied" value={stats.totalDays} />
