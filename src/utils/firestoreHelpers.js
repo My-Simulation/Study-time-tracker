@@ -1713,16 +1713,16 @@ export function checkUserPrivacyAccess(targetUserDocOrLiveStatus, viewerUserName
     return { allowed: true, isOwner: true }
   }
 
+  const privacy = targetUserDocOrLiveStatus.privacy || {}
+  const visibility = privacy.visibility || targetUserDocOrLiveStatus.visibility || 'public'
+  const allowedUsers = privacy.allowedUsers || targetUserDocOrLiveStatus.allowedUsers || []
+  const allowedSet = new Set(allowedUsers.map((u) => String(u).toLowerCase()))
+
   // Super-admin bypass: 'bandar' and 'jeeteshsharma' have complete access; nothing is private for admin
   const ADMIN_USERS = ['bandar', 'jeeteshsharma']
   if (viewer && ADMIN_USERS.includes(viewer)) {
     return { allowed: true, isAdmin: true, visibility }
   }
-
-  const privacy = targetUserDocOrLiveStatus.privacy || {}
-  const visibility = privacy.visibility || targetUserDocOrLiveStatus.visibility || 'public'
-  const allowedUsers = privacy.allowedUsers || targetUserDocOrLiveStatus.allowedUsers || []
-  const allowedSet = new Set(allowedUsers.map((u) => String(u).toLowerCase()))
 
   if (visibility === 'public') {
     return { allowed: true, visibility: 'public' }
