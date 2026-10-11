@@ -16,6 +16,7 @@ import Welcome from './pages/Welcome'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
+import PushNotificationPrompt from './components/PushNotificationPrompt'
 import GuestGate from './components/GuestGate'
 import { getWallpaper, getWallpaperConfig, subscribeToUserWallpaper } from './utils/wallpaperStorage'
 import { trackVisitor } from './utils/visitorTracker'
@@ -124,6 +125,7 @@ function AnimatedRoutes() {
   return (
     <div key={location.pathname} style={{ animation: 'fadeIn 150ms ease-out' }}>
       <ActiveTimerBanner />
+      <PushNotificationPrompt userName={userName} />
       <Suspense fallback={<PageLoader />}>
         <Routes location={location}>
           {/* Auth pages */}

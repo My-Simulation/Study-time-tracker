@@ -143,15 +143,71 @@ async function networkFirst(request, cacheName) {
   }
 }
 
+// ── Web Push Event (Background notification from server) ──────────
+self.addEventListener('push', (event) => {
+  let data = {
+    title: '⚡ JeetPrep Study Alert',
+    body: 'Aapne aaj apna timer use nahi kara! Daily time table ready karo aur JeetPrep ke sath apne aim tak pahuncho.',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: 'jeetprep-daily-study-reminder',
+    url: '/',
+  }
+
+  if (event.data) {
+    try {
+      const payload = event.data.json()
+      data = { ...data, ...payload }
+    } catch {
+      data.body = event.data.text() || data.body
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: data.icon || '/icon-192.png',
+    badge: data.badge || '/icon-192.png',
+    vibrate: [250, 100, 250, 100, 250],
+    tag: data.tag || 'jeetprep-reminder',
+    renotify: true,
+    data: {
+      url: data.url || '/',
+      timestamp: Date.now(),
+    },
+    actions: [
+      { action: 'start', title: '⏱️ Start Timer' },
+      { action: 'planner', title: '📋 Time Table' },
+    ],
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  )
+})
+
 // ── Notification Click ──────────────────────────────────────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
+
+  let targetUrl = event.notification.data?.url || '/'
+  if (event.action === 'planner') {
+    targetUrl = '/plan'
+  } else if (event.action === 'start') {
+    targetUrl = '/'
+  }
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url && 'focus' in client) return client.focus()
+        if (client.url && 'focus' in client) {
+          if (client.navigate) client.navigate(targetUrl)
+          return client.focus()
+        }
       }
-      if (self.clients.openWindow) return self.clients.openWindow('/')
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl)
+      }
     })
   )
 })
+
