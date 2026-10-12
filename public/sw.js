@@ -8,8 +8,8 @@
 //   • Firebase / APIs → NETWORK-FIRST
 // ─────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'stt-v6'
-const ASSET_CACHE = 'stt-assets-v6'
+const CACHE_NAME = 'stt-v7'
+const ASSET_CACHE = 'stt-assets-v7'
 
 const PRECACHE_URLS = [
   '/',

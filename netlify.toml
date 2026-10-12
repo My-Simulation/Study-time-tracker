@@ -1,6 +1,13 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
+
+# Serverless function API endpoints
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
 
 # Do not serve index.html for missing assets; return 404 so Vite/browser can handle it
 [[redirects]]

@@ -1,9 +1,9 @@
 // netlify/functions/send-reminders.js
 // Netlify serverless function to broadcast daily study reminders to inactive users
 
-const webPush = require('web-push')
-const { initializeApp, getApps } = require('firebase/app')
-const { getFirestore, collection, getDocs, query, where, doc, updateDoc, arrayRemove } = require('firebase/firestore')
+import webPush from 'web-push'
+import { initializeApp, getApps } from 'firebase/app'
+import { getFirestore, collection, getDocs, query, where, doc, updateDoc, arrayRemove } from 'firebase/firestore'
 
 const VAPID_PUBLIC_KEY = 'BLDLxPPeudzs6kWQRqOwvHp1D7p5qI6M-tLRtS40H53JnHVZ6dD_oGNX2D0YS6hO37TVGwnWGTHpNWMRAirZY80'
 const VAPID_PRIVATE_KEY = 'LODkSppWYx9q9lXMQ2h_6qRLvyG90Nie8VqCbFv10SA'
@@ -34,7 +34,7 @@ function getLocalDateString() {
   return `${year}-${month}-${day}`
 }
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   // Allow POST or GET with admin validation
   const authHeader = event.headers.authorization || ''
   const isPost = event.httpMethod === 'POST'
