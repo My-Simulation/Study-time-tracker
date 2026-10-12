@@ -514,15 +514,35 @@ export default function ExamHub() {
                         </div>
                       </div>
 
-                      <a
-                        href={paper.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3.5 py-2 rounded-xl bg-[#202032] hover:bg-purple-600 hover:text-white border border-[#30304a] text-purple-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 flex-shrink-0"
-                      >
-                        <span>📥</span>
-                        <span>Open Official Paper</span>
-                      </a>
+                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap flex-shrink-0">
+                        {/* Direct PDF search that filters exclusively for PDF documents */}
+                        <a
+                          href={`https://www.google.com/search?q=${encodeURIComponent(
+                            `${currentExam.name} ${paper.year} ${paper.title} official question paper answer key filetype:pdf`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
+                          title="Search and download direct PDF file"
+                        >
+                          <span>📄</span>
+                          <span>Download PDF</span>
+                        </a>
+
+                        {/* Official Commission Site */}
+                        {paper.link && (
+                          <a
+                            href={paper.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-2 rounded-xl bg-[#202032] hover:bg-[#2c2c44] border border-[#30304a] text-gray-300 hover:text-white text-xs font-semibold transition-all flex items-center justify-center gap-1"
+                            title="Open Official Commission Portal"
+                          >
+                            <span>🌐</span>
+                            <span>Portal</span>
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

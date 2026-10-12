@@ -26,14 +26,6 @@ import {
 } from '../utils/firestoreHelpers'
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 import { clearSession, updateCurrentSession } from '../utils/auth'
-import {
-  getGeminiApiKey,
-  getCustomGeminiApiKey,
-  hasCustomGeminiApiKey,
-  setGeminiApiKey,
-  testGeminiApiKey,
-  hasGeminiApiKey,
-} from '../utils/aiService'
 import EditProfileModal from '../components/EditProfileModal'
 import {
   isPushSupported,
@@ -111,43 +103,6 @@ export default function Profile({ userName }) {
     return { sundayRestDay: false, effectiveFrom: null }
   })
   const [settingsSaved, setSettingsSaved] = useState(false)
-
-  // ── AI & Gemini API Key State ──
-  const [aiKeyInput, setAiKeyInput] = useState(() => getCustomGeminiApiKey())
-  const [isAiKeySaved, setIsAiKeySaved] = useState(() => hasCustomGeminiApiKey())
-  const [aiKeyStatus, setAiKeyStatus] = useState(null)
-  const [aiKeyTesting, setAiKeyTesting] = useState(false)
-  const [showAiKeyText, setShowAiKeyText] = useState(false)
-
-  const handleSaveAiKey = async (e) => {
-    e?.preventDefault()
-    const cleanKey = aiKeyInput.trim()
-    if (!cleanKey) {
-      setGeminiApiKey('')
-      setIsAiKeySaved(false)
-      setAiKeyStatus({ type: 'info', msg: 'Personal key removed. Reverted to built-in system AI key.' })
-      return
-    }
-    setAiKeyTesting(true)
-    setAiKeyStatus(null)
-    try {
-      await testGeminiApiKey(cleanKey)
-      setGeminiApiKey(cleanKey)
-      setIsAiKeySaved(true)
-      setAiKeyStatus({ type: 'success', msg: '🎉 Personal Gemini Key Connected! Real AI is now active.' })
-    } catch (err) {
-      setAiKeyStatus({ type: 'error', msg: `Connection failed: ${err.message}` })
-    } finally {
-      setAiKeyTesting(false)
-    }
-  }
-
-  const handleRemoveAiKey = () => {
-    setGeminiApiKey('')
-    setAiKeyInput('')
-    setIsAiKeySaved(false)
-    setAiKeyStatus({ type: 'info', msg: 'Personal key removed. Reverted to built-in system AI key.' })
-  }
 
   // ── Privacy & Live Activity Visibility State ──
   const [visibility, setVisibility] = useState('public') // 'public' | 'selected' | 'private'
@@ -1138,123 +1093,49 @@ export default function Profile({ userName }) {
           </div>
         </div>
 
-        {/* ── AI Study Mentor & Gemini API Key Settings Card ── */}
+        {/* ── Kit AI Pro Study Engine Card ── */}
         <div className="bg-[#141414] border border-[#242424] rounded-2xl p-5 shadow-xl flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#222] pb-3">
             <div className="flex items-center gap-2.5">
               <span className="text-xl">🤖</span>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white">Kit AI · Study Mentor & Plan Generator</h3>
-                  {isAiKeySaved ? (
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Personal Key Active
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Built-in Kit AI Active
-                    </span>
-                  )}
+                  <h3 className="text-sm font-bold text-white">Kit AI · Study Mentor & Exam Intelligence</h3>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Google Gemini 3.8 Flash Pro Active
+                  </span>
                 </div>
                 <p className="text-[11px] text-gray-400 mt-0.5">
-                  Apne exam & syllabus ke hisaab se Kit Generated Plan aur Kit AI mentor chat activate karein
+                  Top-tier reasoning model for real-time timetable planning, doubt solving & competitive exam intelligence
                 </p>
               </div>
             </div>
 
-            <a
-              href="https://aistudio.google.com/app/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-all flex items-center gap-1 self-start sm:self-auto"
-            >
-              <span>🔑 Get Free API Key</span>
-              <span>↗</span>
-            </a>
+            <div className="self-start sm:self-auto">
+              <span className="text-xs font-mono font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-3 py-1 rounded-xl">
+                Unlimited for All Aspirants
+              </span>
+            </div>
           </div>
 
-          <form onSubmit={handleSaveAiKey} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-gray-300 flex items-center justify-between">
-                <span>Google Gemini API Key (Optional Override):</span>
-                <button
-                  type="button"
-                  onClick={() => setShowAiKeyText(!showAiKeyText)}
-                  className="text-[10px] text-purple-400 hover:underline"
-                >
-                  {showAiKeyText ? 'Hide Key' : 'Show Key'}
-                </button>
-              </label>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <input
-                  type={showAiKeyText ? 'text' : 'password'}
-                  value={aiKeyInput}
-                  onChange={(e) => setAiKeyInput(e.target.value)}
-                  placeholder="Built-in AI active for everyone! (Or paste personal key)"
-                  className="flex-1 px-3.5 py-2 rounded-xl bg-[#1b1b22] border border-[#333] text-white text-xs font-mono outline-none focus:border-purple-500 transition-colors"
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    type="submit"
-                    disabled={aiKeyTesting}
-                    className="pill-btn px-4 h-9 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow transition-all whitespace-nowrap"
-                  >
-                    {aiKeyTesting ? 'Testing Key…' : '⚡ Connect Key'}
-                  </button>
-                  {isAiKeySaved && (
-                    <button
-                      type="button"
-                      onClick={handleRemoveAiKey}
-                      className="px-3 h-9 rounded-xl bg-[#222] hover:bg-[#333] text-gray-400 hover:text-red-400 text-xs transition-colors"
-                      title="Remove Key"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3.5 rounded-xl bg-[#181822] border border-[#272738] flex flex-col gap-1">
+              <span className="text-[11px] text-gray-400 font-medium">Core AI Model</span>
+              <span className="text-xs font-bold text-white">Gemini 3.8 Flash</span>
+              <span className="text-[10px] text-emerald-400 mt-0.5">Next-gen high speed & accuracy ✓</span>
             </div>
-
-            {/* Feedback alert */}
-            {aiKeyStatus && (
-              <div
-                className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
-                  aiKeyStatus.type === 'success'
-                    ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                    : aiKeyStatus.type === 'error'
-                    ? 'bg-red-500/10 border border-red-500/30 text-red-300'
-                    : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'
-                }`}
-              >
-                <span>{aiKeyStatus.msg}</span>
-              </div>
-            )}
-
-            {/* How to get key box */}
-            <div className="p-3 rounded-xl bg-[#181822] border border-[#272738] flex flex-col gap-1.5 text-xs text-gray-400">
-              <span className="font-bold text-gray-300 flex items-center gap-1.5">
-                <span>💡</span>
-                <span>Free API Key Kaise Banayein (100% Free - 30 Seconds):</span>
-              </span>
-              <ol className="list-decimal list-inside space-y-0.5 text-[11px] text-gray-400">
-                <li>
-                  <a
-                    href="https://aistudio.google.com/app/apikey"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-purple-400 underline font-medium"
-                  >
-                    aistudio.google.com/app/apikey
-                  </a>{' '}
-                  par jayein aur apne Google account se sign in karein.
-                </li>
-                <li><strong>"Create API Key"</strong> button par click karein.</li>
-                <li>Key copy karke upar box me paste karein aur <strong>"Connect Key"</strong> dabayein.</li>
-              </ol>
+            <div className="p-3.5 rounded-xl bg-[#181822] border border-[#272738] flex flex-col gap-1">
+              <span className="text-[11px] text-gray-400 font-medium">Integrated Features</span>
+              <span className="text-xs font-bold text-white">Timetable, Mentor & Doubts</span>
+              <span className="text-[10px] text-purple-300 mt-0.5">Personalized to your streak ✓</span>
             </div>
-          </form>
+            <div className="p-3.5 rounded-xl bg-[#181822] border border-[#272738] flex flex-col gap-1">
+              <span className="text-[11px] text-gray-400 font-medium">Exam Intelligence</span>
+              <span className="text-xs font-bold text-white">Central & State Exams</span>
+              <span className="text-[10px] text-indigo-300 mt-0.5">Syllabus & Pattern Generator ✓</span>
+            </div>
+          </div>
         </div>
 
         {/* ── Weekly Study Target Card (Matches Screenshot 1) ── */}

@@ -20,9 +20,9 @@ import {
 import { todayString, formatHoursMinutes, formatDuration } from './formatTime.js'
 
 const GEMINI_MODELS = [
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash-lite',
-  'gemini-flash-latest',
+  'gemini-flash-latest',       // Google Gemini 3.8 Flash (Latest, top-tier reasoning & quality)
+  'gemini-3.5-flash-lite',     // Gemini 3.5 Flash Lite
+  'gemini-flash-lite-latest',  // Fast resilient fallback
 ]
 const DAILY_LIMIT = 30
 const STORAGE_LIMIT_KEY = 'stt_ai_daily_usage'

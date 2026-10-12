@@ -8,10 +8,6 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   chatWithAIMentor,
   getRemainingDailyQuota,
-  getGeminiApiKey,
-  getCustomGeminiApiKey,
-  hasCustomGeminiApiKey,
-  setGeminiApiKey,
   hasGeminiApiKey,
 } from '../utils/aiService'
 
@@ -33,9 +29,6 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [quota, setQuota] = useState(() => getRemainingDailyQuota())
-  const [showSettings, setShowSettings] = useState(false)
-  const [customKey, setCustomKey] = useState(() => getCustomGeminiApiKey())
-  const [keySaved, setKeySaved] = useState(false)
 
   const messagesEndRef = useRef(null)
 
@@ -108,13 +101,6 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-1.5 rounded-lg bg-[#1e1e26] hover:bg-[#282833] text-gray-400 hover:text-white transition-colors text-xs"
-              title="API Settings"
-            >
-              ⚙️
-            </button>
-            <button
               onClick={onClose}
               className="w-7 h-7 rounded-full bg-[#1e1e26] hover:bg-[#282833] text-gray-400 hover:text-white flex items-center justify-center text-xs transition-colors"
             >
@@ -123,57 +109,15 @@ export default function AICoachDrawer({ isOpen, onClose, userContext }) {
           </div>
         </div>
 
-        {/* Optional Custom API Key Settings Banner */}
-        {showSettings && (
-          <form onSubmit={handleSaveKey} className="p-3 bg-[#191924] border-b border-[#2d2d3d] flex flex-col gap-2 animate-fadeIn">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
-                <span>🔑</span>
-                <span>Google Gemini API Key:</span>
-              </span>
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[10px] text-purple-400 hover:underline font-semibold"
-              >
-                Free aistudio.google.com ↗
-              </a>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="password"
-                value={customKey}
-                onChange={(e) => setCustomKey(e.target.value)}
-                placeholder="Built-in AI active (or paste personal key)"
-                className="flex-1 px-3 py-1.5 rounded-xl bg-[#121216] border border-[#333] text-white text-xs outline-none focus:border-purple-500 font-mono"
-              />
-              <button
-                type="submit"
-                className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow transition-colors whitespace-nowrap"
-              >
-                {keySaved ? 'Saved ✓' : 'Save Key'}
-              </button>
-            </div>
-            <p className="text-[10px] text-gray-400 leading-tight">
-              Project master AI key already active! Optional: Apna personal key laga sakte hain.
-            </p>
-          </form>
-        )}
-
         {/* AI Status Pill */}
-        <div className="px-3.5 py-1.5 bg-purple-950/20 border-b border-purple-500/15 flex items-center justify-between gap-2">
-          <span className="text-[11px] text-purple-200/90 truncate flex items-center gap-1.5">
+        <div className="px-3.5 py-1.5 bg-gradient-to-r from-purple-950/30 to-indigo-950/30 border-b border-purple-500/20 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-purple-200/90 truncate flex items-center gap-1.5 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>{hasCustomGeminiApiKey() ? 'Personal Key Active' : 'Kit AI Active (Free for All Users)'}</span>
+            <span>Kit AI Pro · Google Gemini 3.8 Flash Active</span>
           </span>
-          <button
-            type="button"
-            onClick={() => setShowSettings(!showSettings)}
-            className="text-[10px] font-bold text-purple-300 bg-purple-500/15 border border-purple-500/25 px-2.5 py-0.5 rounded-full hover:bg-purple-500/30 whitespace-nowrap"
-          >
-            {showSettings ? 'Close' : '⚙️ Custom Key'}
-          </button>
+          <span className="text-[10px] font-mono font-bold text-purple-300 bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 rounded-full">
+            Top Quality AI
+          </span>
         </div>
 
         {/* Live Account Highlights Strip */}
