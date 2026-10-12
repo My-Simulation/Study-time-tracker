@@ -8,6 +8,7 @@
 import React, { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { EXAM_DATABASE, searchExams } from '../utils/examHubData'
+import { fetchExamByAI, getSavedAiExams } from '../utils/examAiSearch'
 import { getSession } from '../utils/auth'
 import { getSyllabus, saveSyllabus } from '../utils/firestoreHelpers'
 
@@ -24,21 +25,70 @@ export default function ExamHub() {
   const [isImporting, setIsImporting] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
 
+  // AI Exam Search State
+  const [aiExams, setAiExams] = useState(() => getSavedAiExams())
+  const [isAiSearching, setIsAiSearching] = useState(false)
+  const [aiSearchError, setAiSearchError] = useState('')
+
   const showToast = (msg) => {
     setToastMessage(msg)
     setTimeout(() => setToastMessage(''), 3500)
   }
 
-  // Filter exams based on search query
+  // Filter exams based on search query (combines local database + AI-generated exams)
   const searchResults = useMemo(() => {
-    return searchExams(searchQuery)
-  }, [searchQuery])
+    const local = searchExams(searchQuery)
+    const q = (searchQuery || '').trim().toLowerCase()
+    if (!q) {
+      return [...local, ...aiExams]
+    }
+    const matchingAi = aiExams.filter((e) =>
+      e.name?.toLowerCase().includes(q) ||
+      e.fullName?.toLowerCase().includes(q) ||
+      e.category?.toLowerCase().includes(q) ||
+      e.conductingBody?.toLowerCase().includes(q)
+    )
+    const seen = new Set(local.map((e) => e.id))
+    const combined = [...local]
+    for (const exam of matchingAi) {
+      if (!seen.has(exam.id)) {
+        combined.push(exam)
+        seen.add(exam.id)
+      }
+    }
+    return combined
+  }, [searchQuery, aiExams])
 
   // Current selected exam
   const currentExam = useMemo(() => {
     if (!searchResults.length) return null
     return searchResults.find((e) => e.id === selectedExamId) || searchResults[0]
   }, [searchResults, selectedExamId])
+
+  // AI Search Handler for any exam (State Govt, Police, CET, REET, Teaching, etc.)
+  const handleTriggerAiSearch = async (queryToSearch) => {
+    const term = (queryToSearch || searchQuery).trim()
+    if (!term) return
+
+    setIsAiSearching(true)
+    setAiSearchError('')
+
+    try {
+      const examData = await fetchExamByAI(term)
+      setAiExams((prev) => {
+        const exists = prev.some((e) => e.id === examData.id)
+        if (exists) return prev.map((e) => (e.id === examData.id ? examData : e))
+        return [examData, ...prev]
+      })
+      setSelectedExamId(examData.id)
+      showToast(`✨ Kit AI generated official details for ${examData.name}!`)
+    } catch (err) {
+      console.error('AI search error:', err)
+      setAiSearchError(err.message || 'Could not fetch exam details. Please try again or check your query.')
+    } finally {
+      setIsAiSearching(false)
+    }
+  }
 
   // Import exam syllabus into personal tracker
   const handleImportToMySyllabus = async () => {
@@ -102,26 +152,51 @@ export default function ExamHub() {
 
       {/* ── Main Container ── */}
       <main className="max-w-4xl w-full mx-auto px-4 py-5 flex-1 flex flex-col gap-5">
-        {/* ── SEARCH BAR SECTION (Clean & Uncluttered) ── */}
+        {/* ── SEARCH BAR SECTION (Clean & Uncluttered with AI Search) ── */}
         <section className="flex flex-col gap-3">
-          <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-base">
-              🔍
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search any exam (e.g. SSC CGL, UPSC, JEE Main, NEET, NDA, Banking, Railways)..."
-              autoFocus
-              className="w-full rounded-2xl bg-[#151522] border border-[#2b2b3f] text-white text-sm pl-11 pr-10 py-3.5 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all placeholder:text-gray-500 shadow-lg"
-            />
-            {searchQuery && (
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-base">
+                🔍
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (searchResults.length === 0 || !currentExam) {
+                      handleTriggerAiSearch(searchQuery)
+                    }
+                  }
+                }}
+                placeholder="Search any exam (e.g. SSC CGL, UPSC, UP Police, REET, JEE, BPSC, Banking)..."
+                autoFocus
+                className="w-full rounded-2xl bg-[#151522] border border-[#2b2b3f] text-white text-sm pl-11 pr-10 py-3.5 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all placeholder:text-gray-500 shadow-lg"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-sm w-6 h-6 flex items-center justify-center rounded-full bg-[#202030]"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Direct AI Research Button */}
+            {searchQuery.trim().length > 1 && (
               <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-sm w-6 h-6 flex items-center justify-center rounded-full bg-[#202030]"
+                type="button"
+                onClick={() => handleTriggerAiSearch(searchQuery)}
+                disabled={isAiSearching}
+                className="px-4 py-3 sm:py-0 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
               >
-                ✕
+                {isAiSearching ? (
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <span>✨ AI Research</span>
+                )}
               </button>
             )}
           </div>
@@ -133,7 +208,7 @@ export default function ExamHub() {
               <button
                 key={tag}
                 onClick={() => setSearchQuery(tag)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 cursor-pointer ${
                   searchQuery.toLowerCase() === tag.toLowerCase()
                     ? 'bg-purple-600 text-white'
                     : 'bg-[#181827] border border-[#2b2b3f] text-gray-300 hover:text-white hover:border-gray-500'
@@ -142,11 +217,61 @@ export default function ExamHub() {
                 {tag}
               </button>
             ))}
+            {searchQuery.trim().length > 1 && (
+              <button
+                onClick={() => handleTriggerAiSearch(searchQuery)}
+                disabled={isAiSearching}
+                className="px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/40 transition-all flex items-center gap-1 flex-shrink-0 cursor-pointer"
+              >
+                <span>✨ Research "{searchQuery.slice(0, 15)}" with AI</span>
+              </button>
+            )}
           </div>
         </section>
 
+        {/* ── AI RESEARCHING LOADING BANNER ── */}
+        {isAiSearching && (
+          <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-[#18122c] via-[#121224] to-[#0c0c16] border border-purple-500/50 shadow-2xl flex flex-col items-center text-center gap-3 animate-in fade-in duration-300">
+            <div className="relative">
+              <div className="w-14 h-14 rounded-2xl bg-purple-600/20 border border-purple-500/60 flex items-center justify-center text-2xl shadow-inner animate-bounce">
+                🤖
+              </div>
+              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-500 opacity-40 blur-md animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-black text-white flex items-center justify-center gap-2">
+                <span>Kit AI is researching "{searchQuery}"</span>
+                <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+              </h3>
+              <p className="text-xs text-purple-200/70 mt-1 max-w-md leading-relaxed">
+                Scanning authentic curriculum, stage-wise marking blueprints, subject chapter breakdown, and official PYQ links...
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono mt-1">
+              <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+              <span>Generating verified Syllabus & Exam Scheme...</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── AI SEARCH ERROR (If any) ── */}
+        {aiSearchError && !isAiSearching && (
+          <div className="p-4 rounded-2xl bg-rose-950/20 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚠️</span>
+              <span>{aiSearchError}</span>
+            </div>
+            <button
+              onClick={() => handleTriggerAiSearch(searchQuery)}
+              className="px-3 py-1 rounded-xl bg-rose-600/30 hover:bg-rose-600/50 text-white font-bold text-[11px] transition-colors cursor-pointer"
+            >
+              Retry AI Search
+            </button>
+          </div>
+        )}
+
         {/* ── EXAM SELECTOR CAROUSEL (If Multiple Results) ── */}
-        {searchResults.length > 0 && (
+        {searchResults.length > 0 && !isAiSearching && (
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
             {searchResults.map((exam) => {
               const isSelected = currentExam?.id === exam.id
@@ -160,11 +285,18 @@ export default function ExamHub() {
                       : 'bg-[#141420] border-[#252538] hover:border-gray-600'
                   }`}
                 >
-                  <span className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-gray-300'}`}>
-                    {exam.name}
-                  </span>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-gray-300'}`}>
+                      {exam.name}
+                    </span>
+                    {exam.aiGenerated && (
+                      <span className="text-[9px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1 py-0.2 rounded">
+                        AI
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] text-gray-500 truncate max-w-[150px]">
-                    {exam.conductingBody.split('(')[0]}
+                    {exam.conductingBody?.split('(')[0] || 'Govt Exam'}
                   </span>
                 </button>
               )
@@ -172,25 +304,41 @@ export default function ExamHub() {
           </div>
         )}
 
-        {/* ── NO RESULTS STATE ── */}
-        {searchResults.length === 0 && (
-          <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center flex flex-col items-center gap-2 my-4">
-            <span className="text-3xl">🔍</span>
-            <h3 className="text-sm font-bold text-white">No exam found for "{searchQuery}"</h3>
-            <p className="text-xs text-gray-400 max-w-sm">
-              Aap SSC, UPSC, JEE, NEET, NDA, Banking, ya Railways jaisa koi bhi term search kar sakte hain.
-            </p>
+        {/* ── NO RESULTS STATE (With 1-Click AI Search Feature) ── */}
+        {searchResults.length === 0 && !isAiSearching && (
+          <div className="p-8 rounded-3xl bg-gradient-to-br from-[#161626] to-[#10101b] border border-purple-500/30 text-center flex flex-col items-center gap-4 my-2 shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-3xl">
+              🤖
+            </div>
+            <div className="max-w-md">
+              <h3 className="text-base font-black text-white">
+                "{searchQuery}" not found in local database?
+              </h3>
+              <p className="text-xs text-gray-300 mt-1 leading-relaxed">
+                Koi baat nahi! Kit AI se kisi bhi <b>State Exam</b> (UP Police, REET, BPSC, MPTET, Rajasthan CET), <b>Central Exam</b>, ya <b>Entrance Exam</b> ka official syllabus aur exam pattern 5 seconds me generate kar sakte hain!
+              </p>
+            </div>
+
+            <button
+              onClick={() => handleTriggerAiSearch(searchQuery)}
+              disabled={isAiSearching}
+              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/40 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+            >
+              <span>⚡</span>
+              <span>Research "{searchQuery}" with Kit AI</span>
+            </button>
+
             <button
               onClick={() => setSearchQuery('')}
-              className="mt-2 text-xs font-bold text-purple-400 hover:underline"
+              className="text-xs text-gray-400 hover:text-white transition-colors cursor-pointer"
             >
-              Clear Search & Show All Exams
+              ← Clear Search & Show Popular Exams
             </button>
           </div>
         )}
 
         {/* ── SELECTED EXAM DETAILS CONTAINER ── */}
-        {currentExam && (
+        {currentExam && !isAiSearching && (
           <div className="flex flex-col gap-4">
             {/* Exam Hero Card */}
             <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-[#181829] via-[#141422] to-[#10101a] border border-[#2c2c42] shadow-xl flex flex-col gap-3">
@@ -200,6 +348,12 @@ export default function ExamHub() {
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-600/30 text-purple-300 border border-purple-500/40">
                       {currentExam.category}
                     </span>
+                    {currentExam.aiGenerated && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                        <span>✨</span>
+                        <span>Kit AI Researched</span>
+                      </span>
+                    )}
                     <span className="text-[11px] text-gray-400">
                       Conducted by: <b className="text-gray-200">{currentExam.conductingBody}</b>
                     </span>
