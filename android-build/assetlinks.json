@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.jeetprep.studytracker",
+        "sha256_cert_fingerprints": ["D7:2C:87:C3:8F:F8:41:40:AF:09:60:3B:EE:9F:D5:0F:57:12:6D:32:CB:48:33:27:08:1E:A8:2E:75:15:BE:24"]
+      }
+    }]
