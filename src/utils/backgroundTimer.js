@@ -52,18 +52,32 @@ class BackgroundTimerService {
   }
 
   _initServiceWorkerListener() {
+    const handleAction = (data) => {
+      if (!data || data.type !== 'STT_TIMER_ACTION') return
+      if (data.action === 'pause') {
+        if (this.actionCallbacks.onPause) this.actionCallbacks.onPause()
+      } else if (data.action === 'resume') {
+        if (this.actionCallbacks.onPlay) this.actionCallbacks.onPlay()
+      } else if (data.action === 'lap') {
+        if (this.actionCallbacks.onLap) this.actionCallbacks.onLap()
+      }
+    }
+
+    // 1. BroadcastChannel (instant multi-context communication)
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        this.timerChannel = new BroadcastChannel('stt_timer_channel')
+        this.timerChannel.onmessage = (event) => handleAction(event.data)
+      } catch (e) {}
+    }
+
+    // 2. ServiceWorker message listener with startMessages()
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        const data = event.data
-        if (!data || data.type !== 'STT_TIMER_ACTION') return
-        if (data.action === 'pause') {
-          if (this.actionCallbacks.onPause) this.actionCallbacks.onPause()
-        } else if (data.action === 'resume') {
-          if (this.actionCallbacks.onPlay) this.actionCallbacks.onPlay()
-        } else if (data.action === 'lap') {
-          if (this.actionCallbacks.onLap) this.actionCallbacks.onLap()
-        }
-      })
+      navigator.serviceWorker.onmessage = (event) => handleAction(event.data)
+      navigator.serviceWorker.addEventListener('message', (event) => handleAction(event.data))
+      if (navigator.serviceWorker.startMessages) {
+        navigator.serviceWorker.startMessages()
+      }
     }
   }
 
@@ -351,10 +365,15 @@ class BackgroundTimerService {
         this._drawPiPCanvas(rawTime, isRunning, subject, topic)
       }
 
-      // 4. Android Status Bar & Lock Screen persistent notification (throttled to 1s)
+      // 4. Android Status Bar & Lock Screen persistent notification
+      // Only re-post notification on state change (Start/Pause/Resume/Lap) or every 10s while running.
+      // Calling showNotification every 1000ms causes Android SystemUI to redraw/twitch ("jhatka")
+      // and swallows user touches on the Pause/Lap buttons.
       const currentSec = Math.floor((Number(elapsed) || 0) / 1000)
       const stateChanged = this._lastNotifRunning !== isRunning
-      if (currentSec !== this._lastNotifSec || stateChanged) {
+      const isPeriodicTick = currentSec % 10 === 0 && currentSec !== this._lastNotifSec
+
+      if (stateChanged || (isRunning && isPeriodicTick) || this._lastNotifSec === -1) {
         this._lastNotifSec = currentSec
         this._lastNotifRunning = isRunning
         this._updateAndroidNotification(elapsed, isRunning, subject, topic)

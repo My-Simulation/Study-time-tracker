@@ -8,8 +8,8 @@
 //   • Firebase / APIs → NETWORK-FIRST
 // ─────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'stt-v8'
-const ASSET_CACHE = 'stt-assets-v8'
+const CACHE_NAME = 'stt-v9'
+const ASSET_CACHE = 'stt-assets-v9'
 
 const PRECACHE_URLS = [
   '/',
@@ -192,18 +192,63 @@ self.addEventListener('notificationclick', (event) => {
 
   // If user clicked action buttons on the persistent stopwatch notification (Pause, Resume, Lap)
   if (isTimerNotif && (action === 'pause' || action === 'resume' || action === 'lap')) {
-    // Keep notification alive! Do not close it!
+    const isPause = action === 'pause'
+    const isResume = action === 'resume'
+    let currentTitle = event.notification.title || ''
+
+    if (isPause) {
+      if (!currentTitle.includes('(Paused)')) {
+        currentTitle = `${currentTitle}  (Paused)`
+      }
+    } else if (isResume) {
+      currentTitle = currentTitle.replace(/\s*\(Paused\)/, '')
+    }
+
+    const nextActions = isPause
+      ? [
+          { action: 'resume', title: 'Resume' },
+          { action: 'lap', title: 'Lap' },
+        ]
+      : [
+          { action: 'pause', title: 'Pause' },
+          { action: 'lap', title: 'Lap' },
+        ]
+
+    // Keep notification alive! Immediately update UI & broadcast action
     event.waitUntil(
-      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-        if (clients && clients.length > 0) {
-          clients.forEach((client) => {
-            client.postMessage({
-              type: 'STT_TIMER_ACTION',
-              action,
-            })
+      (async () => {
+        try {
+          await self.registration.showNotification(currentTitle, {
+            body: event.notification.body || '',
+            tag: 'stt_timer',
+            renotify: false,
+            silent: true,
+            badge: '/icon-192.png',
+            actions: nextActions,
+            data: event.notification.data || { url: '/' },
           })
-        }
-      })
+        } catch (e) {}
+
+        // 1. BroadcastChannel broadcast (immediate cross-context)
+        try {
+          const bc = new BroadcastChannel('stt_timer_channel')
+          bc.postMessage({ type: 'STT_TIMER_ACTION', action })
+          bc.close()
+        } catch (e) {}
+
+        // 2. Window client postMessage
+        try {
+          const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+          if (clients && clients.length > 0) {
+            clients.forEach((client) => {
+              client.postMessage({
+                type: 'STT_TIMER_ACTION',
+                action,
+              })
+            })
+          }
+        } catch (e) {}
+      })()
     )
     return
   }

@@ -341,7 +341,7 @@ export function useStopwatch(userName) {
 
   // ── Start ─────────────────────────────────────────────────────────────────
   const start = useCallback(() => {
-    if (isRunning) return
+    if (isRunning || startTimestampRef.current) return
     isControllerRef.current = true
     const now = Date.now()
     lastLocalActionRef.current = now
@@ -389,7 +389,7 @@ export function useStopwatch(userName) {
 
   // ── Stop (pause) ──────────────────────────────────────────────────────────
   const stop = useCallback(() => {
-    if (!isRunning) return
+    if (!isRunning && !startTimestampRef.current) return
     isControllerRef.current = true
     const now = Date.now()
     lastLocalActionRef.current = now
@@ -593,12 +593,15 @@ export function useStopwatch(userName) {
     }
   }, [])
 
+  const callbacksRef = useRef({ start, stop, lap })
+  callbacksRef.current = { start, stop, lap }
+
   // Sync with backgroundTimer (MediaSession / Lock Screen controls / Tab Title / Silent Audio)
   useEffect(() => {
     backgroundTimer.setCallbacks({
-      onPlay: start,
-      onPause: stop,
-      onLap: lap,
+      onPlay: () => callbacksRef.current.start?.(),
+      onPause: () => callbacksRef.current.stop?.(),
+      onLap: () => callbacksRef.current.lap?.(),
       onTick: (liveElapsed, liveDisplayTime) => {
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
           setElapsed(liveElapsed)
@@ -615,7 +618,7 @@ export function useStopwatch(userName) {
         } catch (e) {}
       },
     })
-  }, [start, stop, lap, userName, reconcileWithRemote])
+  }, [userName, reconcileWithRemote])
 
   useEffect(() => {
     backgroundTimer.update({ isRunning, displayTime, elapsed })
