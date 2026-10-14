@@ -1287,6 +1287,14 @@ export default function Profile({ userName }) {
             <span className="text-xl">🏛️</span>
             <span className="text-xs font-bold text-white">Exam Hub</span>
           </button>
+          <a
+            href="/JeetPrep.apk"
+            download="JeetPrep.apk"
+            className="p-3.5 rounded-xl bg-[#141414] border border-emerald-500/35 hover:border-emerald-500/70 flex flex-col items-center gap-1 text-center transition-all no-underline"
+          >
+            <span className="text-xl">📱</span>
+            <span className="text-xs font-bold text-emerald-300">App (APK)</span>
+          </a>
         </div>
       </div>
 

@@ -584,6 +584,18 @@ export default function Stopwatch({ userName }) {
             </span>
           </div>
 
+          {/* Android App Direct Download Pill */}
+          <a
+            href="/JeetPrep.apk"
+            download="JeetPrep.apk"
+            title="Download JeetPrep Android App (.apk 2.1 MB)"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-300 text-xs font-semibold transition-all shadow-sm active:scale-95 no-underline flex-shrink-0"
+          >
+            <span>📱</span>
+            <span className="hidden sm:inline">Get App</span>
+            <span className="text-[10px] px-1 py-0.2 rounded bg-emerald-500/25 text-emerald-200 font-bold font-mono">APK</span>
+          </a>
+
           {notifPermission === 'default' && (
             <button
               onClick={handleEnableNotification}
@@ -1488,6 +1500,22 @@ export default function Stopwatch({ userName }) {
                   <p className="text-[10px] text-gray-400 truncate">Wallpapers</p>
                 </div>
               </button>
+
+              <a
+                href="/JeetPrep.apk"
+                download="JeetPrep.apk"
+                onClick={() => setShowMobileMenu(false)}
+                className="p-3 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-[#191924] hover:bg-[#222232] border border-emerald-500/35 flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98 no-underline col-span-2"
+              >
+                <span className="text-2xl p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex-shrink-0">📱</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-white truncate">Download Android App</h4>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold font-mono">APK 2.1 MB</span>
+                  </div>
+                  <p className="text-[10px] text-emerald-300/80 truncate">Install APK directly • Fast & offline ready</p>
+                </div>
+              </a>
             </div>
           </div>
         </div>
@@ -1580,6 +1608,15 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
             <MenuBtn icon="📋" label="Weekly Plan" onClick={() => { navigate('/plan'); setOpen(false) }} />
             <MenuBtn icon="👁️" label="Watch Partner" onClick={() => { navigate('/watch'); setOpen(false) }} />
             <MenuBtn icon={copied ? '✓' : '🔗'} label={copied ? 'Copied!' : 'Copy Live Link'} onClick={copyLink} />
+            <a
+              href="/JeetPrep.apk"
+              download="JeetPrep.apk"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-left w-full hover:bg-emerald-950/30 text-emerald-300 no-underline"
+            >
+              <span className="text-sm">📱</span>
+              <span className="text-sm font-medium">Download App (APK 2.1MB)</span>
+            </a>
             <div className="border-t border-[#2a2a2a] my-1" />
             <MenuBtn icon="🚪" label="Logout" onClick={onLogout} danger />
           </div>
