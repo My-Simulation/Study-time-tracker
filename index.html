@@ -15,6 +15,56 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" />
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <title>JeetPrep · Study Time Tracker</title>
+    <!-- Permanently neutralize Netlify HUD badge -->
+    <style id="stt-kill-netlify-badge">
+      #nl-badge-frame,
+      #nl-hud-frame,
+      iframe[id^="nl-"],
+      iframe[title*="Netlify"],
+      iframe[title="Powered by Netlify"],
+      .nl-wrap,
+      .nl-card,
+      .nl-badge {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        max-width: 0 !important;
+        max-height: 0 !important;
+        position: absolute !important;
+        top: -9999px !important;
+        left: -9999px !important;
+        clip-path: circle(0) !important;
+        transform: scale(0) !important;
+        z-index: -99999 !important;
+      }
+    </style>
+    <script>
+      (function() {
+        function killNetlifyBadge() {
+          var ids = ['nl-badge-frame', 'nl-hud-frame'];
+          for (var i = 0; i < ids.length; i++) {
+            var el = document.getElementById(ids[i]);
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+          }
+          var iframes = document.querySelectorAll('iframe[title*="Netlify"], iframe[id^="nl-"]');
+          for (var j = 0; j < iframes.length; j++) {
+            if (iframes[j].parentNode) iframes[j].parentNode.removeChild(iframes[j]);
+          }
+          var s = document.querySelector('script[data-nf-variant]');
+          if (s && s.parentNode) s.parentNode.removeChild(s);
+        }
+        killNetlifyBadge();
+        if (typeof MutationObserver !== 'undefined') {
+          var obs = new MutationObserver(killNetlifyBadge);
+          obs.observe(document.documentElement, { childList: true, subtree: true });
+        }
+        window.addEventListener('DOMContentLoaded', killNetlifyBadge);
+        window.addEventListener('load', killNetlifyBadge);
+      })();
+    </script>
   </head>
   <body style="background-color: #0d0d0d; color: white; margin: 0; min-height: 100vh;">
     <div id="root">

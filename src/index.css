@@ -131,3 +131,23 @@
   transition: opacity 150ms ease-out;
 }
 
+/* ─── Neutralize Netlify HUD badge ───────────────── */
+#nl-badge-frame,
+#nl-hud-frame,
+iframe[id^="nl-"],
+iframe[title*="Netlify"],
+iframe[title="Powered by Netlify"],
+.nl-wrap,
+.nl-card,
+.nl-badge {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  z-index: -99999 !important;
+}
