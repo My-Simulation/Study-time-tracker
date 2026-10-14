@@ -365,68 +365,15 @@ class BackgroundTimerService {
         this._drawPiPCanvas(rawTime, isRunning, subject, topic)
       }
 
-      // 4. Android Status Bar & Lock Screen persistent notification
-      // Only re-post notification on state change (Start/Pause/Resume/Lap) or every 10s while running.
-      // Calling showNotification every 1000ms causes Android SystemUI to redraw/twitch ("jhatka")
-      // and swallows user touches on the Pause/Lap buttons.
-      const currentSec = Math.floor((Number(elapsed) || 0) / 1000)
-      const stateChanged = this._lastNotifRunning !== isRunning
-      const isPeriodicTick = currentSec % 10 === 0 && currentSec !== this._lastNotifSec
-
-      if (stateChanged || (isRunning && isPeriodicTick) || this._lastNotifSec === -1) {
-        this._lastNotifSec = currentSec
-        this._lastNotifRunning = isRunning
-        this._updateAndroidNotification(elapsed, isRunning, subject, topic)
-      }
+      // Ensure any lingering web notifications are dismissed; MediaSession provides smooth lockscreen/tray widget
+      this.closeAndroidNotification()
     } catch (outerErr) {
       console.warn('renderMedia error:', outerErr)
     }
   }
 
   /**
-   * Pinned, silent notification on Android (Status bar + Lock screen)
-   * Designed to match the native Google Clock stopwatch notification layout.
-   */
-  async _updateAndroidNotification(elapsed, isRunning, subject, topic) {
-    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
-    const isAndroid = /android/i.test(navigator.userAgent)
-    if (!isAndroid) return // Keep clean on iOS
-
-    try {
-      const reg = await navigator.serviceWorker.ready
-      if (reg && reg.showNotification) {
-        const digits = this._formatClockDigits(elapsed)
-        const titleStr = isRunning ? digits : `${digits}  (Paused)`
-        const bodyStr = subject ? (topic ? `${subject} · ${topic}` : subject) : ''
-
-        const actions = isRunning
-          ? [
-              { action: 'pause', title: 'Pause' },
-              { action: 'lap', title: 'Lap' },
-            ]
-          : [
-              { action: 'resume', title: 'Resume' },
-              { action: 'lap', title: 'Lap' },
-            ]
-
-        await reg.showNotification(titleStr, {
-          body: bodyStr,
-          tag: 'stt_timer',
-          renotify: false,
-          silent: true,
-          badge: '/icon-192.png',
-          actions,
-          data: { url: '/' },
-        })
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  /**
-   * Closes the Android timer notification
+   * Closes any lingering Android timer notification
    */
   async closeAndroidNotification() {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return

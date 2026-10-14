@@ -8,8 +8,8 @@
 //   • Firebase / APIs → NETWORK-FIRST
 // ─────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'stt-v9'
-const ASSET_CACHE = 'stt-assets-v9'
+const CACHE_NAME = 'stt-v10'
+const ASSET_CACHE = 'stt-assets-v10'
 
 const PRECACHE_URLS = [
   '/',
@@ -33,7 +33,7 @@ self.addEventListener('install', (event) => {
   )
 })
 
-// ── Activate: purge ALL old caches ──────────────────────────
+// ── Activate: purge ALL old caches & dismiss any stuck raw timer notifications ──
 self.addEventListener('activate', (event) => {
   const CURRENT = new Set([CACHE_NAME, ASSET_CACHE])
   event.waitUntil(
@@ -42,6 +42,10 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(keys.filter((k) => !CURRENT.has(k)).map((k) => caches.delete(k)))
       )
+      .then(() => self.registration.getNotifications({ tag: 'stt_timer' }))
+      .then((notifs) => {
+        if (notifs) notifs.forEach((n) => n.close())
+      })
       .then(() => self.clients.claim())
   )
 })
@@ -187,74 +191,32 @@ self.addEventListener('push', (event) => {
 
 // ── Notification Click ──────────────────────────────────────
 self.addEventListener('notificationclick', (event) => {
+  try {
+    event.notification.close()
+  } catch (e) {}
+
   const isTimerNotif = event.notification.tag === 'stt_timer'
   const action = event.action
 
-  // If user clicked action buttons on the persistent stopwatch notification (Pause, Resume, Lap)
   if (isTimerNotif && (action === 'pause' || action === 'resume' || action === 'lap')) {
-    const isPause = action === 'pause'
-    const isResume = action === 'resume'
-    let currentTitle = event.notification.title || ''
+    try {
+      const bc = new BroadcastChannel('stt_timer_channel')
+      bc.postMessage({ type: 'STT_TIMER_ACTION', action })
+      bc.close()
+    } catch (e) {}
 
-    if (isPause) {
-      if (!currentTitle.includes('(Paused)')) {
-        currentTitle = `${currentTitle}  (Paused)`
-      }
-    } else if (isResume) {
-      currentTitle = currentTitle.replace(/\s*\(Paused\)/, '')
-    }
-
-    const nextActions = isPause
-      ? [
-          { action: 'resume', title: 'Resume' },
-          { action: 'lap', title: 'Lap' },
-        ]
-      : [
-          { action: 'pause', title: 'Pause' },
-          { action: 'lap', title: 'Lap' },
-        ]
-
-    // Keep notification alive! Immediately update UI & broadcast action
     event.waitUntil(
-      (async () => {
-        try {
-          await self.registration.showNotification(currentTitle, {
-            body: event.notification.body || '',
-            tag: 'stt_timer',
-            renotify: false,
-            silent: true,
-            badge: '/icon-192.png',
-            actions: nextActions,
-            data: event.notification.data || { url: '/' },
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        if (clients && clients.length > 0) {
+          clients.forEach((client) => {
+            client.postMessage({ type: 'STT_TIMER_ACTION', action })
           })
-        } catch (e) {}
-
-        // 1. BroadcastChannel broadcast (immediate cross-context)
-        try {
-          const bc = new BroadcastChannel('stt_timer_channel')
-          bc.postMessage({ type: 'STT_TIMER_ACTION', action })
-          bc.close()
-        } catch (e) {}
-
-        // 2. Window client postMessage
-        try {
-          const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-          if (clients && clients.length > 0) {
-            clients.forEach((client) => {
-              client.postMessage({
-                type: 'STT_TIMER_ACTION',
-                action,
-              })
-            })
-          }
-        } catch (e) {}
-      })()
+          return clients[0].focus()
+        }
+      })
     )
     return
   }
-
-  // If user clicked the notification card itself or non-timer notifications
-  event.notification.close()
 
   let targetUrl = event.notification.data?.url || '/'
   if (event.action === 'planner') {
