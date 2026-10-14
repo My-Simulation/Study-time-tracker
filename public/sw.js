@@ -8,8 +8,8 @@
 //   • Firebase / APIs → NETWORK-FIRST
 // ─────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'stt-v7'
-const ASSET_CACHE = 'stt-assets-v7'
+const CACHE_NAME = 'stt-v8'
+const ASSET_CACHE = 'stt-assets-v8'
 
 const PRECACHE_URLS = [
   '/',
@@ -187,6 +187,28 @@ self.addEventListener('push', (event) => {
 
 // ── Notification Click ──────────────────────────────────────
 self.addEventListener('notificationclick', (event) => {
+  const isTimerNotif = event.notification.tag === 'stt_timer'
+  const action = event.action
+
+  // If user clicked action buttons on the persistent stopwatch notification (Pause, Resume, Lap)
+  if (isTimerNotif && (action === 'pause' || action === 'resume' || action === 'lap')) {
+    // Keep notification alive! Do not close it!
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        if (clients && clients.length > 0) {
+          clients.forEach((client) => {
+            client.postMessage({
+              type: 'STT_TIMER_ACTION',
+              action,
+            })
+          })
+        }
+      })
+    )
+    return
+  }
+
+  // If user clicked the notification card itself or non-timer notifications
   event.notification.close()
 
   let targetUrl = event.notification.data?.url || '/'
@@ -200,7 +222,7 @@ self.addEventListener('notificationclick', (event) => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if (client.url && 'focus' in client) {
-          if (client.navigate) client.navigate(targetUrl)
+          if (client.navigate && targetUrl !== '/') client.navigate(targetUrl)
           return client.focus()
         }
       }

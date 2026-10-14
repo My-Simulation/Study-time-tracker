@@ -19,6 +19,8 @@ class BackgroundTimerService {
     this.isPiPActive = false
     this.fallbackInterval = null
     this.lastProcessedSecond = -1
+    this._lastNotifSec = -1
+    this._lastNotifRunning = null
 
     this.actionCallbacks = {
       onPlay: null,
@@ -46,6 +48,23 @@ class BackgroundTimerService {
 
     this._initAudio()
     this._initVisibilityListener()
+    this._initServiceWorkerListener()
+  }
+
+  _initServiceWorkerListener() {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        const data = event.data
+        if (!data || data.type !== 'STT_TIMER_ACTION') return
+        if (data.action === 'pause') {
+          if (this.actionCallbacks.onPause) this.actionCallbacks.onPause()
+        } else if (data.action === 'resume') {
+          if (this.actionCallbacks.onPlay) this.actionCallbacks.onPlay()
+        } else if (data.action === 'lap') {
+          if (this.actionCallbacks.onLap) this.actionCallbacks.onLap()
+        }
+      })
+    }
   }
 
   _initAudio() {
@@ -230,12 +249,31 @@ class BackgroundTimerService {
       this.fallbackInterval = null
     }
     this.lastProcessedSecond = -1
+    this._lastNotifSec = -1
+    this._lastNotifRunning = null
     this.pauseAudio()
     this.releaseWakeLock()
     this.closeAndroidNotification()
     if (typeof document !== 'undefined') {
       document.title = 'JeetPrep · Study Time Tracker'
     }
+  }
+
+  /**
+   * Formats elapsed ms into clean clock digits (MM:SS or HH:MM:SS), identical to Google Clock.
+   */
+  _formatClockDigits(elapsedMs) {
+    const totalSec = Math.max(0, Math.floor((Number(elapsedMs) || 0) / 1000))
+    const hours = Math.floor(totalSec / 3600)
+    const minutes = Math.floor((totalSec % 3600) / 60)
+    const seconds = totalSec % 60
+
+    const pad = (n) => String(n).padStart(2, '0')
+
+    if (hours > 0) {
+      return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+    }
+    return `${pad(minutes)}:${pad(seconds)}`
   }
 
   /**
@@ -313,8 +351,14 @@ class BackgroundTimerService {
         this._drawPiPCanvas(rawTime, isRunning, subject, topic)
       }
 
-      // 4. Android Status Bar & Lock Screen persistent notification
-      this._updateAndroidNotification(timeFormatted, isRunning, subtitle)
+      // 4. Android Status Bar & Lock Screen persistent notification (throttled to 1s)
+      const currentSec = Math.floor((Number(elapsed) || 0) / 1000)
+      const stateChanged = this._lastNotifRunning !== isRunning
+      if (currentSec !== this._lastNotifSec || stateChanged) {
+        this._lastNotifSec = currentSec
+        this._lastNotifRunning = isRunning
+        this._updateAndroidNotification(elapsed, isRunning, subject, topic)
+      }
     } catch (outerErr) {
       console.warn('renderMedia error:', outerErr)
     }
@@ -322,8 +366,9 @@ class BackgroundTimerService {
 
   /**
    * Pinned, silent notification on Android (Status bar + Lock screen)
+   * Designed to match the native Google Clock stopwatch notification layout.
    */
-  async _updateAndroidNotification(timeFormatted, isRunning, subtitle) {
+  async _updateAndroidNotification(elapsed, isRunning, subject, topic) {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
     const isAndroid = /android/i.test(navigator.userAgent)
@@ -332,18 +377,28 @@ class BackgroundTimerService {
     try {
       const reg = await navigator.serviceWorker.ready
       if (reg && reg.showNotification) {
-        const titleStr = isRunning ? `⏱️ ${timeFormatted}` : `⏸️ Paused: ${timeFormatted}`
-        const bodyStr = isRunning
-          ? `🟢 Running · ${subtitle}`
-          : `⏸️ Paused · ${subtitle}`
+        const digits = this._formatClockDigits(elapsed)
+        const titleStr = isRunning ? digits : `${digits}  (Paused)`
+        const bodyStr = subject ? (topic ? `${subject} · ${topic}` : subject) : ''
+
+        const actions = isRunning
+          ? [
+              { action: 'pause', title: 'Pause' },
+              { action: 'lap', title: 'Lap' },
+            ]
+          : [
+              { action: 'resume', title: 'Resume' },
+              { action: 'lap', title: 'Lap' },
+            ]
 
         await reg.showNotification(titleStr, {
           body: bodyStr,
           tag: 'stt_timer',
           renotify: false,
           silent: true,
-          icon: '/icon-192.png',
           badge: '/icon-192.png',
+          actions,
+          data: { url: '/' },
         })
       }
     } catch (e) {
