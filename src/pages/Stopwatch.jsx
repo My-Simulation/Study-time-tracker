@@ -21,6 +21,8 @@ import BackgroundModal from '../components/BackgroundModal'
 import AICoachDrawer from '../components/AICoachDrawer'
 import SessionTimeline from '../components/SessionTimeline'
 import AuthModal from '../components/AuthModal'
+import AdminTimerBoosterModal from '../components/AdminTimerBoosterModal'
+import { ADMIN_USERNAMES } from '../utils/doubtHelpers'
 import { buildUserAIContext } from '../utils/aiService'
 import {
   getWallpaper,
@@ -64,6 +66,7 @@ export default function Stopwatch({ userName }) {
   const [showAICoach, setShowAICoach] = useState(false)
   const [userAIContext, setUserAIContext] = useState(null)
   const [showWallpaperModal, setShowWallpaperModal] = useState(false)
+  const [showTimerBoosterModal, setShowTimerBoosterModal] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [wallpaper, setWallpaper] = useState(() => getWallpaper(userName))
   const [wallpaperConfig, setWallpaperConfig] = useState(() => getWallpaperConfig(userName))
@@ -551,7 +554,14 @@ export default function Stopwatch({ userName }) {
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink min-w-0">
           {/* Profile pill for logged-in user OR Get Started button for Guest */}
           {userName ? (
-            <ProfilePill userName={userName} avatarColor={userProfile.avatarColor || avatarColor} photoUrl={userProfile.photoUrl} onLogout={handleSwitchUser} onOpenWallpaper={() => setShowWallpaperModal(true)} />
+            <ProfilePill
+              userName={userName}
+              avatarColor={userProfile.avatarColor || avatarColor}
+              photoUrl={userProfile.photoUrl}
+              onLogout={handleSwitchUser}
+              onOpenWallpaper={() => setShowWallpaperModal(true)}
+              onOpenTimerBooster={() => setShowTimerBoosterModal(true)}
+            />
           ) : (
             <button
               onClick={() => {
@@ -1520,12 +1530,21 @@ export default function Stopwatch({ userName }) {
           </div>
         </div>
       )}
+
+      {/* Admin Timer Booster Modal (Admin Only) */}
+      {ADMIN_USERNAMES.includes(userName?.toLowerCase()) && (
+        <AdminTimerBoosterModal
+          isOpen={showTimerBoosterModal}
+          onClose={() => setShowTimerBoosterModal(false)}
+          initialUser="kittu"
+        />
+      )}
     </div>
   )
 }
 
 // ── Profile Pill ──────────────────────────────────────────────────────────────
-function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpaper }) {
+function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpaper, onOpenTimerBooster }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [imgError, setImgError] = useState(false)
@@ -1597,6 +1616,19 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
               </div>
             </div>
             <div className="border-t border-[#2a2a2a] my-1" />
+
+            {/* Admin Quick Booster Button (Admin only) */}
+            {ADMIN_USERNAMES.includes(userName?.toLowerCase()) && (
+              <button
+                type="button"
+                onClick={() => { onOpenTimerBooster?.(); setOpen(false) }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-xl transition-all text-left w-full bg-gradient-to-r from-amber-500/15 to-orange-500/15 hover:from-amber-500/25 hover:to-orange-500/25 text-amber-300 font-bold border border-amber-500/35 my-0.5 shadow-sm active:scale-98 cursor-pointer"
+              >
+                <span className="text-sm">⚡</span>
+                <span className="text-sm">Admin Timer Booster</span>
+              </button>
+            )}
+
             <MenuBtn icon="👤" label="My Profile & Stats" onClick={() => { navigate('/profile'); setOpen(false) }} />
             <MenuBtn icon="✏️" label="Edit Profile" onClick={() => { navigate('/profile'); setOpen(false) }} />
             <MenuBtn icon="🎨" label="Change Wallpaper" onClick={() => { onOpenWallpaper?.(); setOpen(false) }} />

@@ -1966,6 +1966,150 @@ export async function completeGoogleRegistration({
   return { ok: true, userDoc: userData, username: lowerUsername }
 }
 
+// ─────────────────────────────────────────────
+// ADMIN SUPER-TOOLS: USER TIMER ADJUSTER
+// ─────────────────────────────────────────────
+
+/**
+ * Instantly adjust a user's timer (add, subtract, or set).
+ * Broadcasts in real-time to their device via liveStatus, and updates today's saved session.
+ */
+export async function adminAdjustUserTimer({
+  targetUsername,
+  hours = 0,
+  minutes = 0,
+  adjustSavedSession = true,
+  specificDate = null,
+  operation = 'add', // 'add' | 'subtract' | 'set'
+}) {
+  const target = (targetUsername || '').trim().toLowerCase()
+  if (!target) throw new Error('Target username is required.')
+
+  const targetDocSnap = await getDoc(doc(db, 'users', target))
+  if (!targetDocSnap.exists()) {
+    throw new Error(`User @${target} does not exist in JeetPrep.`)
+  }
+
+  const h = Number(hours) || 0
+  const m = Number(minutes) || 0
+  const deltaSec = h * 3600 + m * 60
+  const deltaMs = deltaSec * 1000
+
+  // 1. Fetch & update liveStatus
+  const statusRef = doc(db, 'liveStatus', target)
+  const statusSnap = await getDoc(statusRef)
+  let oldBaseMs = 0
+  let isRunning = false
+  let startedAtMs = null
+
+  if (statusSnap.exists()) {
+    const data = statusSnap.data()
+    oldBaseMs = Number(data.baseElapsed) || 0
+    isRunning = Boolean(data.isRunning)
+    startedAtMs = data.startedAtMs || null
+  }
+
+  let newBaseMs = oldBaseMs
+  if (operation === 'add') {
+    newBaseMs = oldBaseMs + deltaMs
+  } else if (operation === 'subtract') {
+    newBaseMs = Math.max(0, oldBaseMs - deltaMs)
+  } else if (operation === 'set') {
+    newBaseMs = deltaMs
+  }
+
+  const now = Date.now()
+  await setDoc(
+    statusRef,
+    {
+      userName: target,
+      baseElapsed: newBaseMs,
+      updatedAtMs: now,
+      deviceId: `admin_sync_${now}`,
+      action: 'sync',
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  )
+
+  // 2. Adjust today's / specific date's saved session if requested
+  const targetDate = specificDate || todayString()
+  let savedSessionUpdated = false
+
+  if (adjustSavedSession) {
+    const q = query(
+      collection(db, 'sessions'),
+      where('userName', '==', target),
+      where('date', '==', targetDate)
+    )
+    const sessionSnap = await getDocs(q)
+    if (!sessionSnap.empty) {
+      const sDoc = sessionSnap.docs[0]
+      const sData = sDoc.data()
+      const oldSec = Number(sData.totalSeconds) || 0
+      let newSec = oldSec
+      if (operation === 'add') newSec = oldSec + deltaSec
+      else if (operation === 'subtract') newSec = Math.max(0, oldSec - deltaSec)
+      else if (operation === 'set') newSec = deltaSec
+
+      const secPart = newSec % 60
+      const minPart = Math.floor(newSec / 60) % 60
+      const hrPart = Math.floor(newSec / 3600)
+      const pad2 = (n) => String(n).padStart(2, '0')
+      const formattedTotal = `${hrPart}:${pad2(minPart)}:${pad2(secPart)}.00`
+
+      await updateDoc(doc(db, 'sessions', sDoc.id), {
+        totalSeconds: newSec,
+        totalTime: formattedTotal,
+        updatedAt: serverTimestamp(),
+      })
+      savedSessionUpdated = true
+    }
+  }
+
+  // Calculate current live reading
+  const currentTotalSec = Math.floor(
+    (newBaseMs + (isRunning && startedAtMs ? Math.max(0, Date.now() - startedAtMs) : 0)) / 1000
+  )
+  const curSec = currentTotalSec % 60
+  const curMin = Math.floor(currentTotalSec / 60) % 60
+  const curHr = Math.floor(currentTotalSec / 3600)
+  const pad2 = (n) => String(n).padStart(2, '0')
+  const currentFormatted = `${curHr}:${pad2(curMin)}:${pad2(curSec)}.00`
+
+  return {
+    ok: true,
+    target,
+    displayName: targetDocSnap.data()?.displayName || target,
+    isRunning,
+    oldBaseMs,
+    newBaseMs,
+    currentTotalSec,
+    currentFormatted,
+    savedSessionUpdated,
+    targetDate,
+  }
+}
+
+/**
+ * Fetch all registered users for quick admin select.
+ */
+export async function adminGetAllUsers() {
+  const snap = await getDocs(collection(db, 'users'))
+  const list = []
+  snap.forEach((d) => {
+    const data = d.data()
+    list.push({
+      username: d.id,
+      displayName: data.displayName || d.id,
+      avatarColor: data.avatarColor || '#7c3aed',
+      photoUrl: data.photoUrl || '',
+    })
+  })
+  list.sort((a, b) => a.username.localeCompare(b.username))
+  return list
+}
+
 
 
 

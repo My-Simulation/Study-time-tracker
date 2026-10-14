@@ -27,6 +27,8 @@ import {
 import { todayString, formatHoursMinutes, formatDuration } from '../utils/formatTime'
 import { clearSession, updateCurrentSession } from '../utils/auth'
 import EditProfileModal from '../components/EditProfileModal'
+import AdminTimerBoosterModal from '../components/AdminTimerBoosterModal'
+import { ADMIN_USERNAMES } from '../utils/doubtHelpers'
 import {
   isPushSupported,
   getPushPermissionState,
@@ -49,6 +51,7 @@ export default function Profile({ userName }) {
     }
   })
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showTimerBoosterModal, setShowTimerBoosterModal] = useState(false)
   const [allSessions, setAllSessions] = useState(() => {
     if (!userName) return []
     try {
@@ -993,26 +996,36 @@ export default function Profile({ userName }) {
               </p>
             )}
 
-            {/* Admin Broadcast Tool for bandar & jeeteshsharma */}
+            {/* Admin Super-Tools for bandar & jeeteshsharma */}
             {(userName?.toLowerCase() === 'bandar' || userName?.toLowerCase() === 'jeeteshsharma') && (
               <div className="mt-2 pt-3 border-t border-[#262635] flex flex-col gap-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-amber-300">🛡️ Admin Super-Tool:</span>
-                    <span className="text-[11px] text-gray-400">Broadcast to all inactive students</span>
+                    <span className="text-xs font-bold text-amber-300">🛡️ Admin Super-Tools:</span>
+                    <span className="text-[11px] text-gray-400">Instant Timer Booster & Broadcast</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleAdminBroadcast}
-                    disabled={broadcastLoading}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    {broadcastLoading ? (
-                      <span className="w-3.5 h-3.5 border-2 border-amber-300/30 border-t-amber-300 rounded-full animate-spin" />
-                    ) : (
-                      <span>📢 Broadcast Inactivity Reminders</span>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowTimerBoosterModal(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                    >
+                      <span>⚡</span>
+                      <span>Adjust User Timer</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAdminBroadcast}
+                      disabled={broadcastLoading}
+                      className="px-3 py-1.5 rounded-xl bg-[#20202e] hover:bg-[#2c2c40] border border-[#333348] text-gray-300 hover:text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {broadcastLoading ? (
+                        <span className="w-3.5 h-3.5 border-2 border-amber-300/30 border-t-amber-300 rounded-full animate-spin" />
+                      ) : (
+                        <span>📢 Broadcast Inactivity Reminders</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 {broadcastFeedback && (
                   <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl">
@@ -1310,6 +1323,15 @@ export default function Profile({ userName }) {
           }
         }}
       />
+
+      {/* Admin Timer Booster Modal */}
+      {(userName?.toLowerCase() === 'bandar' || userName?.toLowerCase() === 'jeeteshsharma') && (
+        <AdminTimerBoosterModal
+          isOpen={showTimerBoosterModal}
+          onClose={() => setShowTimerBoosterModal(false)}
+          initialUser="kittu"
+        />
+      )}
     </div>
   )
 }
