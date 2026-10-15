@@ -364,9 +364,6 @@ class BackgroundTimerService {
       if (this.isPiPActive && this.pipCanvas) {
         this._drawPiPCanvas(rawTime, isRunning, subject, topic)
       }
-
-      // Ensure any lingering web notifications are dismissed; MediaSession provides smooth lockscreen/tray widget
-      this.closeAndroidNotification()
     } catch (outerErr) {
       console.warn('renderMedia error:', outerErr)
     }
