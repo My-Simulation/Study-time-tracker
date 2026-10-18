@@ -165,16 +165,47 @@ export default function InteractiveCosmicTrail() {
       wakeLoop()
     }
 
+    // Dedicated Touch event handlers for mobile devices (iPhone, Android, Tablets)
+    let isTouchActive = false
+
+    const handleTouchStart = (e) => {
+      isTouchActive = true
+      for (let i = 0; i < e.touches.length; i++) {
+        const t = e.touches[i]
+        addPoint(t.clientX, t.clientY, true)
+        addShockwave(t.clientX, t.clientY)
+      }
+    }
+
+    const handleTouchMove = (e) => {
+      isTouchActive = true
+      for (let i = 0; i < e.touches.length; i++) {
+        const t = e.touches[i]
+        addPoint(t.clientX, t.clientY, true)
+      }
+    }
+
+    const handleTouchEnd = (e) => {
+      if (e.touches.length === 0) {
+        isTouchActive = false
+        lastPoint = null
+      }
+    }
+
+    // Pointer events for desktop mouse move and pen
     const handlePointerMove = (e) => {
-      addPoint(e.clientX, e.clientY, e.pointerType === 'touch')
+      if (e.pointerType === 'touch' || isTouchActive) return
+      addPoint(e.clientX, e.clientY, false)
     }
 
     const handlePointerDown = (e) => {
-      addPoint(e.clientX, e.clientY, e.pointerType === 'touch')
+      if (e.pointerType === 'touch' || isTouchActive) return
+      addPoint(e.clientX, e.clientY, false)
       addShockwave(e.clientX, e.clientY)
     }
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (e) => {
+      if (e.pointerType === 'touch') return
       lastPoint = null
     }
 
@@ -354,6 +385,10 @@ export default function InteractiveCosmicTrail() {
     window.addEventListener('pointerdown', handlePointerDown, { passive: true })
     window.addEventListener('pointerup', handlePointerUp, { passive: true })
     window.addEventListener('pointercancel', handlePointerUp, { passive: true })
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: true })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true })
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true })
 
     return () => {
       window.removeEventListener('resize', resize)
@@ -361,6 +396,10 @@ export default function InteractiveCosmicTrail() {
       window.removeEventListener('pointerdown', handlePointerDown)
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerUp)
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', handleTouchEnd)
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }
