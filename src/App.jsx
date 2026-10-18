@@ -19,6 +19,7 @@ import ActiveTimerBanner from './components/ActiveTimerBanner'
 import PushNotificationPrompt from './components/PushNotificationPrompt'
 import GuestGate from './components/GuestGate'
 import CinematicBackground from './components/CinematicBackground'
+import InteractiveCosmicTrail from './components/InteractiveCosmicTrail'
 import { getWallpaper, getWallpaperConfig, subscribeToUserWallpaper } from './utils/wallpaperStorage'
 import { trackVisitor } from './utils/visitorTracker'
 
@@ -242,6 +243,9 @@ export default function App() {
     <BrowserRouter>
       {/* ── Cinematic Ambient Cosmic Nebula & Starlight Atmosphere ── */}
       <CinematicBackground />
+
+      {/* ── Interactive Cosmic Constellation Trail & Touch Ribbon ── */}
+      <InteractiveCosmicTrail />
 
       {/* ── Global Personal Focus Wallpaper Layer across all pages ── */}
       {wallpaper && (
