@@ -67,7 +67,7 @@ export default function Stopwatch({ userName }) {
   const [userAIContext, setUserAIContext] = useState(null)
   const [showWallpaperModal, setShowWallpaperModal] = useState(false)
   const [showTimerBoosterModal, setShowTimerBoosterModal] = useState(false)
-  const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [showAppsMenu, setShowAppsMenu] = useState(false)
   const [wallpaper, setWallpaper] = useState(() => getWallpaper(userName))
   const [wallpaperConfig, setWallpaperConfig] = useState(() => getWallpaperConfig(userName))
   const [streakCount, setStreakCount] = useState(0)
@@ -81,16 +81,16 @@ export default function Stopwatch({ userName }) {
       displayName: s?.displayName || userName,
     }
   })
-  // Prevent background scrolling when mobile apps sheet is open
+  // Prevent background scrolling when apps sheet is open
   useEffect(() => {
-    if (showMobileMenu) {
+    if (showAppsMenu) {
       const prev = document.body.style.overflow
       document.body.style.overflow = 'hidden'
       return () => {
         document.body.style.overflow = prev
       }
     }
-  }, [showMobileMenu])
+  }, [showAppsMenu])
 
   // Sync wallpaper when userName switches or when updated locally/cloud
   useEffect(() => {
@@ -647,70 +647,25 @@ export default function Stopwatch({ userName }) {
             <span className="hidden sm:inline">Kit AI</span>
           </button>
 
-          {/* Desktop Navigation Icons (hidden on mobile to prevent overlap) */}
-          <div className="hidden md:flex items-center gap-0.5 sm:gap-1">
-            {/* Day Planner Sheet icon */}
-            <IconButton onClick={() => navigate('/planner')} title="Daily Study Planner" aria-label="Day Planner">
-              <span className="text-sm sm:text-base leading-none">🌸</span>
-            </IconButton>
-            {/* Syllabus tracker icon */}
-            <IconButton onClick={() => navigate('/syllabus')} title="Syllabus & Topics" aria-label="Syllabus">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-            </IconButton>
-            {/* Plan icon */}
-            <IconButton onClick={() => navigate('/plan')} title="Study Plan" aria-label="Study Plan">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="3" y1="9" x2="21" y2="9" />
-              </svg>
-            </IconButton>
-            {/* Watch partner */}
-            <IconButton onClick={() => navigate('/watch')} title="Watch Partner" aria-label="Watch Partner">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </IconButton>
-            {/* Analytics icon */}
-            <IconButton onClick={() => navigate('/analytics')} title="Study Analytics" aria-label="Study Analytics">
-              <span className="text-sm sm:text-base leading-none">📈</span>
-            </IconButton>
-            {/* Leaderboard icon */}
-            <IconButton onClick={() => navigate('/leaderboard')} title="Anonymous Study Leaderboard" aria-label="Leaderboard">
-              <span className="text-sm sm:text-base leading-none">🏆</span>
-            </IconButton>
-            {/* Mentor Doubt Solver */}
-            <IconButton onClick={() => navigate('/doubts')} title="Mentor Doubt Solver (1st Free)" aria-label="Doubts">
-              <span className="text-sm sm:text-base leading-none">👨‍🏫</span>
-            </IconButton>
-            {/* Exam Hub Search */}
-            <IconButton onClick={() => navigate('/exam-hub')} title="Govt & Entrance Exam Search (Syllabus & PYQs)" aria-label="Exam Hub">
-              <span className="text-sm sm:text-base leading-none">🏛️</span>
-            </IconButton>
-            {/* Study Blog & Guides */}
-            <IconButton onClick={() => navigate('/blog')} title="JeetPrep Guides & Blog" aria-label="Blog">
-              <span className="text-sm sm:text-base leading-none">📰</span>
-            </IconButton>
-            {/* History */}
-            <IconButton onClick={() => navigate('/history')} title="Study History" aria-label="History">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-              </svg>
-            </IconButton>
-            {/* Floating Mini Stopwatch (PiP) */}
-            <IconButton onClick={togglePictureInPicture} title="Floating Mini Stopwatch (Picture-in-Picture)" aria-label="Float Mini Timer">
-              <span className="text-sm sm:text-base leading-none">🪟</span>
-            </IconButton>
-          </div>
-
-          {/* Mobile All-Apps Trigger Button (Prevents mobile top-bar squishing) */}
+          {/* Direct Leaderboard shortcut */}
           <button
             type="button"
-            onClick={() => setShowMobileMenu(true)}
-            className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-gray-200 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer ml-1"
-            title="Open Apps & Tools Menu"
+            onClick={() => navigate('/leaderboard')}
+            title="Study Leaderboard & Ranks"
+            aria-label="Leaderboard"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#1c1c28] hover:bg-[#252538] border border-[#2e2e42] text-amber-300 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer flex-shrink-0"
+          >
+            <span>🏆</span>
+            <span className="hidden sm:inline">Leaderboard</span>
+          </button>
+
+          {/* Unified Apps & Tools Trigger Button (Desktop & Mobile) */}
+          <button
+            type="button"
+            onClick={() => setShowAppsMenu(true)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-950/40 to-[#1c1c28] hover:from-purple-900/40 hover:to-[#252538] border border-purple-500/35 hover:border-purple-500/60 text-purple-200 text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer flex-shrink-0 ml-0.5"
+            title="Open JeetPrep Apps & Study Tools"
+            aria-label="Apps Menu"
           >
             <span className="text-sm">⊞</span>
             <span>Apps</span>
@@ -845,10 +800,10 @@ export default function Stopwatch({ userName }) {
                     </div>
                   </div>
                   <button
-                    onClick={() => navigate('/plan')}
-                    className="text-[11px] px-2.5 py-1 rounded-xl bg-purple-600/25 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 font-semibold transition-all whitespace-nowrap"
+                    onClick={() => navigate('/planner')}
+                    className="text-[11px] px-2.5 py-1 rounded-xl bg-purple-600/25 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 font-semibold transition-all whitespace-nowrap cursor-pointer"
                   >
-                    Weekly Plan →
+                    Day Planner →
                   </button>
                 </div>
               )}
@@ -1331,191 +1286,171 @@ export default function Stopwatch({ userName }) {
         </div>
       )}
 
-      {/* ── Mobile Apps & Navigation Sheet (Prevents Top Bar Overlap on Phone) ── */}
-      {showMobileMenu && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end md:hidden">
+      {/* ── Unified Categorized Apps & Tools Modal / Drawer (Desktop & Mobile) ── */}
+      {showAppsMenu && (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
           {/* Backdrop (tap outside to close) */}
           <div
-            onClick={() => setShowMobileMenu(false)}
+            onClick={() => setShowAppsMenu(false)}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm cursor-pointer transition-opacity"
             style={{ animation: 'fadeIn 150ms ease-out' }}
           />
 
-          {/* Slide-Up Bottom Sheet */}
+          {/* Modal / Bottom Sheet */}
           <div
-            className="relative z-10 w-full max-w-lg mx-auto bg-[#14141c] border-t border-[#2e2e42] rounded-t-3xl shadow-2xl flex flex-col max-h-[85vh] max-h-[85dvh] text-white overflow-hidden"
+            className="relative z-10 w-full max-w-lg md:max-w-xl mx-auto bg-[#14141c] border border-[#2e2e42] rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col max-h-[85vh] max-h-[85dvh] text-white overflow-hidden"
             style={{ animation: 'slideUp 200ms ease-out' }}
           >
-            {/* Drawer top handle */}
-            <div className="pt-3 pb-1 flex justify-center w-full flex-shrink-0">
+            {/* Drawer top handle for mobile */}
+            <div className="pt-3 pb-1 flex justify-center w-full flex-shrink-0 md:hidden">
               <div className="w-12 h-1.5 rounded-full bg-[#3a3a4e]" />
             </div>
 
-            <div className="flex items-center justify-between px-5 pb-3 border-b border-[#252538] flex-shrink-0">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#252538] flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-lg">⚡</span>
                 <span className="text-sm font-black text-white">JeetPrep Apps & Tools</span>
               </div>
               <button
                 type="button"
-                onClick={() => setShowMobileMenu(false)}
+                onClick={() => setShowAppsMenu(false)}
                 className="w-8 h-8 rounded-full bg-[#20202e] hover:bg-[#2c2c40] text-gray-300 hover:text-white flex items-center justify-center text-sm font-bold cursor-pointer transition-all active:scale-95"
               >
                 ✕
               </button>
             </div>
 
-            {/* Scrollable Grid of Apps */}
-            <div className="p-4 overflow-y-auto overscroll-contain flex-1 grid grid-cols-2 gap-2.5 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))]">
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/planner') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-pink-500/15 border border-pink-500/30 flex-shrink-0">🌸</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Day Planner</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Timetable & goals</p>
+            {/* Scrollable Content with Clean Categorized Sections */}
+            <div className="p-4 sm:p-5 overflow-y-auto overscroll-contain flex-1 flex flex-col gap-4 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))]">
+              {/* Section 1: 📅 Time Table & Planning */}
+              <div>
+                <div className="flex items-center gap-2 px-1 mb-2">
+                  <span className="text-[11px] font-bold text-pink-400 uppercase tracking-wider">📅 Time Table & Planning</span>
+                  <div className="h-px bg-[#26263a] flex-1" />
                 </div>
-              </button>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); navigate('/planner') }}
+                    className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-pink-500/15 border border-pink-500/30 flex-shrink-0">🌸</span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">Day Planner</h4>
+                      <p className="text-[10px] text-gray-400 truncate">Timetable & daily sheet</p>
+                    </div>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/syllabus') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 flex-shrink-0">📚</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Syllabus</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Chapters & topics</p>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); navigate('/syllabus') }}
+                    className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 flex-shrink-0">📚</span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">Subject Tracker</h4>
+                      <p className="text-[10px] text-gray-400 truncate">Syllabus & topics</p>
+                    </div>
+                  </button>
                 </div>
-              </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/plan') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex-shrink-0">📅</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Weekly Plan</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Daily focus goals</p>
+              {/* Section 2: 🏛️ Exam Prep & Doubts */}
+              <div>
+                <div className="flex items-center gap-2 px-1 mb-2">
+                  <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider">🏛️ Exam Prep & Doubts</span>
+                  <div className="h-px bg-[#26263a] flex-1" />
                 </div>
-              </button>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); navigate('/exam-hub') }}
+                    className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-blue-500/15 border border-blue-500/30 flex-shrink-0">🏛️</span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">Exam Hub Search</h4>
+                      <p className="text-[10px] text-gray-400 truncate">Syllabus & real PYQs</p>
+                    </div>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/watch') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex-shrink-0">👥</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Watch Partner</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Live study room</p>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); navigate('/doubts') }}
+                    className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex-shrink-0">👨‍🏫</span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">Doubt Solver</h4>
+                      <p className="text-[10px] text-emerald-400 truncate">1st Free • Mentor written</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); navigate('/blog') }}
+                    className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 flex-shrink-0">📰</span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">Study Blog</h4>
+                      <p className="text-[10px] text-purple-400 truncate">Hacks & timetables</p>
+                    </div>
+                  </button>
                 </div>
-              </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/analytics') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex-shrink-0">📈</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Analytics</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Progress charts</p>
+              {/* Section 3: 👥 Live Study & Tools */}
+              <div>
+                <div className="flex items-center gap-2 px-1 mb-2">
+                  <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">👥 Live Study & Tools</span>
+                  <div className="h-px bg-[#26263a] flex-1" />
                 </div>
-              </button>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); navigate('/watch') }}
+                    className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex-shrink-0">👥</span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">Watch Partner</h4>
+                      <p className="text-[10px] text-gray-400 truncate">Live room & share timer</p>
+                    </div>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/history') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 flex-shrink-0">🕒</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Study History</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Past logs & streaks</p>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); navigate('/history') }}
+                    className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 flex-shrink-0">🕒</span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">Study History</h4>
+                      <p className="text-[10px] text-gray-400 truncate">Logs & streaks</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); togglePictureInPicture() }}
+                    className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-blue-500/15 border border-blue-500/30 flex-shrink-0">🪟</span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">Float Timer</h4>
+                      <p className="text-[10px] text-gray-400 truncate">Mini screen timer (PiP)</p>
+                    </div>
+                  </button>
                 </div>
-              </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/leaderboard') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 flex-shrink-0">🏆</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Leaderboard</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Anonymous ranks</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/doubts') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex-shrink-0">👨‍🏫</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Doubt Solver</h4>
-                  <p className="text-[10px] text-emerald-400 truncate">1st Free • Mentor handwritten</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/exam-hub') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-blue-500/15 border border-blue-500/30 flex-shrink-0">🏛️</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Exam Hub Search</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Syllabus & Real PYQs</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); navigate('/blog') }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 flex-shrink-0">📰</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Study Blog & Guides</h4>
-                  <p className="text-[10px] text-purple-400 truncate">Tips, timetables & hacks</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); togglePictureInPicture() }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-blue-500/15 border border-blue-500/30 flex-shrink-0">🪟</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Float Timer</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Picture-in-picture</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setShowMobileMenu(false); setShowWallpaperModal(true) }}
-                className="p-3 rounded-2xl bg-[#191924] hover:bg-[#222232] border border-[#2a2a3e] flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
-              >
-                <span className="text-2xl p-2 rounded-xl bg-rose-500/15 border border-rose-500/30 flex-shrink-0">🎨</span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white truncate">Focus Themes</h4>
-                  <p className="text-[10px] text-gray-400 truncate">Wallpapers</p>
-                </div>
-              </button>
-
+              {/* Download App APK Banner */}
               <a
                 href="/JeetPrep.apk"
                 download="JeetPrep.apk"
-                onClick={() => setShowMobileMenu(false)}
-                className="p-3 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-[#191924] hover:bg-[#222232] border border-emerald-500/35 flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98 no-underline col-span-2"
+                onClick={() => setShowAppsMenu(false)}
+                className="p-3 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-[#191924] hover:bg-[#222232] border border-emerald-500/35 flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98 no-underline"
               >
                 <span className="text-2xl p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex-shrink-0">📱</span>
                 <div className="min-w-0 flex-1">
@@ -1546,7 +1481,6 @@ export default function Stopwatch({ userName }) {
 // ── Profile Pill ──────────────────────────────────────────────────────────────
 function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpaper, onOpenTimerBooster }) {
   const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [imgError, setImgError] = useState(false)
   const navigate = useNavigate()
 
@@ -1554,18 +1488,11 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
     setImgError(false)
   }, [photoUrl])
 
-  const shareLink = `${window.location.origin}/watch/${userName}`
-  const copyLink = () => {
-    navigator.clipboard.writeText(shareLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 sm:gap-2 rounded-full px-1.5 sm:px-2 py-1 sm:py-1.5 transition-colors hover:bg-[#1a1a1a] flex-shrink-0"
+        className="flex items-center gap-1.5 sm:gap-2 rounded-full px-1.5 sm:px-2 py-1 sm:py-1.5 transition-colors hover:bg-[#1a1a1a] flex-shrink-0 cursor-pointer"
       >
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden"
@@ -1630,21 +1557,12 @@ function ProfilePill({ userName, avatarColor, photoUrl, onLogout, onOpenWallpape
             )}
 
             <MenuBtn icon="👤" label="My Profile & Stats" onClick={() => { navigate('/profile'); setOpen(false) }} />
-            <MenuBtn icon="✏️" label="Edit Profile" onClick={() => { navigate('/profile'); setOpen(false) }} />
             <MenuBtn icon="🎨" label="Change Wallpaper" onClick={() => { onOpenWallpaper?.(); setOpen(false) }} />
-            <MenuBtn icon="📈" label="Study Analytics" onClick={() => { navigate('/analytics'); setOpen(false) }} />
-            <MenuBtn icon="🏆" label="Leaderboard" onClick={() => { navigate('/leaderboard'); setOpen(false) }} />
-            <MenuBtn icon="👨‍🏫" label="Mentor Doubt Solver" onClick={() => { navigate('/doubts'); setOpen(false) }} />
-            <MenuBtn icon="🏛️" label="Exam Hub (Syllabus & PYQ)" onClick={() => { navigate('/exam-hub'); setOpen(false) }} />
-            <MenuBtn icon="📰" label="Study Blog & Guides" onClick={() => { navigate('/blog'); setOpen(false) }} />
-            <MenuBtn icon="📋" label="Weekly Plan" onClick={() => { navigate('/plan'); setOpen(false) }} />
-            <MenuBtn icon="👁️" label="Watch Partner" onClick={() => { navigate('/watch'); setOpen(false) }} />
-            <MenuBtn icon={copied ? '✓' : '🔗'} label={copied ? 'Copied!' : 'Copy Live Link'} onClick={copyLink} />
             <a
               href="/JeetPrep.apk"
               download="JeetPrep.apk"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-left w-full hover:bg-emerald-950/30 text-emerald-300 no-underline"
+              className="flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-left w-full hover:bg-emerald-950/30 text-emerald-300 no-underline cursor-pointer"
             >
               <span className="text-sm">📱</span>
               <span className="text-sm font-medium">Download App (APK 2.1MB)</span>

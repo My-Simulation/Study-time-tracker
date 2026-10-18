@@ -96,7 +96,6 @@ export default function Profile({ userName }) {
     } catch {}
     return null
   })
-  const [copied, setCopied] = useState(false)
   const [settings, setSettings] = useState(() => {
     if (!userName) return { sundayRestDay: false, effectiveFrom: null }
     try {
@@ -489,13 +488,6 @@ export default function Profile({ userName }) {
     }
   }, [allSessions, weeklyPlan, dayPlanners, today, settings])
 
-  const shareLink = `${window.location.origin}/watch/${userName}`
-  const copyShareLink = () => {
-    navigator.clipboard.writeText(shareLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to log out?')) {
       clearSession()
@@ -583,22 +575,15 @@ export default function Profile({ userName }) {
               <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-start">
                 <button
                   onClick={() => setShowEditModal(true)}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 transition-all flex items-center gap-1.5 shadow-sm"
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <span>✏️</span> Edit Profile
                 </button>
                 <button
-                  onClick={copyShareLink}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-[#222] hover:bg-[#2c2c2c] border border-[#333] text-gray-200 transition-all flex items-center gap-1.5"
-                >
-                  <span>{copied ? '✓' : '🔗'}</span>
-                  {copied ? 'Link Copied!' : 'Share Live Study Link'}
-                </button>
-                <button
                   onClick={() => navigate('/analytics')}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 transition-all flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
-                  <span>📈</span> Analytics
+                  <span>📈</span> Detailed Analytics
                 </button>
               </div>
             </div>
@@ -1159,10 +1144,10 @@ export default function Profile({ userName }) {
               <h3 className="text-base font-bold text-white mt-0.5">Study Progress This Week</h3>
             </div>
             <button
-              onClick={() => navigate('/plan')}
-              className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-all flex items-center gap-1"
+              onClick={() => navigate('/planner')}
+              className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-all flex items-center gap-1 cursor-pointer"
             >
-              <span>✏️</span> Set Target
+              <span>🌸</span> Day Sheet
             </button>
           </div>
 
@@ -1273,11 +1258,11 @@ export default function Profile({ userName }) {
             <span className="text-xs font-bold text-white">Day Planner</span>
           </button>
           <button
-            onClick={() => navigate('/plan')}
-            className="p-3.5 rounded-xl bg-[#141414] border border-[#252525] hover:border-purple-500/50 flex flex-col items-center gap-1 text-center transition-all"
+            onClick={() => navigate('/syllabus')}
+            className="p-3.5 rounded-xl bg-[#141414] border border-[#252525] hover:border-purple-500/50 flex flex-col items-center gap-1 text-center transition-all cursor-pointer"
           >
-            <span className="text-xl">📋</span>
-            <span className="text-xs font-bold text-white">Weekly Plan</span>
+            <span className="text-xl">📚</span>
+            <span className="text-xs font-bold text-white">Subject Tracker</span>
           </button>
           <button
             onClick={() => navigate('/history')}
