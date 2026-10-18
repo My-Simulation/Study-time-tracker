@@ -58,7 +58,7 @@
   }
 
   .card {
-    @apply bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl;
+    @apply bg-[#14141e]/90 backdrop-blur-md border border-[#2a2a3e] rounded-2xl transition-all duration-300 shadow-lg hover:border-[#3d3d5a];
   }
 
   /* Modal scroll container — prevents body scroll bleed on mobile */
@@ -187,6 +187,21 @@
 
 .animate-cyberBeam {
   animation: cyberBeam 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes pageEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-pageEntrance {
+  animation: pageEntrance 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ─── Page fade transition ───────────────────────── */

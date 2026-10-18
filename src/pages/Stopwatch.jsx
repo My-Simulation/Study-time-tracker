@@ -45,6 +45,7 @@ export default function Stopwatch({ userName }) {
   const { elapsed, isRunning, laps, displayTime, timeline, startTimestamp, start, stop, reset, lap, togglePictureInPicture } = useStopwatch(userName)
 
   const location = useLocation()
+  const pomoAlertFiredRef = useRef(false)
   const [showModal, setShowModal] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalConfig, setAuthModalConfig] = useState({ title: '', subtitle: '', sessionDuration: '' })

@@ -100,8 +100,12 @@ class ErrorBoundary extends React.Component {
 
 function PageLoader() {
   return (
-    <div className="flex items-center justify-center min-h-[50vh]">
-      <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+      <div className="relative flex items-center justify-center w-12 h-12">
+        <div className="absolute inset-0 rounded-full border border-purple-500/40 animate-ping opacity-60" />
+        <div className="w-8 h-8 rounded-full border-2 border-purple-500/30 border-t-purple-400 animate-spin" />
+      </div>
+      <span className="text-[11px] font-mono text-purple-300/80 tracking-widest uppercase">Loading JeetPrep...</span>
     </div>
   )
 }
@@ -124,7 +128,7 @@ function AnimatedRoutes() {
   const userName = session?.username || ''
 
   return (
-    <div key={location.pathname} style={{ animation: 'fadeIn 150ms ease-out' }}>
+    <div key={location.pathname} className="animate-pageEntrance min-h-screen flex flex-col">
       <ActiveTimerBanner />
       <PushNotificationPrompt userName={userName} />
       <Suspense fallback={<PageLoader />}>
