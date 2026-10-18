@@ -18,6 +18,7 @@ import SignUp from './pages/SignUp'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
 import PushNotificationPrompt from './components/PushNotificationPrompt'
 import GuestGate from './components/GuestGate'
+import CinematicBackground from './components/CinematicBackground'
 import { getWallpaper, getWallpaperConfig, subscribeToUserWallpaper } from './utils/wallpaperStorage'
 import { trackVisitor } from './utils/visitorTracker'
 
@@ -235,6 +236,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      {/* ── Cinematic Ambient Cosmic Nebula & Starlight Atmosphere ── */}
+      <CinematicBackground />
+
       {/* ── Global Personal Focus Wallpaper Layer across all pages ── */}
       {wallpaper && (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none">

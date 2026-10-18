@@ -735,7 +735,15 @@ export default function Stopwatch({ userName }) {
           </div>
 
           {/* Main Stopwatch Timer Card */}
-          <div className="card flex flex-col flex-1 overflow-hidden transition-all duration-300 shadow-2xl bg-[#14141a]/95 backdrop-blur-md border border-[#2e2e42]">
+          <div
+            className={`card flex flex-col flex-1 overflow-hidden transition-all duration-500 shadow-2xl backdrop-blur-md relative ${
+              isRunning
+                ? timerMode === 'pomodoro'
+                  ? 'bg-[#10191c]/95 border-teal-500/50 shadow-[0_0_40px_-5px_rgba(20,184,166,0.35)] ring-1 ring-teal-500/30'
+                  : 'bg-[#141424]/95 border-purple-500/50 shadow-[0_0_40px_-5px_rgba(139,92,246,0.35)] ring-1 ring-purple-500/30'
+                : 'bg-[#14141a]/95 border-[#2e2e42]'
+            }`}
+          >
             <div ref={captureRef} className="rounded-2xl overflow-hidden bg-[#181822]/95 backdrop-blur-md">
               {/* Pomodoro countdown bar */}
               {timerMode === 'pomodoro' && (
@@ -774,7 +782,12 @@ export default function Stopwatch({ userName }) {
                 </div>
               )}
 
-              <StopwatchDisplay displayTime={displayTime} />
+              <StopwatchDisplay
+                displayTime={displayTime}
+                isRunning={isRunning}
+                timerMode={timerMode}
+                activeSubject={activeSubject}
+              />
 
               {/* Subtle compact timeline pill */}
               <div className="flex justify-center pb-2.5 px-3 relative z-20">
@@ -1241,6 +1254,28 @@ export default function Stopwatch({ userName }) {
                     </span>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Zen Mode Live Kinetic Equalizer Wave */}
+            {isRunning && (
+              <div className="flex items-center justify-center gap-1.5 mt-5 h-8">
+                {Array.from({ length: 24 }).map((_, idx) => (
+                  <span
+                    key={idx}
+                    className={`w-1.5 rounded-full ${
+                      timerMode === 'pomodoro'
+                        ? 'bg-gradient-to-t from-teal-500 to-cyan-300'
+                        : 'bg-gradient-to-t from-purple-500 via-indigo-400 to-cyan-300'
+                    }`}
+                    style={{
+                      animation: `${idx % 3 === 0 ? 'eqDance1' : idx % 3 === 1 ? 'eqDance2' : 'eqDance3'} 1.1s ease-in-out ${idx * 70}ms infinite`,
+                      boxShadow: timerMode === 'pomodoro'
+                        ? '0 0 10px rgba(20, 184, 166, 0.6)'
+                        : '0 0 10px rgba(168, 85, 247, 0.6)',
+                    }}
+                  />
+                ))}
               </div>
             )}
 
