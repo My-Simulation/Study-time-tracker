@@ -45,7 +45,7 @@ export default function Stopwatch({ userName }) {
   const { elapsed, isRunning, laps, displayTime, timeline, startTimestamp, start, stop, reset, lap, togglePictureInPicture } = useStopwatch(userName)
 
   const location = useLocation()
-  const pomoAlertFiredRef = useRef(false)
+  const timerAlertFiredRef = useRef(false)
   const [showModal, setShowModal] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalConfig, setAuthModalConfig] = useState({ title: '', subtitle: '', sessionDuration: '' })
@@ -59,9 +59,24 @@ export default function Stopwatch({ userName }) {
   const [dayNum, setDayNum] = useState(1)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [isStandalone, setIsStandalone] = useState(false)
-  const [timerMode, setTimerMode] = useState('stopwatch') // 'stopwatch' | 'pomodoro'
-  const [pomoMinutes, setPomoMinutes] = useState(25)
-  const [pomoBreakMinutes, setPomoBreakMinutes] = useState(5)
+  const [timerMode, setTimerMode] = useState(() => {
+    try {
+      return localStorage.getItem('stt_timer_mode') || 'stopwatch'
+    } catch {
+      return 'stopwatch'
+    }
+  }) // 'stopwatch' | 'timer'
+  const [countdownTargetSec, setCountdownTargetSec] = useState(() => {
+    try {
+      const val = Number(localStorage.getItem('stt_countdown_target_sec'))
+      return val > 0 ? val : 3600 // 1 hour default
+    } catch {
+      return 3600
+    }
+  })
+  const [countdownBaselineElapsed, setCountdownBaselineElapsed] = useState(0)
+  const [showCustomTimePicker, setShowCustomTimePicker] = useState(false)
+  const [showTimerCompleteModal, setShowTimerCompleteModal] = useState(false)
   const [isZenMode, setIsZenMode] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showAICoach, setShowAICoach] = useState(false)
@@ -155,6 +170,80 @@ export default function Stopwatch({ userName }) {
     }
   }, [])
 
+  const playAlarmSound = useCallback(() => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) return
+      const ctx = new AudioContextClass()
+      if (ctx.state === 'suspended') {
+        ctx.resume()
+      }
+      // Celebratory melodic bell chime sequence: C5, E5, G5, C6 repeated twice
+      const chords = [
+        { f: 523.25, t: 0.00 }, // C5
+        { f: 659.25, t: 0.16 }, // E5
+        { f: 783.99, t: 0.32 }, // G5
+        { f: 1046.50, t: 0.48 }, // C6
+        { f: 523.25, t: 0.80 }, // C5
+        { f: 659.25, t: 0.96 }, // E5
+        { f: 783.99, t: 1.12 }, // G5
+        { f: 1046.50, t: 1.28 }, // C6
+      ]
+      chords.forEach(({ f, t }) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.type = 'triangle'
+        osc.frequency.setValueAtTime(f, ctx.currentTime + t)
+        gain.gain.setValueAtTime(0, ctx.currentTime + t)
+        gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + t + 0.03)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.55)
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.start(ctx.currentTime + t)
+        osc.stop(ctx.currentTime + t + 0.6)
+      })
+    } catch (e) {
+      console.warn('Audio alarm error:', e)
+    }
+  }, [])
+
+  // ── Reverse Countdown Timer Logic (Clock-style test timer) ──────────────────
+  const elapsedInCountdown = Math.max(0, elapsed - countdownBaselineElapsed)
+  const countdownRemainingSec = Math.max(0, countdownTargetSec - Math.floor(elapsedInCountdown / 1000))
+  const countdownProgressPct = countdownTargetSec > 0
+    ? Math.min(100, Math.round((Math.floor(elapsedInCountdown / 1000) / countdownTargetSec) * 100))
+    : 0
+
+  function formatCountdownDisplay(seconds) {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = seconds % 60
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+
+  function formatCountdownDuration(seconds) {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = seconds % 60
+    if (h > 0 && m > 0) return `${h}h ${m}m`
+    if (h > 0) return `${h}h`
+    if (m > 0 && s > 0) return `${m}m ${s}s`
+    if (m > 0) return `${m}m`
+    return `${s}s`
+  }
+
+  const handleStartStop = useCallback(() => {
+    if (isRunning) {
+      stop()
+    } else {
+      if (timerMode === 'timer' && countdownRemainingSec === 0) {
+        setCountdownBaselineElapsed(elapsed)
+        timerAlertFiredRef.current = false
+      }
+      start()
+    }
+  }, [isRunning, timerMode, countdownRemainingSec, elapsed, start, stop])
+
   // ── Keyboard shortcuts (Space = Start/Pause, F = Zen Fullscreen, Esc = Exit Zen) ──
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -165,8 +254,7 @@ export default function Stopwatch({ userName }) {
       if (e.code === 'Space') {
         e.preventDefault()
         if (isTodayRest) return
-        if (isRunning) stop()
-        else start()
+        handleStartStop()
       } else if (e.code === 'KeyF') {
         e.preventDefault()
         setIsZenMode((prev) => !prev)
@@ -177,7 +265,7 @@ export default function Stopwatch({ userName }) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isRunning, start, stop, isZenMode])
+  }, [handleStartStop, isTodayRest, isZenMode])
 
   const handleEnableNotification = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -459,29 +547,49 @@ export default function Stopwatch({ userName }) {
   const dismissToast = useCallback(() => setToast({ visible: false, message: '' }), [])
   const totalSeconds = Math.floor(elapsed / 1000)
 
-  // ── Pomodoro Logic ────────────────────────────────────────────────────────
-  const pomoTargetSec = pomoMinutes * 60
-  const pomoRemainingSec = Math.max(0, pomoTargetSec - (totalSeconds % pomoTargetSec))
-
   useEffect(() => {
-    if (timerMode !== 'pomodoro' || !isRunning) return
-    if (totalSeconds > 0 && totalSeconds % pomoTargetSec === 0 && !pomoAlertFiredRef.current) {
-      pomoAlertFiredRef.current = true
-      playChime()
+    if (timerMode !== 'timer' || !isRunning || countdownTargetSec <= 0) return
+    if (countdownRemainingSec === 0 && !timerAlertFiredRef.current) {
+      timerAlertFiredRef.current = true
+      stop()
+      playAlarmSound()
+      setShowTimerCompleteModal(true)
+      if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 500])
       setToast({
         visible: true,
-        message: `🎉 Pomodoro ${pomoMinutes}m focus completed! Time for a ${pomoBreakMinutes}m break! ☕`,
+        message: `⏰ Time's Up! ${formatCountdownDuration(countdownTargetSec)} Test Complete! 🔔`,
       })
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200])
-    } else if (totalSeconds % pomoTargetSec !== 0) {
-      pomoAlertFiredRef.current = false
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('⏰ JeetPrep — Test Timer Complete!', {
+            body: `Aapka ${formatCountdownDuration(countdownTargetSec)} ka focus timer pura ho gaya hai!`,
+            icon: '/pwa-192x192.png',
+          })
+        }
+      } catch {}
+    } else if (countdownRemainingSec > 0) {
+      timerAlertFiredRef.current = false
     }
-  }, [timerMode, isRunning, totalSeconds, pomoTargetSec, pomoMinutes, pomoBreakMinutes, playChime])
+  }, [timerMode, isRunning, countdownRemainingSec, countdownTargetSec, stop, playAlarmSound])
 
-  function formatPomodoroTime(seconds) {
-    const m = Math.floor(seconds / 60)
-    const s = seconds % 60
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  const handleSetPreset = (sec) => {
+    setCountdownTargetSec(sec)
+    setCountdownBaselineElapsed(elapsed)
+    try {
+      localStorage.setItem('stt_countdown_target_sec', String(sec))
+    } catch {}
+    setToast({ visible: true, message: `⏳ Timer set to ${formatCountdownDuration(sec)}` })
+  }
+
+  const handleAdjustTarget = (deltaSec) => {
+    setCountdownTargetSec((prev) => {
+      const next = Math.max(60, Math.min(86400, prev + deltaSec))
+      try {
+        localStorage.setItem('stt_countdown_target_sec', String(next))
+      } catch {}
+      return next
+    })
+    setCountdownBaselineElapsed(elapsed)
   }
 
   // ── Daily goal progress ───────────────────────────────────────────────────
@@ -681,11 +789,14 @@ export default function Stopwatch({ userName }) {
 
           {/* Focus Mode & Visuals Toolbar */}
           <div className="flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl bg-[#14141c]/90 backdrop-blur-md border border-[#2a2a3e] shadow-sm">
-            {/* Mode Switcher: Stopwatch vs Pomodoro */}
+            {/* Mode Switcher: Stopwatch vs Reverse Countdown Timer */}
             <div className="inline-flex p-0.5 rounded-xl bg-[#1c1c26] border border-[#2d2d3e] flex-shrink-0">
               <button
                 type="button"
-                onClick={() => setTimerMode('stopwatch')}
+                onClick={() => {
+                  setTimerMode('stopwatch')
+                  try { localStorage.setItem('stt_timer_mode', 'stopwatch') } catch {}
+                }}
                 className={`px-2 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   timerMode === 'stopwatch'
                     ? 'bg-purple-600 text-white shadow-sm'
@@ -698,16 +809,20 @@ export default function Stopwatch({ userName }) {
               </button>
               <button
                 type="button"
-                onClick={() => setTimerMode('pomodoro')}
+                onClick={() => {
+                  setTimerMode('timer')
+                  setCountdownBaselineElapsed(elapsed)
+                  try { localStorage.setItem('stt_timer_mode', 'timer') } catch {}
+                }}
                 className={`px-2 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center cursor-pointer ${
-                  timerMode === 'pomodoro'
-                    ? 'bg-teal-600 text-white shadow-sm'
+                  timerMode === 'timer'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-sm font-extrabold'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                <span>🍅</span>
-                <span className="hidden sm:inline ml-1">Pomodoro</span>
-                <span className="sm:hidden ml-0.5 text-[11px]">Pomo</span>
+                <span>⏳</span>
+                <span className="hidden sm:inline ml-1">Timer (Test)</span>
+                <span className="sm:hidden ml-0.5 text-[11px]">Timer</span>
               </button>
             </div>
 
@@ -739,52 +854,215 @@ export default function Stopwatch({ userName }) {
           <div
             className={`card flex flex-col flex-1 overflow-hidden transition-all duration-500 shadow-2xl backdrop-blur-md relative ${
               isRunning
-                ? timerMode === 'pomodoro'
-                  ? 'bg-[#10191c]/95 border-teal-500/50 shadow-[0_0_40px_-5px_rgba(20,184,166,0.35)] ring-1 ring-teal-500/30'
+                ? timerMode === 'timer'
+                  ? 'bg-[#191512]/95 border-amber-500/50 shadow-[0_0_40px_-5px_rgba(245,158,11,0.35)] ring-1 ring-amber-500/30'
                   : 'bg-[#141424]/95 border-purple-500/50 shadow-[0_0_40px_-5px_rgba(139,92,246,0.35)] ring-1 ring-purple-500/30'
                 : 'bg-[#14141a]/95 border-[#2e2e42]'
             }`}
           >
             <div ref={captureRef} className="rounded-2xl overflow-hidden bg-[#181822]/95 backdrop-blur-md">
-              {/* Pomodoro countdown bar */}
-              {timerMode === 'pomodoro' && (
-                <div className="px-4 py-2.5 bg-[#101b22] border-b border-teal-500/25 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">🍅</span>
-                    <div className="text-left">
-                      <span className="text-xs font-extrabold text-teal-300">
-                        Focus Countdown: {formatPomodoroTime(pomoRemainingSec)}
-                      </span>
-                      <span className="text-[10px] text-gray-400 block">
-                        {pomoMinutes}m target focus block
-                      </span>
+              {/* Clock-Style Reverse Countdown Timer Panel */}
+              {timerMode === 'timer' && (
+                <div className="px-3.5 sm:px-4 py-3 bg-[#17141f]/95 border-b border-amber-500/25 flex flex-col gap-2.5">
+                  {/* Header & Quick Status */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base flex-shrink-0">⏳</span>
+                      <div className="text-left min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-extrabold text-amber-300 truncate">
+                            Countdown: {formatCountdownDisplay(countdownRemainingSec)}
+                          </span>
+                          {isRunning && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse font-mono font-bold">
+                              TEST RUNNING
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-gray-400 block truncate font-medium">
+                          Target: {formatCountdownDuration(countdownTargetSec)} • Synced with Study Stopwatch
+                        </span>
+                      </div>
                     </div>
+
+                    {/* Set Custom Time Toggle */}
+                    {!isRunning && (
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomTimePicker((prev) => !prev)}
+                        className="text-[11px] px-2.5 py-1 rounded-xl bg-[#241e33] hover:bg-[#322a48] border border-amber-500/30 text-amber-200 font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 flex-shrink-0"
+                      >
+                        <span>⚙️</span>
+                        <span>{showCustomTimePicker ? 'Close' : 'Set Time'}</span>
+                      </button>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setPomoMinutes(25)}
-                      className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                        pomoMinutes === 25 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#182632] text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      25m
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPomoMinutes(50)}
-                      className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                        pomoMinutes === 50 ? 'bg-teal-500 text-black shadow-sm' : 'bg-[#182632] text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      50m
-                    </button>
+
+                  {/* Custom Clock-Style Time Picker (Hours, Minutes, Seconds) */}
+                  {showCustomTimePicker && !isRunning && (
+                    <div className="p-2.5 rounded-xl bg-[#0f0c18] border border-amber-500/20 flex flex-wrap items-center justify-between gap-2 animate-fadeIn">
+                      <div className="flex items-center gap-2 text-xs font-bold text-gray-300">
+                        {/* Hours Picker */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] text-gray-400 font-semibold mb-1">HOURS</span>
+                          <div className="flex items-center gap-1 bg-[#1a1626] rounded-lg border border-[#2d2540] px-1 py-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustTarget(-3600)}
+                              className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded cursor-pointer font-bold select-none"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="0"
+                              max="24"
+                              value={Math.floor(countdownTargetSec / 3600)}
+                              onChange={(e) => {
+                                const newH = Math.max(0, Math.min(24, parseInt(e.target.value, 10) || 0))
+                                const currentM = Math.floor((countdownTargetSec % 3600) / 60)
+                                const newSec = Math.max(60, newH * 3600 + currentM * 60)
+                                setCountdownTargetSec(newSec)
+                                setCountdownBaselineElapsed(elapsed)
+                                try { localStorage.setItem('stt_countdown_target_sec', String(newSec)) } catch {}
+                              }}
+                              className="font-mono font-bold text-sm text-amber-300 w-8 text-center bg-transparent border-none p-0 focus:outline-none focus:bg-amber-500/10 rounded [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustTarget(3600)}
+                              className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded cursor-pointer font-bold select-none"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <span className="text-gray-500 text-lg self-end mb-1">:</span>
+
+                        {/* Minutes Picker */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] text-gray-400 font-semibold mb-1">MINUTES</span>
+                          <div className="flex items-center gap-1 bg-[#1a1626] rounded-lg border border-[#2d2540] px-1 py-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustTarget(-300)}
+                              className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded cursor-pointer font-bold select-none"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="0"
+                              max="59"
+                              value={Math.floor((countdownTargetSec % 3600) / 60)}
+                              onChange={(e) => {
+                                const currentH = Math.floor(countdownTargetSec / 3600)
+                                const newM = Math.max(0, Math.min(59, parseInt(e.target.value, 10) || 0))
+                                const newSec = Math.max(60, currentH * 3600 + newM * 60)
+                                setCountdownTargetSec(newSec)
+                                setCountdownBaselineElapsed(elapsed)
+                                try { localStorage.setItem('stt_countdown_target_sec', String(newSec)) } catch {}
+                              }}
+                              className="font-mono font-bold text-sm text-amber-300 w-8 text-center bg-transparent border-none p-0 focus:outline-none focus:bg-amber-500/10 rounded [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustTarget(300)}
+                              className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded cursor-pointer font-bold select-none"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <span className="text-gray-500 text-lg self-end mb-1">:</span>
+
+                        {/* Quick Step Buttons (+5m, +15m, +30m) */}
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] text-gray-400 font-semibold mb-1">QUICK ADD</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustTarget(300)}
+                              className="px-2 py-1 rounded bg-[#1e192c] hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold cursor-pointer"
+                            >
+                              +5m
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustTarget(900)}
+                              className="px-2 py-1 rounded bg-[#1e192c] hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold cursor-pointer"
+                            >
+                              +15m
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustTarget(1800)}
+                              className="px-2 py-1 rounded bg-[#1e192c] hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold cursor-pointer"
+                            >
+                              +30m
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomTimePicker(false)}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold cursor-pointer transition-all self-end mb-0.5 shadow-sm"
+                      >
+                        Done ✓
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Quick Mock Test & Study Presets */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider flex-shrink-0 mr-0.5">
+                      Presets:
+                    </span>
+                    {[
+                      { sec: 900, label: '15m' },
+                      { sec: 1800, label: '30m' },
+                      { sec: 2700, label: '45m' },
+                      { sec: 3600, label: '1h Test' },
+                      { sec: 7200, label: '2h Exam' },
+                      { sec: 10800, label: '3h Mock Test' },
+                    ].map((p) => (
+                      <button
+                        key={p.sec}
+                        type="button"
+                        disabled={isRunning}
+                        onClick={() => handleSetPreset(p.sec)}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all flex-shrink-0 cursor-pointer ${
+                          countdownTargetSec === p.sec
+                            ? 'bg-amber-500 text-black shadow-md ring-1 ring-amber-400 font-extrabold'
+                            : 'bg-[#1c172a] text-gray-300 hover:text-white border border-[#2d2540]'
+                        } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Progress Bar showing test completion */}
+                  <div className="w-full flex items-center gap-2 pt-0.5">
+                    <div className="flex-1 h-1.5 rounded-full bg-[#1e1a2c] overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300 rounded-full transition-all duration-300"
+                        style={{ width: `${countdownProgressPct}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono text-gray-400 whitespace-nowrap">
+                      {countdownProgressPct}% done
+                    </span>
                   </div>
                 </div>
               )}
 
               <StopwatchDisplay
-                displayTime={displayTime}
+                displayTime={timerMode === 'timer' ? formatCountdownDisplay(countdownRemainingSec) : displayTime}
                 isRunning={isRunning}
                 timerMode={timerMode}
                 activeSubject={activeSubject}
@@ -880,7 +1158,11 @@ export default function Stopwatch({ userName }) {
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={reset}
+                  onClick={() => {
+                    reset()
+                    setCountdownBaselineElapsed(0)
+                    timerAlertFiredRef.current = false
+                  }}
                   disabled={isTodayRest || isRunning || elapsed === 0}
                   className="pill-btn flex-1"
                   style={{ background: '#2a2a2a', color: (isTodayRest || isRunning || elapsed === 0) ? '#555' : 'white', cursor: (isTodayRest || isRunning || elapsed === 0) ? 'not-allowed' : 'pointer' }}
@@ -897,7 +1179,7 @@ export default function Stopwatch({ userName }) {
                   </button>
                 ) : (
                   <button
-                    onClick={isRunning ? stop : start}
+                    onClick={handleStartStop}
                     className="pill-btn flex-1"
                     style={{ background: isRunning ? '#ef4444' : '#22c55e', color: isRunning ? 'white' : 'black' }}
                   >
@@ -1173,8 +1455,12 @@ export default function Stopwatch({ userName }) {
           {/* Top Header */}
           <div className="flex items-center justify-between w-full max-w-5xl mx-auto">
             <div className="flex items-center gap-2 sm:gap-3">
-              <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest px-2.5 sm:px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                {timerMode === 'pomodoro' ? '🍅 Pomodoro' : '⏱️ Stopwatch'}
+              <span className={`text-[10px] sm:text-xs font-black uppercase tracking-widest px-2.5 sm:px-3 py-1 rounded-full border ${
+                timerMode === 'timer'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                  : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+              }`}>
+                {timerMode === 'timer' ? '⏳ Reverse Countdown Timer' : '⏱️ Stopwatch'}
               </span>
               {activeSubject && (
                 <span className="text-xs font-semibold text-gray-400 truncate max-w-[120px] sm:max-w-none">
@@ -1205,13 +1491,13 @@ export default function Stopwatch({ userName }) {
 
           {/* Center Immense Timer */}
           <div className="flex flex-col items-center justify-center my-auto text-center w-full max-w-5xl mx-auto px-1 sm:px-4">
-            {timerMode === 'pomodoro' ? (
+            {timerMode === 'timer' ? (
               <div className="flex flex-col items-center justify-center w-full">
-                <span className="text-[11px] sm:text-sm font-bold uppercase tracking-widest text-teal-400 mb-2 flex items-center gap-1.5">
-                  <span>🍅</span> Focus Countdown
+                <span className="text-[11px] sm:text-sm font-bold uppercase tracking-widest text-amber-400 mb-2 flex items-center gap-1.5">
+                  <span>⏳</span> Reverse Test Countdown
                 </span>
                 <div
-                  className="font-black font-mono tracking-tight text-white drop-shadow-2xl text-center select-none w-full tabular-nums whitespace-nowrap"
+                  className="font-black font-mono tracking-tight text-amber-100 drop-shadow-[0_0_30px_rgba(245,158,11,0.65)] text-center select-none w-full tabular-nums whitespace-nowrap"
                   style={{
                     fontSize: 'clamp(44px, min(15vw, 20vh), 130px)',
                     lineHeight: 1,
@@ -1219,11 +1505,16 @@ export default function Stopwatch({ userName }) {
                     letterSpacing: '-0.03em',
                   }}
                 >
-                  {formatPomodoroTime(pomoRemainingSec)}
+                  {formatCountdownDisplay(countdownRemainingSec)}
                 </div>
-                <span className="text-[11px] sm:text-xs font-mono text-gray-400 mt-3 bg-white/5 border border-white/10 px-3 py-1 rounded-full backdrop-blur-sm">
-                  Total Elapsed: {displayTime}
-                </span>
+                <div className="flex items-center gap-2 mt-3 flex-wrap justify-center">
+                  <span className="text-[11px] sm:text-xs font-mono text-gray-400 bg-white/5 border border-white/10 px-3 py-1 rounded-full backdrop-blur-sm">
+                    Stopwatch Logged: {displayTime}
+                  </span>
+                  <span className="text-[11px] sm:text-xs font-mono text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full backdrop-blur-sm">
+                    Target: {formatCountdownDuration(countdownTargetSec)} ({countdownProgressPct}%)
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center w-full">
@@ -1265,14 +1556,14 @@ export default function Stopwatch({ userName }) {
                   <span
                     key={idx}
                     className={`w-1.5 rounded-full ${
-                      timerMode === 'pomodoro'
-                        ? 'bg-gradient-to-t from-teal-500 to-cyan-300'
+                      timerMode === 'timer'
+                        ? 'bg-gradient-to-t from-amber-500 via-orange-400 to-yellow-300'
                         : 'bg-gradient-to-t from-purple-500 via-indigo-400 to-cyan-300'
                     }`}
                     style={{
                       animation: `${idx % 3 === 0 ? 'eqDance1' : idx % 3 === 1 ? 'eqDance2' : 'eqDance3'} 1.1s ease-in-out ${idx * 70}ms infinite`,
-                      boxShadow: timerMode === 'pomodoro'
-                        ? '0 0 10px rgba(20, 184, 166, 0.6)'
+                      boxShadow: timerMode === 'timer'
+                        ? '0 0 10px rgba(245, 158, 11, 0.6)'
                         : '0 0 10px rgba(168, 85, 247, 0.6)',
                     }}
                   />
@@ -1301,7 +1592,7 @@ export default function Stopwatch({ userName }) {
           <div className="flex flex-col items-center gap-3 w-full max-w-4xl mx-auto">
             <div className="flex items-center gap-4">
               <button
-                onClick={isRunning ? stop : start}
+                onClick={handleStartStop}
                 className="px-8 py-3.5 rounded-full font-extrabold text-base transition-all shadow-xl hover:scale-105"
                 style={{
                   background: isRunning ? '#ef4444' : '#22c55e',
@@ -1509,6 +1800,82 @@ export default function Stopwatch({ userName }) {
           onClose={() => setShowTimerBoosterModal(false)}
           initialUser="kittu"
         />
+      )}
+
+      {/* ── Test / Countdown Timer Completion Modal ── */}
+      {showTimerCompleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            onClick={() => setShowTimerCompleteModal(false)}
+            className="fixed inset-0 bg-black/80 backdrop-blur-md cursor-pointer"
+            style={{ animation: 'fadeIn 200ms ease-out' }}
+          />
+          <div
+            className="relative z-10 w-full max-w-md bg-[#13131c] border border-amber-500/40 rounded-3xl p-6 sm:p-7 shadow-[0_0_50px_rgba(245,158,11,0.25)] flex flex-col items-center text-center text-white"
+            style={{ animation: 'scaleUp 220ms ease-out' }}
+          >
+            {/* Pulsing ring bell icon */}
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-4xl mb-3 shadow-[0_0_24px_rgba(245,158,11,0.4)] animate-bounce">
+              ⏰
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold uppercase tracking-wider mb-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>TIME'S UP · TEST COMPLETED</span>
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-black text-white mb-1.5">
+              Target Completed! 🎯
+            </h3>
+            <p className="text-sm text-gray-300 mb-5 leading-relaxed">
+              Aapka <span className="font-bold text-amber-300">{formatCountdownDuration(countdownTargetSec)}</span> ka test countdown timer pura ho gaya hai! Stopwatch ne aapka focus time sync karke save karne ke liye ready kar diya hai.
+            </p>
+
+            {/* Target & elapsed stats pill */}
+            <div className="w-full bg-[#1b1b26] border border-[#2b2b3d] rounded-2xl p-4 mb-5 flex items-center justify-around">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Target Test</p>
+                <p className="text-lg font-mono font-black text-amber-400">{formatCountdownDuration(countdownTargetSec)}</p>
+              </div>
+              <div className="w-px h-8 bg-[#2d2d40]" />
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Total Focus Logged</p>
+                <p className="text-lg font-mono font-black text-emerald-400">{displayTime?.split('.')[0] || '0:00:00'}</p>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTimerCompleteModal(false)
+                  if (!userName) {
+                    setAuthModalConfig({
+                      title: 'Save Your Test Session',
+                      subtitle: 'Sign in to save this completed test focus session into your permanent history & streaks.',
+                      sessionDuration: displayTime,
+                    })
+                    setShowAuthModal(true)
+                  } else {
+                    setShowModal(true)
+                  }
+                }}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-lg shadow-amber-500/20 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>💾</span>
+                <span>Save Study Session</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTimerCompleteModal(false)}
+                className="py-3 px-4 rounded-xl font-semibold text-sm bg-[#1e1e2c] hover:bg-[#28283a] text-gray-300 border border-[#303046] active:scale-98 transition-all cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
