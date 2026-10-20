@@ -74,7 +74,22 @@ export default function Stopwatch({ userName }) {
       return 3600
     }
   })
-  const [countdownBaselineElapsed, setCountdownBaselineElapsed] = useState(0)
+
+  const [countdownBaselineElapsed, setCountdownBaselineElapsed] = useState(() => {
+    try {
+      const val = Number(localStorage.getItem('stt_countdown_baseline_elapsed'))
+      return isNaN(val) ? 0 : val
+    } catch {
+      return 0
+    }
+  })
+
+  const updateCountdownBaseline = useCallback((val) => {
+    setCountdownBaselineElapsed(val)
+    try {
+      localStorage.setItem('stt_countdown_baseline_elapsed', String(val))
+    } catch {}
+  }, [])
   const [showCustomTimePicker, setShowCustomTimePicker] = useState(false)
   const [showTimerCompleteModal, setShowTimerCompleteModal] = useState(false)
   const [isZenMode, setIsZenMode] = useState(false)
@@ -232,17 +247,26 @@ export default function Stopwatch({ userName }) {
     return `${s}s`
   }
 
+  const elapsedRef = useRef(elapsed)
+  elapsedRef.current = elapsed
+
+  const countdownRemainingSecRef = useRef(countdownRemainingSec)
+  countdownRemainingSecRef.current = countdownRemainingSec
+
+  const timerModeRef = useRef(timerMode)
+  timerModeRef.current = timerMode
+
   const handleStartStop = useCallback(() => {
     if (isRunning) {
       stop()
     } else {
-      if (timerMode === 'timer' && countdownRemainingSec === 0) {
-        setCountdownBaselineElapsed(elapsed)
+      if (timerModeRef.current === 'timer' && countdownRemainingSecRef.current === 0) {
+        updateCountdownBaseline(elapsedRef.current)
         timerAlertFiredRef.current = false
       }
       start()
     }
-  }, [isRunning, timerMode, countdownRemainingSec, elapsed, start, stop])
+  }, [isRunning, start, stop, updateCountdownBaseline])
 
   // ── Keyboard shortcuts (Space = Start/Pause, F = Zen Fullscreen, Esc = Exit Zen) ──
   useEffect(() => {
@@ -319,7 +343,6 @@ export default function Stopwatch({ userName }) {
 
   const isRunningRef = useRef(isRunning)
   isRunningRef.current = isRunning
-  const elapsedRef = useRef(elapsed)
   elapsedRef.current = elapsed
   const resetRef = useRef(reset)
   resetRef.current = reset
@@ -574,7 +597,7 @@ export default function Stopwatch({ userName }) {
 
   const handleSetPreset = (sec) => {
     setCountdownTargetSec(sec)
-    setCountdownBaselineElapsed(elapsed)
+    updateCountdownBaseline(elapsed)
     try {
       localStorage.setItem('stt_countdown_target_sec', String(sec))
     } catch {}
@@ -589,7 +612,7 @@ export default function Stopwatch({ userName }) {
       } catch {}
       return next
     })
-    setCountdownBaselineElapsed(elapsed)
+    updateCountdownBaseline(elapsed)
   }
 
   // ── Daily goal progress ───────────────────────────────────────────────────
@@ -811,7 +834,6 @@ export default function Stopwatch({ userName }) {
                 type="button"
                 onClick={() => {
                   setTimerMode('timer')
-                  setCountdownBaselineElapsed(elapsed)
                   try { localStorage.setItem('stt_timer_mode', 'timer') } catch {}
                 }}
                 className={`px-2 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center cursor-pointer ${
@@ -923,7 +945,7 @@ export default function Stopwatch({ userName }) {
                                 const currentM = Math.floor((countdownTargetSec % 3600) / 60)
                                 const newSec = Math.max(60, newH * 3600 + currentM * 60)
                                 setCountdownTargetSec(newSec)
-                                setCountdownBaselineElapsed(elapsed)
+                                updateCountdownBaseline(elapsed)
                                 try { localStorage.setItem('stt_countdown_target_sec', String(newSec)) } catch {}
                               }}
                               className="font-mono font-bold text-sm text-amber-300 w-8 text-center bg-transparent border-none p-0 focus:outline-none focus:bg-amber-500/10 rounded [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -961,7 +983,7 @@ export default function Stopwatch({ userName }) {
                                 const newM = Math.max(0, Math.min(59, parseInt(e.target.value, 10) || 0))
                                 const newSec = Math.max(60, currentH * 3600 + newM * 60)
                                 setCountdownTargetSec(newSec)
-                                setCountdownBaselineElapsed(elapsed)
+                                updateCountdownBaseline(elapsed)
                                 try { localStorage.setItem('stt_countdown_target_sec', String(newSec)) } catch {}
                               }}
                               className="font-mono font-bold text-sm text-amber-300 w-8 text-center bg-transparent border-none p-0 focus:outline-none focus:bg-amber-500/10 rounded [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -1160,7 +1182,7 @@ export default function Stopwatch({ userName }) {
                 <button
                   onClick={() => {
                     reset()
-                    setCountdownBaselineElapsed(0)
+                    updateCountdownBaseline(0)
                     timerAlertFiredRef.current = false
                   }}
                   disabled={isTodayRest || isRunning || elapsed === 0}

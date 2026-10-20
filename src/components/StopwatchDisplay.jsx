@@ -144,7 +144,7 @@ export default function StopwatchDisplay({
       <div className="relative z-10 flex items-baseline justify-center gap-1 sm:gap-2 w-full text-center">
         {/* Main H:MM:SS */}
         <span
-          className={`font-mono tabular-nums leading-none tracking-tight font-black transition-all duration-300 select-none ${
+          className={`font-mono tabular-nums leading-none tracking-tight font-black select-none ${
             isRunning
               ? isTimer
                 ? 'text-amber-100 drop-shadow-[0_0_26px_rgba(245,158,11,0.70)]'
@@ -164,7 +164,7 @@ export default function StopwatchDisplay({
               return (
                 <span
                   key={i}
-                  className={`inline-block transition-opacity duration-300 ${
+                  className={`inline-block ${
                     isRunning ? 'opacity-90 font-light' : 'opacity-40 font-light'
                   }`}
                   style={{ margin: '0 1px' }}
@@ -177,14 +177,12 @@ export default function StopwatchDisplay({
           })}
         </span>
 
-        {/* Milliseconds Pill Accent */}
-        {msPart && msPart !== '00' && (
+        {/* Milliseconds Pill Accent (Stopwatch mode only - always stays stable without jitter) */}
+        {!isTimer && msPart !== undefined && msPart !== '' && (
           <div
-            className={`font-mono tabular-nums font-bold text-xs sm:text-sm px-1.5 py-0.5 rounded-lg border transition-all duration-300 self-center mb-1 ${
+            className={`font-mono tabular-nums font-bold text-xs sm:text-sm px-1.5 py-0.5 rounded-lg border self-center mb-1 min-w-[32px] sm:min-w-[36px] text-center select-none ${
               isRunning
-                ? isTimer
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
-                  : isPomo
+                ? isPomo
                   ? 'bg-teal-500/15 border-teal-500/40 text-teal-300 shadow-[0_0_12px_rgba(20,184,166,0.35)]'
                   : 'bg-purple-500/15 border-purple-500/40 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.35)]'
                 : 'bg-[#1a1a24] border-[#2e2e3e] text-gray-400'
