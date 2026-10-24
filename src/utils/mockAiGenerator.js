@@ -49,24 +49,32 @@ export async function generateAiMockTest({
   const { marksPerCorrect, negativeMarks } = getExamMarkingScheme(examName)
   const totalMarks = questionCount * marksPerCorrect
 
-  const prompt = `You are a Senior Question Paper Setter for TCS iON and National Testing Agency (NTA), preparing real competitive exam mock tests for ${examName} (${subject} - ${topic}).
+  const prompt = `You are a Senior Chief Question Paper Setter for National Testing Agency (NTA) and TCS iON, setting authentic, challenging competitive exam question papers for ${examName} (${subject} - ${topic}).
 
-TASK: Generate a high-yield, realistic mock test containing exactly ${questionCount} multiple-choice questions matching real 2024-2025 exam patterns.
-DIFFICULTY: ${difficulty}. Include realistic calculations, exam-level trap options, and authentic syllabus topics.
+TASK: Generate a high-yield, realistic mock test containing exactly ${questionCount} multiple-choice questions matching real 2024-2025 actual exam shift papers.
+DIFFICULTY: ${difficulty}. 
+STANDARDS & INTEGRITY RULES:
+1. HIGH COMPETITIVE STANDARD: Questions must strictly match real exam difficulty for ${examName}. Avoid simplistic, basic, or generic questions. Include authentic calculations, multi-statement questions, and realistic trap options (distractors based on common exam mistakes).
+2. BALANCED OPTIONS DISTRIBUTION: Randomly distribute the correct answer across Option A (0), Option B (1), Option C (2), and Option D (3). Do NOT place all correct answers in Option 0 or the same position!
+3. STRICT ANSWER & EXPLANATION CONSISTENCY:
+   - "correctOption": MUST be an integer (0, 1, 2, or 3) representing the EXACT index in the "options" array where the correct answer is located.
+   - The value at options[correctOption] MUST BE 100% MATHEMATICALLY AND LOGICALLY IDENTICAL to the final conclusion in "explanation" and "explanationHi".
+   - NEVER let the explanation conclude one answer (e.g. "30") while correctOption points to another option (e.g. "20")! Double-check every question before output.
 
 Format each question with:
-- questionText (English)
-- questionTextHi (Hindi translation, authentic Hindi terminology)
-- options: array of exactly 4 strings in English (Option 0 MUST be the correct option, frontend will shuffle them)
+- questionText (English, clear and unambiguous)
+- questionTextHi (Hindi translation, authentic exam terminology)
+- options: array of exactly 4 strings in English
 - optionsHi: array of exactly 4 corresponding strings in Hindi
-- explanation (Step-by-step solution with short-tricks in English)
-- explanationHi (Step-by-step solution in Hindi)
+- correctOption: integer (0, 1, 2, or 3) pointing to the exact correct answer in options array
+- explanation: Step-by-step mathematical proof / logical reasoning in English with final answer explicitly stated
+- explanationHi: Step-by-step solution in Hindi with final answer explicitly stated
 - sectionName: e.g. "${subject}"
 
 OUTPUT FORMAT:
 Return ONLY valid JSON (no markdown ticks, no preamble) adhering to this schema:
 {
-  "title": "${examName} - ${topic} AI Special Mock",
+  "title": "${examName} - ${topic} High-Yield CBT Mock",
   "examName": "${examName}",
   "category": "${subject}",
   "durationMinutes": ${durationMinutes},
@@ -82,9 +90,9 @@ Return ONLY valid JSON (no markdown ticks, no preamble) adhering to this schema:
       "sectionId": "sec_ai_1",
       "questionText": "...",
       "questionTextHi": "...",
-      "options": ["Correct Option", "Wrong 1", "Wrong 2", "Wrong 3"],
-      "optionsHi": ["सही विकल्प", "गलत 1", "गलत 2", "गलत 3"],
-      "correctOption": 0,
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "optionsHi": ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"],
+      "correctOption": 2,
       "explanation": "...",
       "explanationHi": "..."
     }
@@ -120,6 +128,32 @@ Return ONLY valid JSON (no markdown ticks, no preamble) adhering to this schema:
       const parsed = JSON.parse(cleaned)
 
       if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+        // Sanitize and verify each question for 100% consistency
+        parsed.questions = parsed.questions.map((q, idx) => {
+          let correctIdx = Number(q.correctOption)
+          if (isNaN(correctIdx) || correctIdx < 0 || correctIdx > 3) {
+            correctIdx = 0
+          }
+
+          // Ensure options array has exactly 4 items
+          const options =
+            Array.isArray(q.options) && q.options.length >= 4
+              ? q.options.slice(0, 4)
+              : q.options || ['Option A', 'Option B', 'Option C', 'Option D']
+          const optionsHi =
+            Array.isArray(q.optionsHi) && q.optionsHi.length >= 4
+              ? q.optionsHi.slice(0, 4)
+              : q.optionsHi || options
+
+          return {
+            ...q,
+            id: q.id || `q_ai_${idx + 1}`,
+            options,
+            optionsHi,
+            correctOption: correctIdx,
+          }
+        })
+
         // Assign unique id
         parsed.id = `ai_mock_${Date.now()}`
         parsed.isAiGenerated = true

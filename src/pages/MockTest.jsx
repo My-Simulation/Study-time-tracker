@@ -223,7 +223,7 @@ TASK: Extract every single multiple-choice question from this text and return a 
     }
   ]
 }
-
+NOTE: Ensure "correctOption" is the exact 0-based integer index (0 for A, 1 for B, 2 for C, 3 for D) matching the true answer and explanation without contradiction.
 Return ONLY valid JSON (no markdown ticks, no preamble).`
 
     try {
