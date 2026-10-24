@@ -1710,7 +1710,22 @@ export default function Stopwatch({ userName }) {
                   <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider">🏛️ Exam Prep & Doubts</span>
                   <div className="h-px bg-[#26263a] flex-1" />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => { setShowAppsMenu(false); navigate('/mocks') }}
+                    className="p-3 rounded-2xl bg-gradient-to-br from-purple-950/40 to-[#191924] hover:bg-[#222232] border border-purple-500/35 flex items-center gap-3 text-left transition-all cursor-pointer active:scale-98"
+                  >
+                    <span className="text-2xl p-2 rounded-xl bg-purple-500/20 border border-purple-500/40 flex-shrink-0">📝</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-xs font-bold text-white truncate">CBT Mock Tests</h4>
+                        <span className="text-[8px] px-1 rounded bg-purple-500/30 text-purple-200 font-bold">NEW</span>
+                      </div>
+                      <p className="text-[10px] text-purple-300/80 truncate">TCS iON • AI Exams</p>
+                    </div>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => { setShowAppsMenu(false); navigate('/exam-hub') }}

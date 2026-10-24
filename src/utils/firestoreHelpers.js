@@ -713,10 +713,12 @@ export async function getUserSessions(userName, force = false) {
             try {
               localStorage.setItem(`stt_user_sessions_${uKey}`, JSON.stringify(sorted))
             } catch {}
+            return sorted
           }
         } catch {} finally {
           inFlightSessions.delete(uKey)
         }
+        return localSessions
       })()
       inFlightSessions.set(uKey, bgPromise)
     }
@@ -763,7 +765,18 @@ export async function getUserSessions(userName, force = false) {
 export async function getSessionsByDate(userName, dateStr) {
   if (!userName || !dateStr) return []
   const allSessions = await getUserSessions(userName)
-  return allSessions
+  const list = Array.isArray(allSessions) ? allSessions : (() => {
+    try {
+      const raw = localStorage.getItem(`stt_user_sessions_${userName.toLowerCase()}`)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return parsed
+      }
+    } catch {}
+    return []
+  })()
+
+  return list
     .filter((s) => s.date === dateStr)
     .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
 }

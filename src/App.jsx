@@ -33,6 +33,9 @@ const Leaderboard = lazy(() => import('./pages/Leaderboard'))
 const Doubts = lazy(() => import('./pages/Doubts'))
 const ExamHub = lazy(() => import('./pages/ExamHub'))
 const Blog = lazy(() => import('./pages/Blog'))
+const MockTest = lazy(() => import('./pages/MockTest'))
+const CbtExamPlayer = lazy(() => import('./pages/CbtExamPlayer'))
+const MockResult = lazy(() => import('./pages/MockResult'))
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -198,6 +201,11 @@ function AnimatedRoutes() {
 
           {/* Govt & Entrance Exam Hub */}
           <Route path="/exam-hub" element={<ExamHub />} />
+
+          {/* CBT Mock Test Series & AI Exam Engine */}
+          <Route path="/mocks" element={<MockTest />} />
+          <Route path="/mock-test/:testId" element={<CbtExamPlayer />} />
+          <Route path="/mock-result/:attemptId" element={<MockResult />} />
 
           {/* Study Blog & Guides */}
           <Route path="/blog" element={<Blog />} />
