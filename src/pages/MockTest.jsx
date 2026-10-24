@@ -66,6 +66,7 @@ export default function MockTest() {
   const [activeTab, setActiveTab] = useState('catalog')
   const [selectedCategory, setSelectedCategory] = useState('all') // 'all' | 'banking' | 'ssc' | 'engineering' | 'medical' | 'teaching' | 'state_police' | 'defense'
   const [difficultyFilter, setDifficultyFilter] = useState('all') // 'all' | 'simple' | 'moderate' | 'tough'
+  const [searchQuery, setSearchQuery] = useState('')
   const [pastAttempts, setPastAttempts] = useState([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
 
@@ -93,14 +94,26 @@ export default function MockTest() {
       .finally(() => setIsLoadingHistory(false))
   }, [userName])
 
-  // Filter Catalog by Category & Difficulty
+  // Filter Catalog by Search Query, Category & Difficulty
   const filteredCatalog = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
     return PRELOADED_MOCK_TESTS.filter((t) => {
       const matchCat = selectedCategory === 'all' || t.categoryKey === selectedCategory
       const matchDiff = difficultyFilter === 'all' || t.difficulty === difficultyFilter
-      return matchCat && matchDiff
+
+      let matchSearch = true
+      if (q) {
+        const titleMatch = (t.title || '').toLowerCase().includes(q)
+        const examMatch = (t.examName || '').toLowerCase().includes(q)
+        const catMatch = (t.category || '').toLowerCase().includes(q)
+        const descMatch = (t.description || '').toLowerCase().includes(q)
+        const sectionMatch = (t.sections || []).some((s) => (s.name || '').toLowerCase().includes(q))
+        matchSearch = titleMatch || examMatch || catMatch || descMatch || sectionMatch
+      }
+
+      return matchCat && matchDiff && matchSearch
     })
-  }, [selectedCategory, difficultyFilter])
+  }, [selectedCategory, difficultyFilter, searchQuery])
 
   // Stats
   const totalMocks = pastAttempts.length
@@ -364,9 +377,35 @@ Return ONLY valid JSON (no markdown ticks, no preamble).`
           </button>
         </div>
 
-        {/* ── TAB 1: PRELOADED MOCK CATALOG + CATEGORY & DIFFICULTY FILTER ── */}
+        {/* ── TAB 1: PRELOADED MOCK CATALOG + SEARCH & FILTERS ── */}
         {activeTab === 'catalog' && (
-          <div className="space-y-5 animate-fadeIn">
+          <div className="space-y-4 animate-fadeIn">
+            {/* ── Search Bar ── */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by exam name, paper, subject, or topic (e.g. JEE, NEET, CTET, UP Police, Banking, SSC, NDA, Hindi)..."
+                className="w-full pl-10 pr-10 py-3 rounded-2xl bg-[#14141e] border border-[#242436] text-white placeholder-gray-500 text-xs sm:text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all shadow-inner"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-white text-xs cursor-pointer font-bold"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
             {/* ── Exam Category Filter Pills ── */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
               {EXAM_CATEGORIES.map((cat) => {
@@ -522,6 +561,42 @@ Return ONLY valid JSON (no markdown ticks, no preamble).`
                 )
               })}
             </div>
+
+            {/* Empty Search Result State */}
+            {filteredCatalog.length === 0 && (
+              <div className="text-center py-12 px-4 rounded-3xl bg-[#14141e] border border-[#242436] space-y-3">
+                <div className="text-3xl">🔍</div>
+                <h3 className="text-base font-bold text-white">
+                  No exams found matching "{searchQuery}"
+                </h3>
+                <p className="text-xs text-gray-400 max-w-md mx-auto">
+                  Try searching with another keyword or generate an instant AI mock test for this exact exam!
+                </p>
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('')
+                      setSelectedCategory('all')
+                      setDifficultyFilter('all')
+                    }}
+                    className="px-4 py-2 rounded-xl bg-[#1f1f2e] text-gray-300 hover:text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedExam(searchQuery || 'SSC CGL')
+                      setActiveTab('ai_generator')
+                    }}
+                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-purple-600/30"
+                  >
+                    ⚡ Generate with AI
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
