@@ -12,6 +12,24 @@ const GEMINI_MODELS = [
   'gemini-flash-lite-latest',
 ]
 
+export function getExamMarkingScheme(examName = '') {
+  const norm = examName.toLowerCase()
+  if (norm.includes('jee') || norm.includes('neet')) {
+    return { marksPerCorrect: 4, negativeMarks: 1 }
+  }
+  if (norm.includes('ctet') || norm.includes('tet') || norm.includes('prt') || norm.includes('teaching')) {
+    return { marksPerCorrect: 1, negativeMarks: 0 }
+  }
+  if (norm.includes('clerk') || norm.includes('po') || norm.includes('banking') || norm.includes('rrb clerk') || norm.includes('rrb po') || norm.includes('sbi')) {
+    return { marksPerCorrect: 1, negativeMarks: 0.25 }
+  }
+  if (norm.includes('nda')) {
+    return { marksPerCorrect: 3, negativeMarks: 1 }
+  }
+  // Default: SSC, State Police, Railway, State Exams
+  return { marksPerCorrect: 2, negativeMarks: 0.5 }
+}
+
 /**
  * Generate a complete custom mock test via Gemini AI
  */
@@ -27,6 +45,9 @@ export async function generateAiMockTest({
   if (!apiKey) {
     throw new Error('Gemini API key is required to generate AI Mock Tests.')
   }
+
+  const { marksPerCorrect, negativeMarks } = getExamMarkingScheme(examName)
+  const totalMarks = questionCount * marksPerCorrect
 
   const prompt = `You are a Senior Question Paper Setter for TCS iON and National Testing Agency (NTA), preparing real competitive exam mock tests for ${examName} (${subject} - ${topic}).
 
@@ -49,9 +70,9 @@ Return ONLY valid JSON (no markdown ticks, no preamble) adhering to this schema:
   "examName": "${examName}",
   "category": "${subject}",
   "durationMinutes": ${durationMinutes},
-  "totalMarks": ${questionCount * 2},
-  "marksPerCorrect": 2,
-  "negativeMarks": 0.5,
+  "totalMarks": ${totalMarks},
+  "marksPerCorrect": ${marksPerCorrect},
+  "negativeMarks": ${negativeMarks},
   "sections": [
     { "id": "sec_ai_1", "name": "${subject}", "questionCount": ${questionCount}, "timeLimitMinutes": ${durationMinutes} }
   ],

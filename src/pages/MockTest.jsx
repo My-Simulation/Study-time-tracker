@@ -16,20 +16,45 @@ import { generateAiMockTest } from '../utils/mockAiGenerator.js'
 import { getGeminiApiKey } from '../utils/aiService.js'
 import { getSession } from '../utils/auth.js'
 
+const EXAM_CATEGORIES = [
+  { id: 'all', label: '🌐 All Exams' },
+  { id: 'banking', label: '🏛️ Banking (RRB / SBI / PO)' },
+  { id: 'ssc', label: '📋 SSC (CGL / CHSL / GD)' },
+  { id: 'engineering', label: '⚛️ Engineering (JEE Main)' },
+  { id: 'medical', label: '🩺 Medical (NEET UG)' },
+  { id: 'teaching', label: '👨‍🏫 Teaching (CTET / TET)' },
+  { id: 'state_police', label: '👮 State & Police (UP / State)' },
+  { id: 'defense', label: '🎖️ Defense (NDA / CDS)' },
+]
+
 const EXAM_PRESETS = [
   'IBPS RRB Clerk',
   'IBPS RRB PO / Officer',
-  'IBPS PO / Clerk',
-  'SBI Clerk',
+  'SBI Clerk / PO',
   'SSC CGL',
+  'SSC CHSL',
+  'JEE Main (PCM)',
+  'NEET UG (PCB)',
+  'CTET Paper-1 (Primary)',
+  'UP Police Constable / SI',
+  'State PSC (UPPSC / BPSC / RAS)',
+  'UPSC NDA / CDS',
   'Railway RRB NTPC',
 ]
 
 const SUBJECT_PRESETS = [
-  'Quantitative Aptitude',
-  'Speed Maths',
+  'Quantitative Aptitude (Maths)',
+  'Speed Maths & Simplification',
   'Reasoning Ability',
-  'General Awareness',
+  'General Awareness & Current Affairs',
+  'English Language & Comprehension',
+  'सामान्य हिन्दी (General Hindi)',
+  'Child Development & Pedagogy (CDP)',
+  'Environmental Studies (EVS)',
+  'Physics (भौतिक विज्ञान)',
+  'Chemistry (रसायन विज्ञान)',
+  'Biology (जीव विज्ञान - Botany & Zoology)',
+  'Higher Mathematics (11th-12th)',
 ]
 
 export default function MockTest() {
@@ -39,6 +64,7 @@ export default function MockTest() {
 
   // Main Tabs: 'catalog' | 'ai_generator' | 'import_paper' | 'history'
   const [activeTab, setActiveTab] = useState('catalog')
+  const [selectedCategory, setSelectedCategory] = useState('all') // 'all' | 'banking' | 'ssc' | 'engineering' | 'medical' | 'teaching' | 'state_police' | 'defense'
   const [difficultyFilter, setDifficultyFilter] = useState('all') // 'all' | 'simple' | 'moderate' | 'tough'
   const [pastAttempts, setPastAttempts] = useState([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
@@ -67,11 +93,14 @@ export default function MockTest() {
       .finally(() => setIsLoadingHistory(false))
   }, [userName])
 
-  // Filter Catalog by Difficulty
+  // Filter Catalog by Category & Difficulty
   const filteredCatalog = useMemo(() => {
-    if (difficultyFilter === 'all') return PRELOADED_MOCK_TESTS
-    return PRELOADED_MOCK_TESTS.filter((t) => t.difficulty === difficultyFilter)
-  }, [difficultyFilter])
+    return PRELOADED_MOCK_TESTS.filter((t) => {
+      const matchCat = selectedCategory === 'all' || t.categoryKey === selectedCategory
+      const matchDiff = difficultyFilter === 'all' || t.difficulty === difficultyFilter
+      return matchCat && matchDiff
+    })
+  }, [selectedCategory, difficultyFilter])
 
   // Stats
   const totalMocks = pastAttempts.length
@@ -104,10 +133,10 @@ export default function MockTest() {
     try {
       const diffLabel =
         selectedDifficulty === 'simple'
-          ? 'Simple (RRB Clerk Prelims Speed Drill, 1-step direct)'
+          ? 'Simple (Direct, formula-based & speed drill)'
           : selectedDifficulty === 'tough'
-          ? 'Tough (Calculative Mains Level, multi-concept)'
-          : 'Moderate (Standard RRB Clerk Prelims Exam)'
+          ? 'Tough (High-calculative, multi-concept Advanced level)'
+          : 'Moderate (Real Exam Standard Shift Paper)'
 
       const generatedTest = await generateAiMockTest({
         examName: selectedExam,
@@ -233,13 +262,13 @@ Return ONLY valid JSON (no markdown ticks, no preamble).`
             </button>
             <div>
               <h1 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
-                <span>📝 Banking & SSC CBT Mock Series</span>
+                <span>📝 All-India CBT Mock Series</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-cyan-300 font-bold border border-cyan-500/30">
                   TCS iON Testbook Style
                 </span>
               </h1>
               <p className="text-[11px] text-gray-400 hidden sm:block">
-                Shift-wise authentic memory-based papers categorized into Simple, Moderate & Tough levels.
+                JEE Main, NEET UG, CTET Teaching, State Police (UP/State), Banking (RRB/SBI) & SSC.
               </p>
             </div>
           </div>
@@ -335,9 +364,43 @@ Return ONLY valid JSON (no markdown ticks, no preamble).`
           </button>
         </div>
 
-        {/* ── TAB 1: PRELOADED MOCK CATALOG + DIFFICULTY FILTER ── */}
+        {/* ── TAB 1: PRELOADED MOCK CATALOG + CATEGORY & DIFFICULTY FILTER ── */}
         {activeTab === 'catalog' && (
           <div className="space-y-5 animate-fadeIn">
+            {/* ── Exam Category Filter Pills ── */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {EXAM_CATEGORIES.map((cat) => {
+                const isSelected = selectedCategory === cat.id
+                const count =
+                  cat.id === 'all'
+                    ? PRELOADED_MOCK_TESTS.length
+                    : PRELOADED_MOCK_TESTS.filter((t) => t.categoryKey === cat.id).length
+
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                        : 'bg-[#14141e] text-gray-400 hover:text-white border border-[#242436]'
+                    }`}
+                  >
+                    <span>{cat.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        isSelected
+                          ? 'bg-white/20 text-white font-extrabold'
+                          : 'bg-[#202030] text-gray-400'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
             {/* ── Sub-Filter Bar for Difficulty ── */}
             <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-2xl bg-[#14141e] border border-[#232334]">
               <div className="flex items-center gap-2">
@@ -345,9 +408,9 @@ Return ONLY valid JSON (no markdown ticks, no preamble).`
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {[
                     { id: 'all', label: 'All Levels' },
-                    { id: 'simple', label: '🟢 Simple (Clerk Prelims Speed Drill)' },
+                    { id: 'simple', label: '🟢 Simple (Speed Drill & Basics)' },
                     { id: 'moderate', label: '🟡 Moderate (Exam Shift Standard)' },
-                    { id: 'tough', label: '🔴 Tough (Calculative & Mains)' },
+                    { id: 'tough', label: '🔴 Tough (Calculative & Advanced)' },
                   ].map((f) => (
                     <button
                       key={f.id}
@@ -434,8 +497,17 @@ Return ONLY valid JSON (no markdown ticks, no preamble).`
 
                     <div className="pt-3 border-t border-[#232334] flex items-center justify-between">
                       <div className="text-[11px] text-gray-400">
-                        Right: <strong className="text-emerald-400">+{test.marksPerCorrect}</strong> | Wrong:{' '}
-                        <strong className="text-rose-400">-{test.negativeMarks}</strong>
+                        {test.negativeMarks > 0 ? (
+                          <>
+                            Right: <strong className="text-emerald-400">+{test.marksPerCorrect}</strong> | Wrong:{' '}
+                            <strong className="text-rose-400">-{test.negativeMarks}</strong>
+                          </>
+                        ) : (
+                          <>
+                            Right: <strong className="text-emerald-400">+{test.marksPerCorrect}</strong> |{' '}
+                            <strong className="text-emerald-300">No Negative Marking (0)</strong>
+                          </>
+                        )}
                       </div>
 
                       <button
@@ -461,10 +533,10 @@ Return ONLY valid JSON (no markdown ticks, no preamble).`
                 <span>⚡</span> AI Exam Blueprint Engine (Gemini 2.5)
               </span>
               <h2 className="text-lg sm:text-xl font-black text-white mt-1">
-                Generate Authentic Banking Mock Test
+                Generate Authentic AI Mock Test (Any Exam)
               </h2>
               <p className="text-xs text-gray-400 mt-1">
-                Matches the exact TCS iON & Testbook question blueprint according to your desired difficulty.
+                Matches the exact TCS iON / NTA question blueprint for JEE Main, NEET UG, CTET, UP Police, Banking, SSC, or Defense.
               </p>
             </div>
 
@@ -480,9 +552,9 @@ Return ONLY valid JSON (no markdown ticks, no preamble).`
                 <label className="block text-gray-300 font-bold mb-1.5">Choose Difficulty Level:</label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { id: 'simple', label: '🟢 Simple', desc: 'Clerk Speed Drill' },
-                    { id: 'moderate', label: '🟡 Moderate', desc: 'Real Exam Shift' },
-                    { id: 'tough', label: '🔴 Tough', desc: 'Mains Calculative' },
+                    { id: 'simple', label: '🟢 Simple', desc: 'Speed Drill & Basics' },
+                    { id: 'moderate', label: '🟡 Moderate', desc: 'Exam Shift Standard' },
+                    { id: 'tough', label: '🔴 Tough', desc: 'Calculative & Advanced' },
                   ].map((d) => (
                     <button
                       key={d.id}
