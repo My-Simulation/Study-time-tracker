@@ -13,6 +13,7 @@ import {
   completeGoogleRegistration,
 } from '../utils/firestoreHelpers'
 import { saveSession } from '../utils/auth'
+import { INDIAN_STATES, TARGET_EXAMS } from '../utils/geoConstants'
 import { useNavigate } from 'react-router-dom'
 
 export default function GoogleOnboardingModal({
@@ -27,6 +28,9 @@ export default function GoogleOnboardingModal({
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [selectedState, setSelectedState] = useState(INDIAN_STATES[5]) // Default Delhi (NCR)
+  const [city, setCity] = useState('')
+  const [targetExam, setTargetExam] = useState(TARGET_EXAMS[0])
 
   const [checkingUsername, setCheckingUsername] = useState(false)
   const [usernameAvailable, setUsernameAvailable] = useState(true)
@@ -98,6 +102,11 @@ export default function GoogleOnboardingModal({
       return
     }
 
+    if (!city.trim()) {
+      setError('Please enter your City (e.g. Jaipur, Patna, Lucknow).')
+      return
+    }
+
     const passErr = validatePassword(password)
     if (passErr) {
       setError(passErr)
@@ -118,6 +127,9 @@ export default function GoogleOnboardingModal({
         email: googleData.email,
         googleUid: googleData.googleUid,
         photoUrl: googleData.photoUrl,
+        state: selectedState,
+        city: city.trim(),
+        targetExam,
       })
 
       // Save local session
@@ -223,6 +235,57 @@ export default function GoogleOnboardingModal({
             <p className="text-[10px] text-gray-500">
               Only letters, numbers, and underscores (min 4 characters).
             </p>
+          </div>
+
+          {/* Location & Exam Selection (Admin Info) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-[#252530]">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-gray-300">
+                State / UT <span className="text-purple-400">*</span>
+              </label>
+              <select
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-[#181820] border border-[#2e2e38] text-white text-xs outline-none focus:border-purple-500 transition-colors cursor-pointer"
+              >
+                {INDIAN_STATES.map((s) => (
+                  <option key={s} value={s} className="bg-[#181820] text-white">
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-gray-300">
+                City / District <span className="text-purple-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="e.g. Jaipur, Patna, Lucknow"
+                className="w-full px-3 py-2.5 rounded-xl bg-[#181820] border border-[#2e2e38] text-white text-xs outline-none focus:border-purple-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Target Exam */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-gray-300">
+              Target Exam <span className="text-purple-400">*</span>
+            </label>
+            <select
+              value={targetExam}
+              onChange={(e) => setTargetExam(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-[#181820] border border-[#2e2e38] text-white text-xs outline-none focus:border-purple-500 transition-colors cursor-pointer"
+            >
+              {TARGET_EXAMS.map((ex) => (
+                <option key={ex} value={ex} className="bg-[#181820] text-white">
+                  {ex}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Password fields */}

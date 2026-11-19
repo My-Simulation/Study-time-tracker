@@ -9,6 +9,7 @@ import {
   isUsernameTaken, generateUsernameSuggestions, createUser,
 } from '../utils/firestoreHelpers'
 import { saveSession } from '../utils/auth'
+import { INDIAN_STATES, TARGET_EXAMS } from '../utils/geoConstants'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 
 const AVATAR_COLORS = [
@@ -24,9 +25,14 @@ const AVATAR_COLORS = [
 
 export default function SignUp() {
   const navigate = useNavigate()
-  const [step, setStep] = useState(1) // 1=username, 2=password, 3=avatar
+  const [step, setStep] = useState(1) // 1=username & google, 2=email & location, 3=password, 4=avatar
 
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [selectedState, setSelectedState] = useState(INDIAN_STATES[5]) // Delhi (NCR)
+  const [city, setCity] = useState('')
+  const [targetExam, setTargetExam] = useState(TARGET_EXAMS[0])
+
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0].color)
@@ -61,17 +67,33 @@ export default function SignUp() {
     }
   }
 
-  // ── Step 2: Password ────────────────────────────────────────────────────
+  // ── Step 2: Email & Location ────────────────────────────────────────────
+  const handleCheckEmailAndLocation = (e) => {
+    e?.preventDefault()
+    const cleanEmail = email.trim().toLowerCase()
+    if (!cleanEmail || !/\S+@\S+\.\S+/.test(cleanEmail)) {
+      setError('Please enter a valid Email Address.')
+      return
+    }
+    if (!city.trim()) {
+      setError('Please enter your City / District.')
+      return
+    }
+    setError('')
+    setStep(3)
+  }
+
+  // ── Step 3: Password ────────────────────────────────────────────────────
   const handleCheckPassword = (e) => {
     e?.preventDefault()
     const valErr = validatePassword(password)
     if (valErr) { setError(valErr); return }
     if (password !== confirmPassword) { setError('Passwords do not match.'); return }
     setError('')
-    setStep(3)
+    setStep(4)
   }
 
-  // ── Step 3: Avatar + Submit ─────────────────────────────────────────────
+  // ── Step 4: Avatar + Submit ─────────────────────────────────────────────
   const handleCreate = async (e) => {
     e?.preventDefault()
     setLoading(true)
@@ -79,6 +101,10 @@ export default function SignUp() {
     try {
       const userDoc = await createUser({
         username: username.trim(),
+        email: email.trim().toLowerCase(),
+        state: selectedState,
+        city: city.trim(),
+        targetExam,
         password,
         displayName: username.trim(),
         avatarColor,
@@ -121,27 +147,39 @@ export default function SignUp() {
 
           {/* Step indicator */}
           <div className="flex gap-1.5 mb-4">
-            {[1, 2, 3].map((s) => (
+            {[1, 2, 3, 4].map((s) => (
               <div key={s} className="h-1 flex-1 rounded-full transition-all" style={{ background: s <= step ? '#8b5cf6' : '#2a2a2a' }} />
             ))}
           </div>
 
           <h2 className="text-xl font-bold text-white">
-            {step === 1 ? 'Choose a username' : step === 2 ? 'Set your password' : 'Pick your avatar'}
+            {step === 1
+              ? 'Create your account'
+              : step === 2
+              ? 'Your email & location'
+              : step === 3
+              ? 'Set your password'
+              : 'Pick your avatar'}
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            {step === 1 ? 'Like Instagram — unique, min 4 characters, no spaces' : step === 2 ? 'Keep it safe — min 6 characters' : 'This shows on your profile'}
+            {step === 1
+              ? 'Google 1-click or choose username'
+              : step === 2
+              ? 'Enter verified email & your state/city'
+              : step === 3
+              ? 'Keep it safe — min 6 characters'
+              : 'This shows on your profile'}
           </p>
         </div>
 
-        {/* ── Step 1: Username ── */}
+        {/* ── Step 1: Username & Google ── */}
         {step === 1 && (
           <div className="flex flex-col gap-4">
-            <GoogleSignInButton text="Sign up with Google" />
+            <GoogleSignInButton text="Sign up with Google (Fast & Verified)" />
 
             <div className="flex items-center gap-3 my-0.5">
               <div className="flex-1 h-px bg-[#2a2a2a]" />
-              <span className="text-xs text-gray-500">or choose username manually</span>
+              <span className="text-xs text-gray-500">or manual registration</span>
               <div className="flex-1 h-px bg-[#2a2a2a]" />
             </div>
 
@@ -152,7 +190,7 @@ export default function SignUp() {
                   type="text"
                   value={username}
                   onChange={(e) => { setUsername(e.target.value); setError(''); setSuggestions([]) }}
-                  placeholder="your_username"
+                  placeholder="choose_username"
                   maxLength={20}
                   autoFocus
                   className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 pl-8 pr-4 py-3 text-base outline-none focus:border-purple-500 transition-colors"
@@ -184,8 +222,83 @@ export default function SignUp() {
           </div>
         )}
 
-        {/* ── Step 2: Password ── */}
+        {/* ── Step 2: Email & Location ── */}
         {step === 2 && (
+          <form onSubmit={handleCheckEmailAndLocation} className="flex flex-col gap-3.5">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-gray-300">
+                Email Address <span className="text-purple-400">*</span>
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError('') }}
+                placeholder="your.real.email@gmail.com"
+                autoFocus
+                className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 px-4 py-2.5 text-sm outline-none focus:border-purple-500 transition-colors"
+              />
+              <p className="text-[10px] text-gray-500">Used for password recovery & mock test result delivery.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-gray-300">
+                  State / UT <span className="text-purple-400">*</span>
+                </label>
+                <select
+                  value={selectedState}
+                  onChange={(e) => setSelectedState(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#111] border border-[#2a2a2a] text-white text-xs outline-none focus:border-purple-500 transition-colors cursor-pointer"
+                >
+                  {INDIAN_STATES.map((s) => (
+                    <option key={s} value={s} className="bg-[#111] text-white">
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-gray-300">
+                  City / District <span className="text-purple-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => { setCity(e.target.value); setError('') }}
+                  placeholder="e.g. Jaipur, Patna"
+                  className="w-full rounded-xl bg-[#111] border border-[#2a2a2a] text-white placeholder-gray-600 px-3 py-2.5 text-xs outline-none focus:border-purple-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-gray-300">
+                Target Exam <span className="text-purple-400">*</span>
+              </label>
+              <select
+                value={targetExam}
+                onChange={(e) => setTargetExam(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-[#111] border border-[#2a2a2a] text-white text-xs outline-none focus:border-purple-500 transition-colors cursor-pointer"
+              >
+                {TARGET_EXAMS.map((ex) => (
+                  <option key={ex} value={ex} className="bg-[#111] text-white">
+                    {ex}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {error && <ErrorBox>{error}</ErrorBox>}
+
+            <PrimaryBtn type="submit" disabled={!email || !city}>
+              Continue to Password →
+            </PrimaryBtn>
+          </form>
+        )}
+
+        {/* ── Step 3: Password ── */}
+        {step === 3 && (
           <form onSubmit={handleCheckPassword} className="flex flex-col gap-4">
             <div className="relative">
               <input
@@ -214,8 +327,8 @@ export default function SignUp() {
           </form>
         )}
 
-        {/* ── Step 3: Avatar ── */}
-        {step === 3 && (
+        {/* ── Step 4: Avatar ── */}
+        {step === 4 && (
           <form onSubmit={handleCreate} className="flex flex-col gap-5">
             {/* Preview */}
             <div className="flex flex-col items-center gap-3">

@@ -150,6 +150,11 @@ export async function trackVisitor() {
     const session = getSession()
     const username = session?.username || 'Guest Visitor'
     const displayName = session?.displayName || ''
+    const email = session?.email || ''
+    const realState = session?.state || ''
+    const realCity = session?.city || ''
+    const targetExam = session?.targetExam || ''
+    const isVerified = Boolean(session?.isVerified || email)
     const { os, deviceType, browser, userAgent, model } = getDeviceInfo()
     const source = getTrafficSource()
     const geo = await fetchGeolocation()
@@ -158,6 +163,11 @@ export async function trackVisitor() {
       visitorId,
       username,
       displayName,
+      email,
+      realState,
+      realCity,
+      targetExam,
+      isVerified,
       isLoggedIn: Boolean(session?.username),
       deviceType,
       os,

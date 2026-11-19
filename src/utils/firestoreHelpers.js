@@ -48,13 +48,17 @@ export function generateUsernameSuggestions(base) {
  * Creates a new user with hashed password.
  * @returns {Promise<object>} The created user doc data
  */
-export async function createUser({ username, password, displayName, avatarColor }) {
+export async function createUser({ username, password, displayName, avatarColor, email = '', state = '', city = '', targetExam = '' }) {
   const lowerUsername = username.trim().toLowerCase()
   const passwordHash = await hashPassword(password)
 
   const userData = {
     username: lowerUsername,
     displayName: displayName || username.trim(),
+    email: email?.trim().toLowerCase() || '',
+    state: state?.trim() || '',
+    city: city?.trim() || '',
+    targetExam: targetExam?.trim() || '',
     passwordHash,
     avatarColor: avatarColor || '#7c3aed',
     createdAt: serverTimestamp(),
@@ -1948,6 +1952,9 @@ export async function completeGoogleRegistration({
   email,
   googleUid,
   photoUrl,
+  state = '',
+  city = '',
+  targetExam = '',
 }) {
   const lowerUsername = username.trim().toLowerCase()
   const userErr = validateUsername(lowerUsername)
@@ -1967,9 +1974,14 @@ export async function completeGoogleRegistration({
     email: email?.trim().toLowerCase() || '',
     googleUid: googleUid || '',
     photoUrl: photoUrl || '',
+    state: state?.trim() || '',
+    city: city?.trim() || '',
+    targetExam: targetExam?.trim() || '',
     passwordHash,
     avatarColor: '#7c3aed',
     authProvider: 'google',
+    isVerified: true,
+    verifiedAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     weeklyPlan: {},
     privacy: { visibility: 'public', allowedUsers: [] },
@@ -1977,6 +1989,39 @@ export async function completeGoogleRegistration({
 
   await setDoc(doc(db, 'users', lowerUsername), userData)
   return { ok: true, userDoc: userData, username: lowerUsername }
+}
+
+/**
+ * Links verified Google Account and Location to an existing legacy account (e.g. maahi_07)
+ */
+export async function linkGoogleToExistingUser({
+  username,
+  email,
+  googleUid,
+  displayName,
+  photoUrl,
+  state = '',
+  city = '',
+  targetExam = '',
+}) {
+  const lowerUsername = username.trim().toLowerCase()
+  if (!lowerUsername) throw new Error('Username is required.')
+
+  const updates = {
+    email: email?.trim().toLowerCase() || '',
+    googleUid: googleUid || '',
+    state: state?.trim() || '',
+    city: city?.trim() || '',
+    targetExam: targetExam?.trim() || '',
+    isVerified: true,
+    verifiedAt: serverTimestamp(),
+  }
+  if (displayName) updates.realName = displayName
+  if (photoUrl) updates.photoUrl = photoUrl
+
+  await updateDoc(doc(db, 'users', lowerUsername), updates)
+  invalidateUserCache(lowerUsername)
+  return updates
 }
 
 // ─────────────────────────────────────────────

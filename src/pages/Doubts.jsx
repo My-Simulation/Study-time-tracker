@@ -23,6 +23,8 @@ import {
 } from '../utils/doubtHelpers'
 import { getSession } from '../utils/auth'
 import { subscribeToVisitorLogs } from '../utils/visitorTracker'
+import { collection, getDocs, query, limit } from 'firebase/firestore'
+import { db } from '../firebase'
 
 const SUBJECT_OPTIONS = [
   'Mathematics',
@@ -104,6 +106,9 @@ export default function Doubts() {
   const [paymentRecords, setPaymentRecords] = useState([])
   const [visitorLogs, setVisitorLogs] = useState([])
   const [adminSubTab, setAdminSubTab] = useState('doubts') // 'doubts' | 'payments' | 'visitors'
+  const [registeredUsers, setRegisteredUsers] = useState([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [visitorDirectoryTab, setVisitorDirectoryTab] = useState('registered') // 'registered' | 'live_traffic'
 
   // Ask Doubt Form State
   const [questionText, setQuestionText] = useState('')
@@ -156,6 +161,16 @@ export default function Doubts() {
   // Subscribe to Admin incoming doubts, payments, and live visitor logs
   useEffect(() => {
     if (!isAdmin) return
+    setLoadingUsers(true)
+    const qUsers = query(collection(db, 'users'), limit(250))
+    getDocs(qUsers)
+      .then((snap) => {
+        const list = snap.docs.map((d) => ({ username: d.id, ...d.data() }))
+        setRegisteredUsers(list)
+      })
+      .catch((err) => console.warn('Could not load users directory:', err))
+      .finally(() => setLoadingUsers(false))
+
     const unsubDoubts = subscribeToAllDoubtsForAdmin((list) => {
       setAdminDoubts(list)
     })
@@ -353,6 +368,12 @@ export default function Doubts() {
       } else {
         const item = map.get(key)
         item.visitCount += 1
+        if (log.email && !item.email) item.email = log.email
+        if (log.realCity && !item.realCity) item.realCity = log.realCity
+        if (log.realState && !item.realState) item.realState = log.realState
+        if (log.targetExam && !item.targetExam) item.targetExam = log.targetExam
+        if (log.isVerified) item.isVerified = true
+
         if ((log.timestamp || 0) > (item.latestTimestamp || 0)) {
           item.latestTimestamp = log.timestamp
           item.city = log.city || item.city
@@ -365,6 +386,10 @@ export default function Doubts() {
           item.os = log.os || item.os
           item.browser = log.browser || item.browser
           item.source = log.source || item.source
+          if (log.email) item.email = log.email
+          if (log.realCity) item.realCity = log.realCity
+          if (log.realState) item.realState = log.realState
+          if (log.targetExam) item.targetExam = log.targetExam
           if (log.isLoggedIn) {
             item.isLoggedIn = true
             item.username = log.username
@@ -758,15 +783,15 @@ export default function Doubts() {
                 {/* Metric Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase">Unique Visitors</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Registered Accounts</span>
                     <span className="text-xl font-black text-purple-400 mt-1 font-mono">
-                      {groupedVisitors.length}
+                      {registeredUsers.length}
                     </span>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Page Hits</span>
-                    <span className="text-xl font-black text-white mt-1 font-mono">
-                      {visitorLogs.length}
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Unique Visitors</span>
+                    <span className="text-xl font-black text-cyan-300 mt-1 font-mono">
+                      {groupedVisitors.length}
                     </span>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-[#141422] border border-[#2b2b40] flex flex-col">
@@ -789,14 +814,155 @@ export default function Doubts() {
                   </div>
                 </div>
 
-                {groupedVisitors.length === 0 ? (
-                  <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center">
-                    <p className="text-xs text-gray-400">
-                      No visitor logs recorded yet. Once users open your link (jeetprep.netlify.app), their real-time location and device info will appear here!
-                    </p>
+                {/* Sub-Switch: Registered Users vs Live Visitors */}
+                <div className="flex items-center gap-2 bg-[#141420] p-1.5 rounded-2xl border border-[#262638] w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setVisitorDirectoryTab('registered')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      visitorDirectoryTab === 'registered'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    👥 Registered Users Directory ({registeredUsers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisitorDirectoryTab('live_traffic')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      visitorDirectoryTab === 'live_traffic'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    📡 Live Traffic & IP Logs ({groupedVisitors.length})
+                  </button>
+                </div>
+
+                {/* TAB 1: REGISTERED USERS DIRECTORY (ADMIN ONLY) */}
+                {visitorDirectoryTab === 'registered' && (
+                  <div className="flex flex-col gap-3">
+                    <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/30 text-xs text-purple-200">
+                      🔒 <strong>Admin-Only User Directory:</strong> Real verified Gmail address, State & City, and Target Exam of every student who registered on JeetPrep.
+                    </div>
+
+                    {loadingUsers ? (
+                      <div className="p-8 text-center text-xs text-gray-400">Loading user directory...</div>
+                    ) : registeredUsers.length === 0 ? (
+                      <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center text-xs text-gray-400">
+                        No registered users found.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {registeredUsers.map((u) => {
+                          const hasEmail = Boolean(u.email)
+                          return (
+                            <div
+                              key={u.username}
+                              className="p-4 rounded-2xl bg-[#141422] border border-[#292940] hover:border-purple-500/50 transition-all flex flex-col justify-between gap-3 shadow-md"
+                            >
+                              <div>
+                                <div className="flex items-center justify-between gap-2 border-b border-[#252538] pb-2.5">
+                                  <div className="flex items-center gap-2.5">
+                                    <div
+                                      className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 shadow-sm"
+                                      style={{ background: u.avatarColor || '#7c3aed' }}
+                                    >
+                                      {u.photoUrl ? (
+                                        <img src={u.photoUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                                      ) : (
+                                        (u.displayName || u.username)[0].toUpperCase()
+                                      )}
+                                    </div>
+                                    <div>
+                                      <span className="text-xs font-bold text-white block">
+                                        @{u.username}
+                                      </span>
+                                      {u.displayName && u.displayName !== u.username && (
+                                        <span className="text-[10px] text-gray-400 block">{u.displayName}</span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      hasEmail
+                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                    }`}
+                                  >
+                                    {hasEmail ? '✓ Verified' : '⚠️ Pending Verification'}
+                                  </span>
+                                </div>
+
+                                {/* User Details */}
+                                <div className="mt-2.5 flex flex-col gap-1.5 text-xs">
+                                  {/* Email */}
+                                  <div className="flex items-center justify-between gap-2 bg-[#191928] px-2.5 py-1.5 rounded-xl border border-[#2d2d42]">
+                                    <span className="text-[11px] text-gray-400 font-medium flex items-center gap-1.5">
+                                      <span>📧 Email:</span>
+                                      <span className="font-mono text-purple-200 font-bold selection:bg-purple-500 truncate max-w-[200px]">
+                                        {u.email || 'Not verified yet'}
+                                      </span>
+                                    </span>
+                                    {u.email && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(u.email)
+                                          showToast(`Copied ${u.email}! 📋`)
+                                        }}
+                                        className="text-[10px] px-2 py-0.5 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 font-bold transition-all cursor-pointer"
+                                      >
+                                        Copy
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Location (State / City) */}
+                                  <div className="flex items-center gap-1.5 text-[11px] text-gray-300 px-1">
+                                    <span>📍 Real Location:</span>
+                                    <span className="font-bold text-emerald-300">
+                                      {u.city ? `${u.city}, ` : ''}{u.state || 'Location not updated'}
+                                    </span>
+                                  </div>
+
+                                  {/* Target Exam */}
+                                  {u.targetExam && (
+                                    <div className="flex items-center gap-1.5 text-[11px] text-gray-300 px-1">
+                                      <span>🎯 Target Exam:</span>
+                                      <span className="font-bold text-amber-300">{u.targetExam}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="text-[10px] text-gray-500 border-t border-[#222232] pt-2 flex items-center justify-between">
+                                <span>Provider: {u.authProvider || 'manual'}</span>
+                                <span>
+                                  {u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-2.5">
+                )}
+
+                {/* TAB 2: LIVE TRAFFIC & IP GEOLOCATION LOGS */}
+                {visitorDirectoryTab === 'live_traffic' && (
+                  <>
+                    {groupedVisitors.length === 0 ? (
+                      <div className="p-8 rounded-2xl bg-[#14141f] border border-[#232333] text-center">
+                        <p className="text-xs text-gray-400">
+                          No visitor logs recorded yet. Once users open your link (jeetprep.netlify.app), their real-time location and device info will appear here!
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2.5">
                     {groupedVisitors.map((v) => (
                       <div
                         key={v.id || v.visitorId || v.username}
@@ -876,8 +1042,10 @@ export default function Doubts() {
                     ))}
                   </div>
                 )}
-              </div>
+              </>
             )}
+          </div>
+        )}
 
             {/* ── SUB-TAB: DOUBTS QUEUE ── */}
             {adminSubTab === 'doubts' && (

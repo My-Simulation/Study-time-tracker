@@ -43,6 +43,11 @@ export function saveSession(username, userDoc) {
   const session = {
     username: username.toLowerCase(),
     displayName: userDoc.displayName || username,
+    email: userDoc.email || '',
+    state: userDoc.state || '',
+    city: userDoc.city || '',
+    targetExam: userDoc.targetExam || '',
+    isVerified: Boolean(userDoc.email || userDoc.googleUid || userDoc.isVerified),
     avatarColor: userDoc.avatarColor || '#7c3aed',
     photoUrl: userDoc.photoUrl || '',
     leaderboardAlias: userDoc.leaderboardAlias || '',

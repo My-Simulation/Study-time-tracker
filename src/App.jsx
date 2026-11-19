@@ -17,6 +17,7 @@ import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import ActiveTimerBanner from './components/ActiveTimerBanner'
 import PushNotificationPrompt from './components/PushNotificationPrompt'
+import AccountVerificationModal from './components/AccountVerificationModal'
 import GuestGate from './components/GuestGate'
 import CinematicBackground from './components/CinematicBackground'
 import InteractiveCosmicTrail from './components/InteractiveCosmicTrail'
@@ -135,6 +136,7 @@ function AnimatedRoutes() {
     <div key={location.pathname} className="animate-pageEntrance min-h-screen flex flex-col">
       <ActiveTimerBanner />
       <PushNotificationPrompt userName={userName} />
+      <AccountVerificationModal />
       <Suspense fallback={<PageLoader />}>
         <Routes location={location}>
           {/* Auth pages */}
