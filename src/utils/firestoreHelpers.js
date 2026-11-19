@@ -2024,6 +2024,22 @@ export async function linkGoogleToExistingUser({
   return updates
 }
 
+/**
+ * Sends an instant pop-up notification / alert from Admin to a specific user (e.g. maahi_07)
+ */
+export async function sendAdminUserAlert(targetUsername, { title, message } = {}) {
+  const lower = targetUsername.trim().toLowerCase()
+  if (!lower) throw new Error('Target username is required.')
+
+  await addDoc(collection(db, 'userAlerts'), {
+    targetUsername: lower,
+    title: title || '🔒 Account Verification Required',
+    message: message || 'Please complete Google Verification and State/City to unlock full Mock Tests.',
+    read: false,
+    createdAt: serverTimestamp(),
+  })
+}
+
 // ─────────────────────────────────────────────
 // ADMIN SUPER-TOOLS: USER TIMER ADJUSTER
 // ─────────────────────────────────────────────

@@ -23,6 +23,7 @@ import {
 } from '../utils/doubtHelpers'
 import { getSession } from '../utils/auth'
 import { subscribeToVisitorLogs } from '../utils/visitorTracker'
+import { sendAdminUserAlert } from '../utils/firestoreHelpers'
 import { collection, getDocs, query, limit } from 'firebase/firestore'
 import { db } from '../firebase'
 
@@ -936,6 +937,29 @@ export default function Doubts() {
                                     </div>
                                   )}
                                 </div>
+
+                                {!hasEmail && (
+                                  <div className="mt-2 pt-2 border-t border-[#252538] flex items-center justify-between gap-2 flex-wrap">
+                                    <span className="text-[10px] text-amber-400 font-medium">Needs Verification</span>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          await sendAdminUserAlert(u.username, {
+                                            title: '🔒 Urgent: Verify Your Account',
+                                            message: `Hello @${u.username}! Admin has requested you to verify your Google Account and State to continue using Mock Tests.`,
+                                          })
+                                          showToast(`🔔 Pop-up alert sent to @${u.username}! They will see it immediately.`)
+                                        } catch (err) {
+                                          showToast('Failed to send alert: ' + err.message)
+                                        }
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm"
+                                    >
+                                      <span>🔔</span> Send Pop-up Alert
+                                    </button>
+                                  </div>
+                                )}
                               </div>
 
                               <div className="text-[10px] text-gray-500 border-t border-[#222232] pt-2 flex items-center justify-between">

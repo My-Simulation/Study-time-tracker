@@ -9,7 +9,8 @@
 
 import React, { useState, useEffect } from 'react'
 import { signInWithPopup } from 'firebase/auth'
-import { auth, googleProvider } from '../firebase'
+import { collection, query, where, onSnapshot, limit } from 'firebase/firestore'
+import { auth, googleProvider, db } from '../firebase'
 import { getUserDoc, linkGoogleToExistingUser } from '../utils/firestoreHelpers'
 import { getSession, updateCurrentSession } from '../utils/auth'
 import { INDIAN_STATES, TARGET_EXAMS } from '../utils/geoConstants'
@@ -20,6 +21,8 @@ export default function AccountVerificationModal() {
 
   const [isOpen, setIsOpen] = useState(false)
   const [checking, setChecking] = useState(true)
+  const [showAlertBanner, setShowAlertBanner] = useState(false)
+  const [alertData, setAlertData] = useState(null)
 
   // Verification step state
   const [googleUser, setGoogleUser] = useState(null) // { email, displayName, uid, photoUrl }
@@ -31,6 +34,47 @@ export default function AccountVerificationModal() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
+  // 1. Listen for real-time Admin alerts sent to this user
+  useEffect(() => {
+    if (!userName) return
+    const cleanUser = userName.trim().toLowerCase()
+    const qAlerts = query(
+      collection(db, 'userAlerts'),
+      where('targetUsername', '==', cleanUser),
+      limit(5)
+    )
+
+    const unsubscribe = onSnapshot(qAlerts, (snap) => {
+      if (!snap.empty) {
+        const latestDoc = snap.docs[0].data()
+        setAlertData(latestDoc)
+        setIsOpen(true)
+        setShowAlertBanner(true)
+
+        // Haptic feedback / vibrate on device
+        try {
+          navigator.vibrate?.([200, 100, 200, 100, 200])
+        } catch {}
+
+        // Browser push notification if permitted
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          navigator.serviceWorker?.ready.then((reg) => {
+            reg?.showNotification('🔒 JeetPrep Action Required', {
+              body: latestDoc.message || `Hello @${userName}! Please verify your Google Account & State.`,
+              icon: '/icon-192.png',
+              badge: '/icon-192.png',
+              vibrate: [200, 100, 200],
+              tag: 'admin-alert',
+            })
+          }).catch(() => {})
+        }
+      }
+    })
+
+    return () => unsubscribe()
+  }, [userName])
+
+  // 2. Initial user verification check
   useEffect(() => {
     if (!userName) {
       setIsOpen(false)
@@ -40,7 +84,6 @@ export default function AccountVerificationModal() {
 
     let isMounted = true
 
-    // Check if user has verified email or googleUid
     getUserDoc(userName)
       .then((doc) => {
         if (!isMounted) return
@@ -53,12 +96,18 @@ export default function AccountVerificationModal() {
         const needsVerification = !doc.email || (!doc.googleUid && !doc.isVerified)
         if (needsVerification) {
           setIsOpen(true)
+          setShowAlertBanner(true)
           if (doc.state) setSelectedState(doc.state)
           if (doc.city) setCity(doc.city)
           if (doc.targetExam) setTargetExam(doc.targetExam)
+
+          // Gentle device vibration alert
+          try {
+            navigator.vibrate?.([150, 80, 150])
+          } catch {}
         } else {
           setIsOpen(false)
-          // Ensure session has email and isVerified
+          setShowAlertBanner(false)
           updateCurrentSession({
             email: doc.email || '',
             state: doc.state || '',
@@ -167,42 +216,69 @@ export default function AccountVerificationModal() {
     window.location.href = '/signin'
   }
 
-  if (checking || !isOpen) return null
+  if (checking) return null
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-      <div
-        className="w-full max-w-md p-6 sm:p-7 rounded-3xl bg-[#121218] border border-amber-500/40 shadow-2xl flex flex-col gap-5 relative text-white font-sans"
-        style={{ animation: 'scaleIn 200ms ease-out' }}
-      >
-        {/* Glow Header */}
-        <div className="flex items-center gap-3.5 border-b border-[#252535] pb-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-2xl flex-shrink-0 shadow-lg shadow-amber-500/10">
-            🔒
+    <>
+      {/* ── Top Floating Notification Banner (Visible on all pages) ── */}
+      {showAlertBanner && !isOpen && (
+        <div className="fixed top-3 inset-x-3 max-w-lg mx-auto z-[9990] p-3.5 rounded-2xl bg-[#1c142e]/95 border-2 border-amber-500/70 backdrop-blur-xl shadow-2xl flex items-center justify-between gap-3 text-white animate-bounce">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-2xl animate-pulse flex-shrink-0">🔔</span>
+            <div className="min-w-0">
+              <span className="text-xs font-black text-amber-300 block truncate">
+                {alertData?.title || 'Account Verification Required'}
+              </span>
+              <span className="text-[11px] text-gray-200 block truncate">
+                {alertData?.message || 'Link Google Account & State to continue Mock Tests'}
+              </span>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-              <span>Account Verification Required</span>
-            </h3>
-            <p className="text-xs text-amber-300 font-medium">
-              Action needed for <span className="text-white font-bold font-mono">@{userName}</span>
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-black shadow-md flex-shrink-0 cursor-pointer transition-transform active:scale-95"
+          >
+            Verify Now
+          </button>
         </div>
+      )}
 
-        {success ? (
-          <div className="p-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-center flex flex-col items-center gap-2 animate-scaleIn">
-            <span className="text-3xl">🎉</span>
-            <h4 className="text-sm font-bold text-emerald-300">Account Successfully Verified!</h4>
-            <p className="text-xs text-gray-300">
-              Welcome back, @{userName}. Unlocking Mock Tests & Tracker...
-            </p>
-          </div>
-        ) : (
-          <>
-            <p className="text-xs text-gray-300 leading-relaxed bg-[#191924] border border-[#2b2b3d] p-3.5 rounded-2xl">
-              👋 <strong>Dear @{userName}</strong>, JeetPrep par Mock Tests dene aur account security ke liye apne <strong>Verified Google Account</strong> aur <strong>Location</strong> ko link karein.
-            </p>
+      {/* ── Main Modal ── */}
+      {isOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div
+            className="w-full max-w-md p-6 sm:p-7 rounded-3xl bg-[#121218] border border-amber-500/40 shadow-2xl flex flex-col gap-5 relative text-white font-sans"
+            style={{ animation: 'scaleIn 200ms ease-out' }}
+          >
+            {/* Glow Header */}
+            <div className="flex items-center gap-3.5 border-b border-[#252535] pb-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-2xl flex-shrink-0 shadow-lg shadow-amber-500/10">
+                🔒
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <span>{alertData?.title || 'Account Verification Required'}</span>
+                </h3>
+                <p className="text-xs text-amber-300 font-medium">
+                  Action needed for <span className="text-white font-bold font-mono">@{userName}</span>
+                </p>
+              </div>
+            </div>
+
+            {success ? (
+              <div className="p-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-center flex flex-col items-center gap-2 animate-scaleIn">
+                <span className="text-3xl">🎉</span>
+                <h4 className="text-sm font-bold text-emerald-300">Account Successfully Verified!</h4>
+                <p className="text-xs text-gray-300">
+                  Welcome back, @{userName}. Unlocking Mock Tests & Tracker...
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-gray-300 leading-relaxed bg-[#191924] border border-[#2b2b3d] p-3.5 rounded-2xl">
+                  👋 <strong>Dear @{userName}</strong>, {alertData?.message || 'JeetPrep par Mock Tests dene aur account security ke liye apne Verified Google Account aur Location ko link karein.'}
+                </p>
 
             {error && (
               <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-xs text-rose-300">
@@ -355,5 +431,7 @@ export default function AccountVerificationModal() {
         )}
       </div>
     </div>
+  )}
+</>
   )
 }
