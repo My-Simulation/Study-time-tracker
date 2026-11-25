@@ -13,6 +13,7 @@ import {
   completeGoogleRegistration,
   loginUser,
   linkGoogleToExistingUser,
+  getUserDoc,
 } from '../utils/firestoreHelpers'
 import { saveSession } from '../utils/auth'
 import { INDIAN_STATES, TARGET_EXAMS } from '../utils/geoConstants'
@@ -222,6 +223,46 @@ export default function GoogleOnboardingModal({
     }
   }
 
+  // Handle Direct 1-Click Link to @bandar
+  const handleDirectLinkToBandar = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      await linkGoogleToExistingUser({
+        username: 'bandar',
+        email: googleData.email,
+        googleUid: googleData.googleUid,
+        displayName: googleData.displayName || 'Jeetesh Sharma',
+        photoUrl: googleData.photoUrl,
+      })
+
+      const bandarDoc = await getUserDoc('bandar', true)
+      const updatedUserDoc = {
+        ...(bandarDoc || {}),
+        username: 'bandar',
+        email: googleData.email,
+        googleUid: googleData.googleUid,
+        photoUrl: googleData.photoUrl || bandarDoc?.photoUrl,
+        isVerified: true,
+      }
+
+      saveSession('bandar', updatedUserDoc)
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new CustomEvent('auth_state_changed', { detail: { username: 'bandar' } }))
+
+      if (onSuccess) {
+        onSuccess('bandar', updatedUserDoc)
+      } else {
+        window.location.href = '/'
+      }
+    } catch (err) {
+      console.error('Direct link to bandar error:', err)
+      setError(err?.message || 'Failed to link account to @bandar.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (!isOpen || !googleData) return null
 
   return (
@@ -257,6 +298,27 @@ export default function GoogleOnboardingModal({
             title="Cancel"
           >
             ✕
+          </button>
+        </div>
+
+        {/* 👑 Direct Admin Link for @bandar */}
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/90 to-amber-950/40 border-2 border-amber-500/70 flex items-center justify-between gap-3 shadow-xl animate-pulse">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">👑</span>
+              <span className="text-xs font-black text-amber-300">Aapka account @bandar hai?</span>
+            </div>
+            <span className="text-[11px] text-gray-200 block truncate">
+              Is Google account ko direct <strong>@bandar</strong> se link karein
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleDirectLinkToBandar}
+            disabled={loading}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black text-xs font-black shadow-md cursor-pointer flex-shrink-0 transition-transform active:scale-95"
+          >
+            {loading ? 'Linking...' : 'Link to @bandar ➔'}
           </button>
         </div>
 
