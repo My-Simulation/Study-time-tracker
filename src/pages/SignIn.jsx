@@ -78,6 +78,12 @@ export default function SignIn() {
         {/* Google Sign-in */}
         <GoogleSignInButton text="Sign in with Google" />
 
+        <div className="text-center">
+          <p className="text-[11px] text-gray-400">
+            Purana account hai? Neeche <strong>Username</strong> aur <strong>Password</strong> se direct login karein.
+          </p>
+        </div>
+
         {/* Divider */}
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-[#2a2a2a]" />

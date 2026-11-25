@@ -14,6 +14,7 @@ import { auth, googleProvider, db } from '../firebase'
 import { getUserDoc, linkGoogleToExistingUser } from '../utils/firestoreHelpers'
 import { getSession, updateCurrentSession } from '../utils/auth'
 import { INDIAN_STATES, TARGET_EXAMS } from '../utils/geoConstants'
+import { checkIsAdmin } from '../utils/doubtHelpers'
 
 export default function AccountVerificationModal() {
   const session = getSession()
@@ -252,18 +253,30 @@ export default function AccountVerificationModal() {
             style={{ animation: 'scaleIn 200ms ease-out' }}
           >
             {/* Glow Header */}
-            <div className="flex items-center gap-3.5 border-b border-[#252535] pb-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-2xl flex-shrink-0 shadow-lg shadow-amber-500/10">
-                🔒
+            <div className="flex items-center justify-between border-b border-[#252535] pb-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-2xl flex-shrink-0 shadow-lg shadow-amber-500/10">
+                  🔒
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                    <span>{alertData?.title || 'Account Verification'}</span>
+                  </h3>
+                  <p className="text-xs text-amber-300 font-medium truncate">
+                    Action needed for <span className="text-white font-bold font-mono">@{userName}</span>
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                  <span>{alertData?.title || 'Account Verification Required'}</span>
-                </h3>
-                <p className="text-xs text-amber-300 font-medium">
-                  Action needed for <span className="text-white font-bold font-mono">@{userName}</span>
-                </p>
-              </div>
+
+              {/* Close Button — users and admin can close if needed */}
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="w-8 h-8 rounded-full bg-[#1e1e2c] hover:bg-[#2c2c3e] text-gray-400 hover:text-white flex items-center justify-center text-sm font-bold transition-all cursor-pointer shadow-sm active:scale-90 flex-shrink-0 ml-2"
+                title="Close for now"
+              >
+                ✕
+              </button>
             </div>
 
             {success ? (
@@ -418,13 +431,20 @@ export default function AccountVerificationModal() {
               </button>
             </form>
 
-            <div className="pt-2 text-center border-t border-[#252535]">
+            <div className="pt-2 flex items-center justify-between border-t border-[#252535]">
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="text-[11px] text-gray-400 hover:text-gray-200 underline cursor-pointer"
+              >
+                Remind me later (Baad me karein)
+              </button>
               <button
                 type="button"
                 onClick={handleLogout}
                 className="text-[11px] text-gray-500 hover:text-gray-300 underline cursor-pointer"
               >
-                Sign out / Login with another account
+                Sign out / Switch account
               </button>
             </div>
           </>
