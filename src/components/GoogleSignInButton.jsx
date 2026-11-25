@@ -13,7 +13,7 @@ import { signInWithGoogleAuth } from '../utils/firestoreHelpers'
 import { saveSession } from '../utils/auth'
 import GoogleOnboardingModal from './GoogleOnboardingModal'
 
-export default function GoogleSignInButton({ text = 'Continue with Google', className = '' }) {
+export default function GoogleSignInButton({ text = 'Continue with Google', className = '', onSuccess }) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -31,7 +31,17 @@ export default function GoogleSignInButton({ text = 'Continue with Google', clas
       } else {
         // Existing user: direct login!
         saveSession(res.username, res.userDoc)
-        navigate('/', { replace: true })
+        window.dispatchEvent(new Event('storage'))
+        window.dispatchEvent(new CustomEvent('auth_state_changed', { detail: { username: res.username } }))
+        if (onSuccess) {
+          onSuccess(res.username, res.userDoc)
+        } else {
+          if (window.location.pathname === '/') {
+            window.location.reload()
+          } else {
+            navigate('/', { replace: true })
+          }
+        }
       }
     } catch (err) {
       console.error('Google Sign-In error:', err)
@@ -92,7 +102,17 @@ export default function GoogleSignInButton({ text = 'Continue with Google', clas
         onSuccess={(username, userDoc) => {
           setShowOnboarding(false)
           saveSession(username, userDoc)
-          navigate('/', { replace: true })
+          window.dispatchEvent(new Event('storage'))
+          window.dispatchEvent(new CustomEvent('auth_state_changed', { detail: { username } }))
+          if (onSuccess) {
+            onSuccess(username, userDoc)
+          } else {
+            if (window.location.pathname === '/') {
+              window.location.reload()
+            } else {
+              navigate('/', { replace: true })
+            }
+          }
         }}
       />
     </>

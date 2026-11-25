@@ -42,7 +42,7 @@ export default function AuthModal({
 
   const handleAuthSubmit = async (e) => {
     e?.preventDefault()
-    const cleanUsername = username.trim().toLowerCase()
+    const cleanUsername = username.trim().toLowerCase().replace(/^@+/, '')
     if (!cleanUsername) {
       setError('Please enter a username.')
       return
@@ -171,6 +171,11 @@ export default function AuthModal({
         <div className="w-full">
           <GoogleSignInButton
             text="Continue with Google"
+            onSuccess={(u, doc) => {
+              onSuccess?.(u, doc)
+              onClose?.()
+              window.location.reload()
+            }}
             className="py-3 text-sm rounded-xl font-bold bg-[#191924] hover:bg-[#222232] border-[#36364d]"
           />
         </div>

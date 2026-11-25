@@ -71,29 +71,80 @@ export async function createUser({ username, password, displayName, avatarColor,
 
 /**
  * Verifies login credentials.
+ * Supports:
+ * - Direct username lookup (e.g. "bandar")
+ * - Handles leading "@" automatically (e.g. "@bandar" -> "bandar")
+ * - Direct server fetch with local cache fallback (prevents stale/negative cache in multiple tabs)
+ * - Email lookup fallback (e.g. user enters "sharmajeetesh32@gmail.com")
+ * - Leaderboard alias lookup fallback
  * @returns {Promise<{ok: boolean, userDoc?: object, error?: string}>}
  */
 export async function loginUser(username, password) {
-  const lowerUsername = username.trim().toLowerCase()
-  const snap = await getDoc(doc(db, 'users', lowerUsername))
+  const cleanUsername = username.trim().toLowerCase().replace(/^@+/, '')
+  if (!cleanUsername) {
+    return { ok: false, error: 'Please enter your username.' }
+  }
 
-  if (!snap.exists()) {
-    return { ok: false, error: `No account found for @${lowerUsername}. Did you mean to sign up?` }
+  let snap = null
+  let actualUsername = cleanUsername
+
+  // 1. Fetch directly from server first for fresh auth data, fallback to getDoc
+  try {
+    const s = await getDocFromServer(doc(db, 'users', cleanUsername))
+    if (s.exists()) snap = s
+  } catch (err) {
+    // getDocFromServer might fail if offline
+  }
+
+  if (!snap) {
+    try {
+      const s = await getDoc(doc(db, 'users', cleanUsername))
+      if (s.exists()) snap = s
+    } catch (err) {}
+  }
+
+  // 2. If not found by username doc ID, check by email
+  if (!snap) {
+    try {
+      const qEmail = query(collection(db, 'users'), where('email', '==', cleanUsername), limit(1))
+      const emailSnap = await getDocs(qEmail)
+      if (!emailSnap.empty) {
+        snap = emailSnap.docs[0]
+        actualUsername = snap.id
+      }
+    } catch (err) {}
+  }
+
+  // 3. If still not found, check by leaderboardAlias
+  if (!snap) {
+    try {
+      const qAlias = query(collection(db, 'users'), where('leaderboardAlias', '==', cleanUsername), limit(1))
+      const aliasSnap = await getDocs(qAlias)
+      if (!aliasSnap.empty) {
+        snap = aliasSnap.docs[0]
+        actualUsername = snap.id
+      }
+    } catch (err) {}
+  }
+
+  if (!snap || !snap.exists()) {
+    return { ok: false, error: `No account found for @${cleanUsername}. Did you mean to sign up?` }
   }
 
   const data = snap.data()
+  data.username = actualUsername
 
   // Legacy accounts (no passwordHash) — prompt to reset
   if (!data.passwordHash) {
-    return { ok: false, error: 'This account needs a password reset. Please create a new account.' }
+    return { ok: false, error: 'This account needs a password reset. Please sign in with Google.' }
   }
 
   const valid = await verifyPassword(password, data.passwordHash)
   if (!valid) {
-    return { ok: false, error: 'Incorrect password. Please try again.' }
+    return { ok: false, error: 'Incorrect password. Please try again or use Google sign-in.' }
   }
 
-  return { ok: true, userDoc: data }
+  return { ok: true, userDoc: data, username: actualUsername }
 }
 
 // ─────────────────────────────────────────────
